@@ -1,0 +1,41 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b base_planner_cu is a 2D path planning system. It is based on the Field D* algorithm but uses gradient interpolation when possible to extract shorter paths. It is a re-planner---that is, it is specially designed to update an existing path with a minimum of effort, given new map data. In typical rover applications this translates into 1-2 orders of magnitude speed-up vs. algorithms such as A* that must plan from scratch each time the map changes.
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b base_planner_cu
+
+<hr>
+
+\subsection base_planner_cu
+
+base_planner_cu receives a map and subsequent map updates as well as goal and robot pose updates. It publishes a path from robot to goal.
+
+\subsubsection Usage
+\verbatim
+$ base_planner_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ base_planner_cu
+\endverbatim
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] pose of the robot in world coordinates
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] This is actually a service this node requests, it requests a map and then receives one. This is generally only used once to get the initial map, after which all map changes are handled by "/cu/map_changes_cu". Note: map must be positive and non-zero.
+
+Publishes to:
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in world coordinates.
+
+*/
