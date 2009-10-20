@@ -1,0 +1,11 @@
+<package>
+  <description>A 2D Path Planning System</description>
+  <author>Michael Otte</author>
+  <license>GNU GPL V3</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://correll.cs.colorado.edu/pmwiki/</url>
+  <depend package="roscpp"/>
+  <depend package="nav_msgs"/>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+</package>
