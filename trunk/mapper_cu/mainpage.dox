@@ -1,0 +1,44 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b mapper_cu is responsible for accumulating sensor data in a map. It provides a service that allows other nodes to request and receive a copy of the current map. It also publishes map updates, thus allowing other nodes to maintain a current version of the map with limited overhead. 
+
+\section rosapi ROS API
+
+List of nodes:
+- \b mapper_cu
+
+<hr>
+
+\subsection mapper_cu
+
+mapper_cu subscribe to sensor data, and accumulates this in a map. It provides a map service and publishes map updates.
+
+\subsubsection Usage
+\verbatim
+$ mapper_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ mapper_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the global coordinate system.
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's current pose in global coordinates.
+
+Publishes to:
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero
+
+
+\subsubsection services ROS services
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map 
+
+
+*/
