@@ -34,7 +34,7 @@ Subscribes to:
 - \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's current pose in global coordinates.
 
 Publishes to:
-- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
 
 
 \subsubsection services ROS services
