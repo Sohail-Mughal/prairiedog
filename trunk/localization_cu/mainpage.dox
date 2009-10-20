@@ -1,0 +1,42 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b localization_cu is a node that provides a localization filter given global pose data and local pose data.
+
+\section rosapi ROS API
+
+
+List of nodes:
+- \b localization_cu
+
+<hr>
+
+\subsection localization_cu
+
+localization_cu subscribes to global pose and local pose data, it uses this to update an internal best estimate of the true pose and then publishes that for other nodes to use.
+
+\subsubsection Usage
+\verbatim
+$ localization_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ localization_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/odometer_pose_cu": [geometry_msgs::Pose2D] 2D pose from another node created using only the wheel odometers.
+- \b "/cu/user_pose_cu": [geometry_msgs::PoseStamped] a user defined pose, used to manually define the robots starting position with a GUI.
+- \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system.
+
+Publishes to:
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
+
+
+*/
