@@ -1,11 +1,12 @@
 <package>
-  <description>A 2D Path Planning System</description>
+  <description>A Mapper for a 2D environment</description>
   <author>Michael Otte</author>
   <license>GNU GPL V3</license>
   <review status="unreviewed" notes=""/>
-  <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/PlanningSystemBase/</url>
+  <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/MappingSystem</url>
   <depend package="roscpp"/>
-  <depend package="nav_msgs"/>
   <depend package="geometry_msgs"/>
   <depend package="sensor_msgs"/>
+  <depend package="nav_msgs"/>
+  <depend package="hokuyo_listener_cu"/>
 </package>
