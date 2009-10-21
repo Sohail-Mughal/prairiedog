@@ -1,0 +1,38 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b hokuyo_listener_cu a node that listens to the hokuyo laser scanner node provided with ros and also the localization_cu system. It then cleans and transforms the raw laser scan data before sending it out for other nodes to use, along with the origin of the laser scanner.
+
+\section rosapi ROS API
+
+- \b hokuyo_listener_cu
+
+<hr>
+
+\subsection hokuyo_listener_cu
+
+hokuyo_listener_cu listens to the hokuyo laser scanner node provided with ros and also the localization_cu system. It then cleans and transforms the raw laser scan data before sending it out for other nodes to use, along with the origin of the laser scanner.
+
+\subsubsection Usage
+\verbatim
+$ hokuyo_listener_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ hokuyo_listener_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "scan": [sensor_msgs::LaserScan] this is a laser scan from the hokuyo laser scanner node
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
+
+Publishes to:
+- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the global coordinate system.
+
+*/

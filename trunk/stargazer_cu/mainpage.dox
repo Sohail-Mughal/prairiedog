@@ -18,7 +18,7 @@ see http://correll.cs.colorado.edu/pmwiki/index.php/Main/PositioningSystemBase f
 
 \subsection  stargazer_cu
 
-node_name reads in an xml file containing psudolite positions and orientations, then interacts with the stargazer sensor to obtain global pose data. It publishes the pose data for other nodes to use.
+stargazer_cu reads in an xml file containing psudolite positions and orientations, then interacts with the stargazer sensor to obtain global pose data. It publishes the pose data for other nodes to use.
 
 \subsubsection Usage
 \verbatim

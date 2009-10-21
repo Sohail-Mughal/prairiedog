@@ -14,7 +14,7 @@ List of nodes:
 
 \subsection visualization_cu
 
-node_name does (provide a basic description of your node)
+visualization_cu is a graphical interface that displays information about the CU prairiedog
 
 \subsubsection Usage
 \verbatim
