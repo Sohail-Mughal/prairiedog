@@ -45,6 +45,7 @@ Pseudolite::Pseudolite(const char * pseudo_xml_file){
       ROS_INFO("ID = %i, x = %f, y = %f, angle = %f", idarr[idx], xarr[idx], yarr[idx], anglearr[idx]);
       idx++;
     }
+    arrsize = idx;
 	}
 	else
 	{

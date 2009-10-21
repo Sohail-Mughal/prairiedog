@@ -99,7 +99,7 @@ int main ( int argc, char ** argv ) {
   // Setup the serial port
 	enum state_counter { waiting_for_STX, reading_data, processing };
 	enum state_counter STATE;
-	int port = setup_serial_port (port_name);
+	int port = setup_serial_port(port_name);
 
   // load configuration file to load things up
   setup_stargazer( port, n, loop_rate, command_file );
@@ -165,7 +165,7 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		meas.theta = angle*M_PI/180;
 		meas.x = x/100;
 		meas.y = y/100;
-
+        
 		// Find the pseudolite data based on the ID. Implement this with a hash table.
     if (p_data.getPseudoliteById(ID)){
 
@@ -180,7 +180,7 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		  //ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
 		  data_pub->publish(meas);
     }else{ // If the measured Pseudolite ID was not found.
-      //ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites\n");
+      //ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites: \n %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
     }
 	}
 
