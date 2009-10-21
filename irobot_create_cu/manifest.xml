@@ -1,0 +1,17 @@
+<package>
+  <description brief="irobot_create_cu">
+
+     This builds on the Brown irobot create package
+
+  </description>
+  <author>common</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/RobotBase</url>
+  <depend package="irobot_create"/>
+  <depend package="geometry_msgs"/>
+  <depend package="nav_msgs"/>
+
+</package>
+
+
