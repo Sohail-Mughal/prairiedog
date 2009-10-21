@@ -1,0 +1,49 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b visualization_cu is a graphical interface that displays information about the CU prairiedog platform
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b visualization_cu
+
+<hr>
+
+\subsection visualization_cu
+
+node_name does (provide a basic description of your node)
+
+\subsubsection Usage
+\verbatim
+$ visualization_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ visualization_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in world coordinates.
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
+- \b "/cu/laser_scan_cu":  [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the global coordinate system.
+- \b "/cu/map_changes_cu": sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] This is actually a service this node requests, it requests a map and then receives one. This is generally only used once to get the initial map, after which all map changes are handled by "/cu/map_changes_cu". Note: map must be positive and non-zero.
+
+Publishes to:
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
+- \b "/cu/user_pose_cu": [geometry_msgs::PoseStamped] a user defined pose, used to manually define the robots starting position with a GUI.
+- \b "/cu/user_control_cu": geometry_msgs::Pose2D this is simple control message for the robot base, y is forward speed and theta is turn (x is currently unused)
+
+\subsubsection parameters ROS parameters
+
+
+*/
