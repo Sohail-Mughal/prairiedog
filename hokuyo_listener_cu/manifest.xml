@@ -1,0 +1,21 @@
+<package>
+  <description brief="hokuyo_listener_cu">
+
+     hokuyo_listener_cu
+
+  </description>
+  <author>common</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/LaserScanner</url>
+  <depend package="roscpp"/>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="hokuyo_node"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/msg/cpp"/>
+  </export>
+</package>
+
+
