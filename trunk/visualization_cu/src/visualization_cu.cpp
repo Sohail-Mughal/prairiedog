@@ -56,6 +56,8 @@
   #define PI 3.1415926535897
 #endif
 
+#define SCANNER_RANGE 5.5 // the range of the scanner in meters;
+        
 struct MAP;
 typedef struct MAP MAP;
 
@@ -689,6 +691,47 @@ void draw_point_list_grids(POINT_LIST* pl, float* color, float rad, float z_heig
   glPopMatrix();
 }
 
+// draws pl in the gui at buffer height z_height as grids, 1 grid of size rad centered on each point
+// uses z of the points to denote color1 or color2 if it is 0 or 1, respectively
+void draw_point_list_grids_binary(POINT_LIST* pl, float* color1, float* color2, float rad, float z_height)
+{    
+  glPushMatrix(); 
+    
+  glTranslatef(-1, -1, z_height);
+  
+  if(costmap != NULL)
+  {
+    float map_rad = 2/(float)max(costmap->height, costmap->width); 
+    glScaled(map_rad,map_rad,1);
+  }
+  
+  int y;
+  if((pl != NULL) & (pl->points != NULL))
+  {
+    glBegin(GL_QUADS);
+    
+    float** points = pl->points;
+    int length = pl->length;
+    float height = rad/costmap->resolution;
+    float width = rad/costmap->resolution;
+    
+    for (y = 0; y < length; y++)  
+    {
+      if(points[y][2] == 0)
+        glColor3f(color1[0], color1[1], color1[2]);   
+      else
+        glColor3f(color2[0], color2[1], color2[2]);   
+      
+      glVertex2f(points[y][0] - width, points[y][1] + height);
+      glVertex2f(points[y][0] + width, points[y][1] + height);
+      glVertex2f(points[y][0] + width, points[y][1] - height);
+      glVertex2f(points[y][0] - width, points[y][1] - height);  
+    }
+    glEnd(); 
+  } 
+  glPopMatrix();
+}
+
 /*----------------------- GRID_LIST ------------------------------------*/
 
 struct GRID_LIST
@@ -1129,10 +1172,26 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
   laser_scan_data = make_point_list(length);
   
   for(int i = 0; i < length; i++)
-  {
-    laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
-    laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
-    laser_scan_data->points[i][2] = z_scl*msg->cloud.points[i].z;   
+  {  
+    #ifdef SCANNER_RANGE  
+      // differentiate between hits in range and hits out of range
+      float no_scale_dx = msg->cloud.points[i].x-msg->origin.x;
+      float no_scale_dy = msg->cloud.points[i].y-msg->origin.y;
+      
+      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
+      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
+      
+      // this is a bit of a hack, but we'll use z to denote in/out of range because we know this is a 2D scan so z is essentially unused
+      if(SCANNER_RANGE <= sqrt(no_scale_dx*no_scale_dx + no_scale_dy*no_scale_dy))
+        laser_scan_data->points[i][2] = 0; // point represents the limits of the scanner, not a hit
+      else
+        laser_scan_data->points[i][2] = 1; // point represents a hit
+      
+    #else      
+      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
+      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
+      laser_scan_data->points[i][2] = z_scl*msg->cloud.points[i].z;  
+    #endif
   }
 
   
@@ -1215,7 +1274,11 @@ void display()
      // draw current laser scan data
      if(laser_scan_data != NULL)
      {
-       draw_point_list_grids(laser_scan_data, RED, laser_hit_display_rad, -.95);
+       #ifdef SCANNER_RANGE
+         draw_point_list_grids_binary(laser_scan_data, GREEN, RED, laser_hit_display_rad, -.95);
+       #else
+         draw_point_list_grids(laser_scan_data, RED, laser_hit_display_rad, -.95);
+       #endif
      }
      
      // draw the global path

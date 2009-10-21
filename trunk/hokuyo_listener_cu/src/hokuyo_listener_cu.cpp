@@ -51,6 +51,8 @@
 #define LASER_SCANNER_X_OFFSET 0.15 // m in robot coordinate system 
 #define LASER_SCANNER_Y_OFFSET 0.0  // m in robot coordinate system 
 #define LASER_SCANNER_THETA_OFFSET PI/6  // rad in laser coordinate system
+    
+#define FORCED_MAX_RANGE // if defiend, this causes readings > max range to be reset to max range
         
 using namespace std;
 
@@ -179,8 +181,13 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     int num_valid = 0;
     for(int i = 0; i < length; i++)
     {
-      if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
-        num_valid++;
+      #ifdef FORCED_MAX_RANGE
+        if(msg->ranges[i] >= range_min || msg->ranges[i] == 0) // zero means no reading, which could happen in a large open area
+          num_valid++;      
+      #else
+        if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
+          num_valid++;
+      #endif
     }
     
     // second pass, populate point cloud with valid values
@@ -194,19 +201,44 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     int j = 0;
     for(int i = 0; i < length; i++)
     {
-      if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
-      {
-        // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame
-        x = msg->ranges[i]*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
-        y = msg->ranges[i]*cos(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_Y_OFFSET;
-        z = 0;
+      #ifdef FORCED_MAX_RANGE  
+        if(msg->ranges[i] >= range_min || msg->ranges[i] == 0)
+        {
+          // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame  
+          if(msg->ranges[i] <= range_max && msg->ranges[i] != 0)
+          {
+            x = msg->ranges[i]*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
+            y = msg->ranges[i]*cos(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_Y_OFFSET;
+            z = 0;
+          }
+          else
+          {
+            x = range_max*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
+            y = range_max*cos(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_Y_OFFSET;
+            z = 0;    
+          }
         
-        // transform 2 from local x, y to global x, y      
-        point_cloud[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
-        point_cloud[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-        point_cloud[j].z = z;
-        j++;
-      }
+          // transform 2 from local x, y to global x, y      
+          point_cloud[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+          point_cloud[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+          point_cloud[j].z = z;
+          j++;
+        }
+      #else
+        if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
+        {
+          // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame
+          x = msg->ranges[i]*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
+          y = msg->ranges[i]*cos(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_Y_OFFSET;
+          z = 0;
+        
+          // transform 2 from local x, y to global x, y      
+          point_cloud[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+          point_cloud[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+          point_cloud[j].z = z;
+          j++;
+        }            
+      #endif
       alpha += inc;
     }
     
