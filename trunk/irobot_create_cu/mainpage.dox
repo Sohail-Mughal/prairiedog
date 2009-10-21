@@ -1,0 +1,65 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b irobot_create_cu two nodes that interact with Brown's irobot create package, extracting pose and publishing it and providing drive commands
+
+\section rosapi ROS API
+
+
+List of nodes:
+- \b demo
+- \b robot_create_cu
+
+<hr>
+
+\subsection demo
+
+demo interacts with Brown's robot create package, extracting pose and display into output and providing drive commands from the keyboard: 
+a: speed up, 
+s: slow down/go backward
+.: turn clockwise
+,: turn counterclockwise
+0: stop
+
+\subsubsection Usage
+\verbatim
+$ demo
+\endverbatim
+
+\par Example
+
+\verbatim
+$ demo
+\end verbatim
+
+<hr>
+
+\subsection robot_create_cu
+
+robot_create_cu interacts with Brown's robot create package, extracting pose and publishing it and providing drive commands based on a path that it receives from an incoming topic.
+
+\subsubsection Usage
+\verbatim
+$ robot_create_cu
+\end verbatim
+
+\par Example
+
+\verbatim
+$ robot_create_cu
+\end verbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/user_control_cu": geometry_msgs::Pose2D this is simple control message for the robot base, y is forward speed and theta is turn (x is currently unused)
+- \b"/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in world coordinates.
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
+
+Publishes to:
+- \b "/cu/odometer_pose_cu": [geometry_msgs::Pose2D] 2D pose created using only the wheel odometers.
+
+*/
