@@ -54,6 +54,8 @@
 
 #define MAP_MEMORY 100 // only used if PROBMAP is defined above
 
+#define SCANNER_RANGE 5.5 // the range of the scanner in meters;
+
 float MAP_INC = 1/(float)MAP_MEMORY; // each reading is worth this much probability
 
 using namespace std;
@@ -394,6 +396,15 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     // third pass, remember hits
     for(int i = 0; i < length; i++)
     {
+      #ifdef SCANNER_RANGE  
+      // only mark hits within range
+      float no_scale_dx = msg->cloud.points[i].x-msg->origin.x;
+      float no_scale_dy = msg->cloud.points[i].y-msg->origin.y;
+      
+      if(SCANNER_RANGE <= sqrt(no_scale_dx*no_scale_dx + no_scale_dy*no_scale_dy))
+        continue;
+      #endif
+              
       #ifdef SIMPLEMAP  
         tcost[(int)(scl_cloud_points[i].y) - map_y_offset][
               (int)(scl_cloud_points[i].x) - map_x_offset] = 1;   
