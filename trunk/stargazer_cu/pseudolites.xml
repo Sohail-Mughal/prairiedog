@@ -4,6 +4,7 @@
     <PseudoLite id="1986" x="6.56" y="8.79" angle="1.5708"></PseudoLite>
     <PseudoLite id="1990" x="6.56" y="11.09" angle="1.5708"></PseudoLite>
     <PseudoLite id="2000" x="6.56" y="13.39" angle="1.5708"></PseudoLite>
-    <PseudoLite id="1988" x="6.56" y="15.69" angle="4.7124"></PseudoLite>
     <PseudoLite id="9204" x="4.08" y="13.39" angle="1.5708"></PseudoLite>
+   <PseudoLite id="1988" x="6.56" y="15.69" angle="4.7124"></PseudoLite>
+   
 </PseudoLiteMap>

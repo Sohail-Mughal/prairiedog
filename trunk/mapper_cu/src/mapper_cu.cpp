@@ -1,4 +1,4 @@
-﻿/*  Copyright Michael Otte, University of Colorado, 9-9-2009
+/*  Copyright Michael Otte, University of Colorado, 9-9-2009
  *
  *  This file is part of Mapper_CU.
  *
