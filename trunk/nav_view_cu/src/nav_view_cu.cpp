@@ -1,23 +1,31 @@
 /*  Copyright Michael Otte, University of Colorado, 9-9-2009
  *
- *  This file is part of Visualization_CU.
+ *  This file is part of nav_view_cu.
  *
- *  Visualization_CU is free software: you can redistribute it and/or modify
+ *  nav_view_cu is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Visualization_CU is distributed in the hope that it will be useful,
+ *  nav_view_cu is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Visualization_CU. If not, see <http://www.gnu.org/licenses/>.
+ *  along with nav_view_cu. If not, see <http://www.gnu.org/licenses/>.
  *
  *
  *  If you require a different license, contact Michael Otte at
  *  michael.otte@colorado.edu
+ *
+ *  nav_view_cu is a minimalistic GUI for 2D planning that is a stand-in 
+ *  for the nav_view node in the default ROS installation. We created 
+ *  nav_view_cu for use on slower computers and computers without GPUs 
+ *  (the normal nav_view relies on the Ogre graphics package, which 
+ *  requires a GPU).
+ *
+ *  nav_view_cu requires that you have the opengl and glut packages installed. 
  */
 
 #include <stdio.h>
@@ -47,8 +55,6 @@
 #include "sensor_msgs/PointCloud.h"
 
 #include "move_base_msgs/MoveBaseActionGoal.h"
-
-#include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
 #include <list>
 
@@ -93,7 +99,7 @@ float win_pan_y = 0;
 float win_aspect_ratio = 1;
 float scale_factor = 1; // radius of the size of the word
 float max_grids_on_side = 500;
-float robot_display_radius = .2;
+float robot_display_radius = .3;
 float laser_hit_display_rad = .02;
 int display_flag = 1; // set to 0 to avoid drawing, set to 1 to draw
 int menu_flag  = 1; // same as above, but only for menu
@@ -123,24 +129,19 @@ POINT_LIST* global_path = NULL;
 POINT_LIST* local_path = NULL;
 GRID_LIST* inflated_obs_local = NULL;
 GRID_LIST* obstacles_local = NULL;
-POSE* goal_pose;
-POINT_LIST* laser_scan_data = NULL;
 
 // global ROS subscriber handles
-ros::Subscriber pose_sub;
+ros::Subscriber particle_cloud_sub;
 ros::Subscriber robot_footprint_sub; 
 ros::Subscriber global_path_sub;
 ros::Subscriber local_path_sub;
 ros::Subscriber inflated_obs_local_sub;
 ros::Subscriber obstacles_local_sub;
-ros::Subscriber goal_sub;
-ros::Subscriber laser_scan_sub;
-ros::Subscriber map_changes_sub;
+
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
 ros::Publisher new_pose_pub;
-ros::Publisher user_control_pub;
 
 // other ROS globals
 ros::Rate loop_rate(100);
@@ -303,7 +304,7 @@ MAP* load_map()
   nav_msgs::GetMap::Request  req;
   nav_msgs::GetMap::Response resp;
   ROS_INFO("Requesting the map...\n");
-  if( !ros::service::call("/cu/get_map_cu", req, resp) )
+  if( !ros::service::call("/static_map", req, resp) )
   {
     ROS_INFO("request failed\n");
     return NULL;
@@ -321,9 +322,17 @@ MAP* load_map()
   MAP* map = make_map(map_height, map_width, map_resolution);
      
   for(int i = 0; i < map_height; i++)
+  {
     for(int j = 0; j < map_width; j++)
-      map->cost[i][j] =  1-((float)resp.map.data[i*map_width+j])/100;
-  
+    {
+      if(resp.map.data[i*map_width+j] == 100)
+        map->cost[i][j] = 0;
+      else if(resp.map.data[i*map_width+j] == 0)
+        map->cost[i][j] = 1;
+      else
+        map->cost[i][j] = .5;
+    }
+  }
   return map;
 }
 
@@ -614,8 +623,8 @@ void print_point_list(POINT_LIST* pl)
   } 
 }
 
-// draws pl in the gui at buffer height z_height as line segments
-void draw_point_list_2D_lines(POINT_LIST* pl, float* color, float z_height)
+// draws pl in the gui at buffer height z_height as line segments, if connect = true, then connect first and last points
+void draw_point_list_2D_lines(POINT_LIST* pl, float* color, float z_height, bool connect)
 {    
   glPushMatrix(); 
     
@@ -638,6 +647,9 @@ void draw_point_list_2D_lines(POINT_LIST* pl, float* color, float z_height)
     
     for (y = 0; y < length; y++)  
       glVertex2f(points[y][0], points[y][1]);
+    
+    if(connect && 0 < length)
+      glVertex2f(points[0][0], points[0][1]);     
     
     glEnd(); 
   } 
@@ -831,7 +843,7 @@ void draw_robot(ROBOT* bot, float z_height)
           
   // draw the outline of the robot
   if(bot->bound != NULL)
-    draw_point_list_2D_lines(bot->bound, bot->color, z_height);
+    draw_point_list_2D_lines(bot->bound, bot->color, z_height, true);
     
   // now draw pose circle and directional arrow 
   if((bot->pose != NULL) & (costmap!= NULL))
@@ -847,10 +859,10 @@ void draw_robot(ROBOT* bot, float z_height)
     
     float scaled_rad = robot_display_radius/costmap->resolution;
     float pos[] = {bot->pose->x, bot->pose->y, 0};
-    draw_circle(pos, scaled_rad , BLUE);
+    draw_circle(pos, scaled_rad , GREEN);
     
     float pos2[] = {bot->pose->x + scaled_rad*bot->pose->cos_alpha, bot->pose->y + scaled_rad*bot->pose->sin_alpha, 0};
-    draw_arrow(pos, pos2, BLUE);
+    draw_arrow(pos, pos2, RED);
     
     glPopMatrix(); 
   }
@@ -978,27 +990,20 @@ void draw_menu(float z_height)
 }
 
 /*----------------------- ROS Callbacks ---------------------------------*/
-
-void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void particle_cloud_callback(const geometry_msgs::PoseArray::ConstPtr& msg)
 {
-  if(costmap == NULL)
-    return;
-   
-  if(msg->header.frame_id != "/2Dmap")
-      ROS_INFO("Received unknown pose message");
-    
   // currently, just use the first particle in the cloud as the robot position
   float x_scl = 1/costmap->resolution;
   float y_scl = 1/costmap->resolution;
   float z_scl = 0;
   
   destroy_pose(robot->pose);
-  robot->pose = make_pose(msg->pose.position.x*x_scl, msg->pose.position.y*y_scl, msg->pose.position.z*z_scl);
+  robot->pose = make_pose(msg->poses[0].position.x*x_scl, msg->poses[0].position.y*y_scl, msg->poses[0].position.z*z_scl);
   
-  float qw = msg->pose.orientation.w;
-  float qx = msg->pose.orientation.x;
-  float qy = msg->pose.orientation.y;
-  float qz = msg->pose.orientation.z; 
+  float qw = msg->poses[0].orientation.w;
+  float qx = msg->poses[0].orientation.x;
+  float qy = msg->poses[0].orientation.y;
+  float qz = msg->poses[0].orientation.z; 
   
   robot->pose->qw = qw;
   robot->pose->qx = qx;
@@ -1007,7 +1012,7 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   
   robot->pose->cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
   robot->pose->sin_alpha = 2*qw*qz + 2*qx*qy; 
-
+  
   display_flag = 1;
   glutPostRedisplay(); 
 }
@@ -1151,67 +1156,7 @@ void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
   //ROS_INFO("New Inflated Obstacle List: \n");
   //print_point_list(inflated_obs_local->grids); 
 }
-    
-void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
-{    
-  goal_pose->x = msg->pose.position.x/costmap->resolution;
-  goal_pose->y = msg->pose.position.y/costmap->resolution;
-  goal_pose->z = msg->pose.position.z;
-  goal_pose->qw = msg->pose.orientation.w;
-  goal_pose->qx = msg->pose.orientation.x;
-  goal_pose->qy = msg->pose.orientation.y;
-  goal_pose->qz = msg->pose.orientation.z; 
-  
-  float qw = goal_pose->qw;
-  float qx = goal_pose->qx;
-  float qy = goal_pose->qy;
-  float qz = goal_pose->qz; 
-  
-  goal_pose->cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
-  goal_pose->sin_alpha = 2*qw*qz + 2*qx*qy;
-  
-  display_flag = 1;
-  glutPostRedisplay(); 
-}
 
-void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
-{ 
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
-  float z_scl = 0; 
-       
-  int length = msg->cloud.points.size();
-  
-  destroy_point_list(laser_scan_data);
-  laser_scan_data = make_point_list(length);
-  
-  for(int i = 0; i < length; i++)
-  {  
-    #ifdef SCANNER_RANGE  
-      // differentiate between hits in range and hits out of range
-      float no_scale_dx = msg->cloud.points[i].x-msg->origin.x;
-      float no_scale_dy = msg->cloud.points[i].y-msg->origin.y;
-      
-      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
-      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
-      
-      // this is a bit of a hack, but we'll use z to denote in/out of range because we know this is a 2D scan so z is essentially unused
-      if(SCANNER_RANGE <= sqrt(no_scale_dx*no_scale_dx + no_scale_dy*no_scale_dy))
-        laser_scan_data->points[i][2] = 0; // point represents the limits of the scanner, not a hit
-      else
-        laser_scan_data->points[i][2] = 1; // point represents a hit
-      
-    #else      
-      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
-      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
-      laser_scan_data->points[i][2] = z_scl*msg->cloud.points[i].z;  
-    #endif
-  }
-
-  
-  display_flag = 1;
-  glutPostRedisplay(); 
-}
 
 void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
 { 
@@ -1284,32 +1229,17 @@ void display()
      {
        draw_grid_list_2D_quads(obstacles_local, RED, -.96);
      }
-   
-     // draw current laser scan data
-     if(laser_scan_data != NULL)
-     {
-       #ifdef SCANNER_RANGE
-         draw_point_list_grids_binary(laser_scan_data, GREEN, RED, laser_hit_display_rad, -.95);
-       #else
-         draw_point_list_grids(laser_scan_data, RED, laser_hit_display_rad, -.95);
-       #endif
-     }
      
      // draw the global path
      if(global_path != NULL)
      {
-       draw_point_list_2D_lines(global_path, GREEN, .97);
+       draw_point_list_2D_lines(global_path, GREEN, .97, false);
      }
    
      // draw the local path
      if(local_path != NULL)
      {
-       draw_point_list_2D_lines(local_path, BLUE, .975);
-     }
-   
-     if(goal_pose != NULL)
-     {
-       draw_pose(goal_pose, GREEN, .9775); 
+       draw_point_list_2D_lines(local_path, BLUE, .975, false);
      }
      
      // draw the robot
@@ -1409,35 +1339,7 @@ void special(int key,int x,int y)
       display_flag = 1;
       glutPostRedisplay();  
     }
-  }
-  else if(display_state == MOVEROBOT)
-  {
-    if (key == GLUT_KEY_RIGHT)
-    {
-      change_turn = -1;
-    }
-    else if (key == GLUT_KEY_LEFT)
-    {
-      change_turn = 1;
-    }
-    else if (key == GLUT_KEY_UP)
-    {
-      change_speed = 1;
-    } 
-    else if (key == GLUT_KEY_DOWN)
-    {
-      change_speed = -1;
-    }
-    
-    geometry_msgs::Pose2D msg;
-    msg.y = change_speed;
-    msg.theta = change_turn;
-    user_control_pub.publish(msg);   
-    
-    change_turn = 0;
-    change_speed = 0;
-  }
-  
+  }  
   
   if(scale_factor < .000001)
     scale_factor = .000001;
@@ -1507,16 +1409,6 @@ void key(unsigned char ch,int x,int y)
     display_flag = 1; 
     glutPostRedisplay(); 
   }  
-  else if(ch == ' ' || ch == '0' || ch == ')' )
-  {
-    change_turn = 0;
-    change_speed = 0;
-
-    geometry_msgs::Pose2D msg;
-    msg.y = change_speed;
-    msg.theta = change_turn;
-    user_control_pub.publish(msg);   
-  }
 
 
   if(scale_factor < .000001)
@@ -1657,29 +1549,30 @@ void mouse(int button, int mouse_state, int x, int y)
       new_heading_y = mouse_y_world - new_location_y;
       //ROS_INFO_STREAM("\n New Goal Heading: " << new_heading_x << ", " << new_heading_y << "\n");
       
-      geometry_msgs::PoseStamped msg;
+      move_base_msgs::MoveBaseActionGoal msg;
       
-      msg.header.frame_id = "/2Dmap";
+      msg.goal.target_pose.header.frame_id = "/map";
+      //msg.frame_id = "/map";
       
       float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
       float absolute_goal_y = (new_location_y + 1)/map_rad*costmap->resolution; // in meters
       
-      msg.pose.position.x = absolute_goal_x;
-      msg.pose.position.y = absolute_goal_y;
-      msg.pose.position.z = 0;
+      msg.goal.target_pose.pose.position.x = absolute_goal_x;
+      msg.goal.target_pose.pose.position.y = absolute_goal_y;
+      msg.goal.target_pose.pose.position.z = 0;
       
       float theta = atan2(new_heading_y,new_heading_x);
       float r = sqrt(2-(2*cos(theta)));
       
       if(r == 0)
-        msg.pose.orientation.w = 1;          
+        msg.goal.target_pose.pose.orientation.w = 1;          
       else
-        msg.pose.orientation.w = sin(theta)/r; 
+        msg.goal.target_pose.pose.orientation.w = sin(theta)/r; 
 
-      msg.pose.orientation.x = 0;
-      msg.pose.orientation.y = 0;
-      msg.pose.orientation.z = r/2; 
+      msg.goal.target_pose.pose.orientation.x = 0;
+      msg.goal.target_pose.pose.orientation.y = 0;
+      msg.goal.target_pose.pose.orientation.z = r/2; 
       
       goal_pub.publish(msg);    
       
@@ -1923,19 +1816,16 @@ void idle()
 // this gets called when glut exits
 void cleanup()
 {
-  pose_sub.shutdown();
+
+  particle_cloud_sub.shutdown();
   robot_footprint_sub.shutdown();
   global_path_sub.shutdown();
   local_path_sub.shutdown();
   inflated_obs_local_sub.shutdown();
   obstacles_local_sub.shutdown();
-  goal_sub.shutdown();
-  laser_scan_sub.shutdown();
-  map_changes_sub.shutdown();
-  
+
   goal_pub.shutdown();
   new_pose_pub.shutdown();
-  user_control_pub.shutdown();
   
   destroy_map(costmap);
   destroy_robot(robot);
@@ -1943,8 +1833,6 @@ void cleanup()
   destroy_point_list(local_path);
   destroy_grid_list(inflated_obs_local);
   destroy_grid_list(obstacles_local);
-  destroy_pose(goal_pose);
-  destroy_point_list(laser_scan_data);
   
   ROS_INFO("\nExit... \n");  
   
@@ -1960,23 +1848,18 @@ int main(int argc, char *argv[])
   
   // global variable init stuff
   robot =  make_robot(0, 0, 0, RED);
-  goal_pose = make_pose(0, 0, 0);
   
   // set up ROS topic subscriber callbacks
-  pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
-  robot_footprint_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/robot_footprint", 2, robot_footprint_callback);
-  global_path_sub = nh.subscribe("/cu/global_path_cu", 2, global_plan_callback);
-  local_path_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
-  inflated_obs_local_sub = nh.subscribe("/move_base/local_costmap/inflated_obstacles", 2, inflated_obs_local_callback);
-  obstacles_local_sub = nh.subscribe("/move_base/local_costmap/obstacles", 2, obstacles_local_callback);
-  goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
-  laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
-  map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
+  particle_cloud_sub = nh.subscribe("/particlecloud", 2, particle_cloud_callback);
+  robot_footprint_sub = nh.subscribe("/local_costmap/robot_footprint", 2, robot_footprint_callback);
+  global_path_sub = nh.subscribe("/NavfnROS/plan", 2, global_plan_callback);
+  local_path_sub = nh.subscribe("/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
+  inflated_obs_local_sub = nh.subscribe("/local_costmap/inflated_obstacles", 2, inflated_obs_local_callback);
+  obstacles_local_sub = nh.subscribe("/local_costmap/obstacles", 2, obstacles_local_callback);
   
   // set up ROS topic publishers
-  goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
-  new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
-  user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
+  goal_pub = nh.advertise<move_base_msgs::MoveBaseActionGoal>("/move_base/goal", 2);
+  new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base/current_position", 2);
   
   //  Initialize GLUT
   glutInit(&argc,argv);
