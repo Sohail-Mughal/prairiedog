@@ -99,7 +99,7 @@ int display_flag = 1; // set to 0 to avoid drawing, set to 1 to draw
 int menu_flag  = 1; // same as above, but only for menu
 
 // display state
-enum Display_State {MOVE, SETGOAL, SETPOSE, RELOADMAP, MOVEROBOT, NONE};
+enum Display_State {MOVE, SETGOAL, SETPOSE, RELOADMAP, MOVEROBOT, UPRES, DOWNRES, NONE};
 Display_State display_state = RELOADMAP;
 Display_State mouseover_state = NONE;
 Display_State mousedown_state = NONE;
@@ -411,9 +411,7 @@ void draw_coarse_map(MAP* map, float z_height, float grids_per_rad)
   float map_rad = 2/(float)max(map->height, map->width); 
   glScaled(map_rad,map_rad,1);
   
-  int y, x;
-  
-  float grids_per_rect = ((float)max(map->height, map->width))/grids_per_rad;  
+  float grids_per_rect = (float)((int)((float)max(map->height, map->width))/grids_per_rad);  
   
   if(display_state == MOVE && mousedown_state == NONE && (left_pressed == 1 || right_pressed == 1))
     grids_per_rect = grids_per_rect*4;
@@ -424,56 +422,47 @@ void draw_coarse_map(MAP* map, float z_height, float grids_per_rad)
   if(grids_per_rect > (float)max(map->height, map->width))
       grids_per_rect = (float)max(map->height, map->width);
   
-  glTranslatef(-grids_per_rect, -grids_per_rect, 0);  
+  glTranslatef(-1, -1, 0);  
   
   
   if(map->cost != NULL)
   {   
-    float val = 0;
-    float num_vals = 0;
-    
-    // plot average of grids that are combined into a single rectangle
-    int next_grid_y = grids_per_rect;
+    // plot min (darkest) of grids that are combined into a single rectangle
     glBegin(GL_QUADS);
     
     int height = map->height;
     int width = map->width;
     float** cost = map->cost;
     
-    for (y = 0; y < height; y++)  
+    int x, y, x_, y_, next_y, next_x;
+    float val;
+    for(y = 0; y < height; y += grids_per_rect)  
     {
-      int next_grid_x = grids_per_rect;
-      for (x = 0; x < width; x++)  
-      {
+      next_y = y+grids_per_rect;
+      if(next_y > height)
+        next_y = height;
+        
+      for(x = 0; x < width; x += grids_per_rect)  
+      {  
+        next_x = x+grids_per_rect;
+        if(next_x > width)
+          next_x = width;    
           
-        val += cost[y][x];
-        num_vals++;
+        val = 1;
+       
+        for(y_ = y; y_ < next_y; y_++) 
+          for(x_ = x; x_ < next_x; x_++) 
+            if(val > cost[y_][x_])
+              val = cost[y_][x_];   
           
-        if(x+1 == next_grid_x && y+1 == next_grid_y)
-        {
-          float float_x = (float)x;
-          float float_y = (float)y;
-	    
-          glColor3f(cost[y][x], cost[y][x], cost[y][x]); 
-            glVertex2f(float_x, float_y + grids_per_rect);
-            glVertex2f(float_x + grids_per_rect, float_y + grids_per_rect);
-            glVertex2f(float_x + grids_per_rect, float_y);
-            glVertex2f(float_x, float_y);    
-   
-          val = 0;
-          num_vals = 0;
-          
-          next_grid_x += (int)grids_per_rect;
-          if(next_grid_x > width)
-            next_grid_x = width;        
-        }
-      }
-      
-      if(y+1 == next_grid_y)
-      {
-        next_grid_y += (int)grids_per_rect;  
-        if(next_grid_y > height)
-          next_grid_y = height;
+        float float_x = (float)x;
+        float float_y = (float)y;
+        
+        glColor3f(val, val, val); 
+          glVertex2f(float_x, float_y + grids_per_rect);
+          glVertex2f(float_x + grids_per_rect, float_y + grids_per_rect);
+          glVertex2f(float_x + grids_per_rect, float_y);
+          glVertex2f(float_x, float_y);         
       }
     }
     glEnd(); 
@@ -887,7 +876,7 @@ void draw_menu(float z_height)
   drawRectangle(pos, size, LIGHT);
   
   float size_button[] = {90*pxls, 25*pxls};
-  
+  float size_small_button[] = {40*pxls, 25*pxls};
   
   float pos_move_button[] = {5*pxls, 5*pxls, 0};
   if(mouseover_state == MOVE)
@@ -919,7 +908,6 @@ void draw_menu(float z_height)
   
   
   float pos_pose_button[] = {205*pxls, 5*pxls, 0};
-  
   if(mouseover_state == SETPOSE)
   {
     drawRectangle(pos_pose_button, size_button, (left_pressed == 1) ? LIGHTGRAY : WHITE);
@@ -959,6 +947,32 @@ void draw_menu(float z_height)
     drawRectangleOutline(move_robot_button, size_button, BLACK); 
   }
   draw_string(move_robot_button, 10*pxls, 8*pxls, "Move Robot");
+  
+  float up_res_button[] = {505*pxls, 5*pxls, 0};
+  if(mouseover_state == UPRES)
+  {
+    drawRectangle(up_res_button, size_small_button, (left_pressed == 1) ? LIGHTGRAY : WHITE);
+    drawRectangleOutline(up_res_button, size_small_button, BLACK);  
+  }
+  else if(display_state == UPRES)
+  {
+    drawRectangle(up_res_button, size_small_button, LIGHTGRAY);
+    drawRectangleOutline(up_res_button, size_small_button, BLACK); 
+  }
+  draw_string(up_res_button, 10*pxls, 8*pxls, "+");
+  
+  float down_res_button[] = {555*pxls, 5*pxls, 0};
+  if(mouseover_state == DOWNRES)
+  {
+    drawRectangle(down_res_button, size_small_button, (left_pressed == 1) ? LIGHTGRAY : WHITE);
+    drawRectangleOutline(down_res_button, size_small_button, BLACK);  
+  }
+  else if(display_state == DOWNRES)
+  {
+    drawRectangle(down_res_button, size_small_button, LIGHTGRAY);
+    drawRectangleOutline(down_res_button, size_small_button, BLACK); 
+  }
+  draw_string(down_res_button, 10*pxls, 8*pxls, "-");
   
   glDepthFunc(GL_LESS);
 }
@@ -1564,6 +1578,18 @@ void mouse(int button, int mouse_state, int x, int y)
         menu_flag = 1;
         glutPostRedisplay(); 
       }
+      else if(mouse_x >= 505*pxls-menu_half_width && mouse_x <= 545*pxls-menu_half_width)
+      {
+        mouseover_state = UPRES;
+        menu_flag = 1;
+        glutPostRedisplay(); 
+      }
+      else if(mouse_x >= 555*pxls-menu_half_width && mouse_x <= 595*pxls-menu_half_width)
+      {
+        mouseover_state = DOWNRES;
+        menu_flag = 1;
+        glutPostRedisplay(); 
+      }
     }
     
     if(mousedown_state == NONE && mouseover_state != NONE && button == GLUT_LEFT_BUTTON && mouse_state == GLUT_DOWN && left_pressed == 0)
@@ -1595,6 +1621,7 @@ void mouse(int button, int mouse_state, int x, int y)
     return;
   }
   
+  // if we get to here then the mouse is below the menu
   if(display_state == MOVE)
   {
     if(button == GLUT_LEFT_BUTTON && mouse_state == GLUT_DOWN && left_pressed == 0)
@@ -1828,6 +1855,10 @@ void motion(int x,int y)
         mouseover_state = RELOADMAP;
       else if(mouse_x >= 405*pxls-menu_half_width && mouse_x <= 495*pxls-menu_half_width)
         mouseover_state = MOVEROBOT;
+      else if(mouse_x >= 505*pxls-menu_half_width && mouse_x <= 545*pxls-menu_half_width)
+        mouseover_state = UPRES;
+      else if(mouse_x >= 555*pxls-menu_half_width && mouse_x <= 595*pxls-menu_half_width)
+        mouseover_state = DOWNRES;
     }
     menu_flag = 1;
     glutPostRedisplay();
@@ -1859,7 +1890,27 @@ void idle()
     {
         ROS_INFO("Failed to get map\n");
     }
-  }  
+  }
+  else if(display_state == UPRES)
+  {  
+    max_grids_on_side *= 2;
+    if(max_grids_on_side > (float)max(costmap->height, costmap->width))
+        max_grids_on_side = (float)max(costmap->height, costmap->width);
+    display_flag = 1; 
+    glutPostRedisplay(); 
+    
+    display_state = MOVE;
+  }
+  else if(display_state == DOWNRES)
+  {  
+    max_grids_on_side /= 2;
+    if(max_grids_on_side < 4)
+        max_grids_on_side = 4;
+    display_flag = 1; 
+    glutPostRedisplay(); 
+    
+    display_state = MOVE;
+  }
   
   ros::spinOnce();
     
