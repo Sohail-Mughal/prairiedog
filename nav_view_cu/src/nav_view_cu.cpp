@@ -103,6 +103,8 @@ float robot_display_radius = .3;
 float laser_hit_display_rad = .02;
 int display_flag = 1; // set to 0 to avoid drawing, set to 1 to draw
 int menu_flag  = 1; // same as above, but only for menu
+float map_x_offset = 0;
+float map_y_offset = 0;
 
 // display state
 enum Display_State {MOVE, SETGOAL, SETPOSE, RELOADMAP, MOVEROBOT, UPRES, DOWNRES, NONE};
@@ -149,7 +151,6 @@ ros::Rate loop_rate(100);
 // globals used to set user robot control
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
 double change_turn = 0; // 0 = no, -1 = decrease turn, 1 = increase turn
-
 
 /*-------------------- basic drawing functions --------------------------*/
 
@@ -320,7 +321,25 @@ MAP* load_map()
   int map_height = resp.map.info.height;
 
   MAP* map = make_map(map_height, map_width, map_resolution);
-     
+
+  
+  float x = resp.map.info.origin.position.x; 
+  float y = resp.map.info.origin.position.y;
+  float z = resp.map.info.origin.position.z;
+          
+  float qx = resp.map.info.origin.orientation.x;
+  float qy = resp.map.info.origin.orientation.y;
+  float qz = resp.map.info.origin.orientation.z;
+  float qw = resp.map.info.origin.orientation.w;
+          
+  ROS_INFO("pose offset: [%f %f %f] \n orientation offset: [%f %f %f %f] \n",x,y,z,qx,qy,qz,qw);
+  
+  if(z != 0 || qx != 0 || qy != 0 || qz != 0 || qw != 1)
+      ROS_ERROR("Map Orientation or Height offset is not supported \n");
+  
+  map_x_offset = x;
+  map_y_offset = y;
+  
   for(int i = 0; i < map_height; i++)
   {
     for(int j = 0; j < map_width; j++)
@@ -946,7 +965,7 @@ void draw_menu(float z_height)
   }
   draw_string(pos_reload_button, 12*pxls, 8*pxls, "Reload Map");
   
-  
+  /*
   float move_robot_button[] = {405*pxls, 5*pxls, 0};
   if(mouseover_state == MOVEROBOT)
   {
@@ -959,6 +978,7 @@ void draw_menu(float z_height)
     drawRectangleOutline(move_robot_button, size_button, BLACK); 
   }
   draw_string(move_robot_button, 10*pxls, 8*pxls, "Move Robot");
+  */
   
   float up_res_button[] = {505*pxls, 5*pxls, 0};
   if(mouseover_state == UPRES)
@@ -998,7 +1018,7 @@ void particle_cloud_callback(const geometry_msgs::PoseArray::ConstPtr& msg)
   float z_scl = 0;
   
   destroy_pose(robot->pose);
-  robot->pose = make_pose(msg->poses[0].position.x*x_scl, msg->poses[0].position.y*y_scl, msg->poses[0].position.z*z_scl);
+  robot->pose = make_pose((msg->poses[0].position.x-map_x_offset)*x_scl, (msg->poses[0].position.y-map_y_offset)*y_scl, msg->poses[0].position.z*z_scl);
   
   float qw = msg->poses[0].orientation.w;
   float qx = msg->poses[0].orientation.x;
@@ -1032,8 +1052,8 @@ void robot_footprint_callback(const geometry_msgs::PolygonStamped::ConstPtr& msg
 
   for(int i = 0; i < size; i++)
   {
-    robot->bound->points[i][0] = msg->polygon.points[i].x*x_scl;
-    robot->bound->points[i][1] = msg->polygon.points[i].y*y_scl;
+    robot->bound->points[i][0] = (msg->polygon.points[i].x-map_x_offset)*x_scl;
+    robot->bound->points[i][1] = (msg->polygon.points[i].y-map_y_offset)*y_scl;
     robot->bound->points[i][2] = msg->polygon.points[i].z*z_scl; 
   }
  
@@ -1059,8 +1079,8 @@ void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
   
   for(int i = 0; i < length; i++)
   {
-    global_path->points[i][0] = x_scl*msg->poses[i].pose.position.x;
-    global_path->points[i][1] = y_scl*msg->poses[i].pose.position.y;
+    global_path->points[i][0] = x_scl*(msg->poses[i].pose.position.x-map_x_offset);
+    global_path->points[i][1] = y_scl*(msg->poses[i].pose.position.y-map_y_offset);
     global_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
   }
 
@@ -1086,8 +1106,8 @@ void local_plan_callback(const nav_msgs::Path::ConstPtr& msg)
   
   for(int i = 0; i < length; i++)
   {
-    local_path->points[i][0] = x_scl*msg->poses[i].pose.position.x;
-    local_path->points[i][1] = y_scl*msg->poses[i].pose.position.y;
+    local_path->points[i][0] = x_scl*(msg->poses[i].pose.position.x-map_x_offset);
+    local_path->points[i][1] = y_scl*(msg->poses[i].pose.position.y-map_y_offset);
     local_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
   }
 
@@ -1113,8 +1133,8 @@ void inflated_obs_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
   
   for(int i = 0; i < length; i++)
   {
-    inflated_obs_local->grids->points[i][0] = x_scl*msg->cells[i].x;
-    inflated_obs_local->grids->points[i][1] = y_scl*msg->cells[i].y;
+    inflated_obs_local->grids->points[i][0] = x_scl*(msg->cells[i].x-map_x_offset);
+    inflated_obs_local->grids->points[i][1] = y_scl*(msg->cells[i].y-map_y_offset);
     inflated_obs_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
   }
 
@@ -1145,8 +1165,8 @@ void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
   
   for(int i = 0; i < length; i++)
   {
-    obstacles_local->grids->points[i][0] = x_scl*msg->cells[i].x;
-    obstacles_local->grids->points[i][1] = y_scl*msg->cells[i].y;
+    obstacles_local->grids->points[i][0] = x_scl*(msg->cells[i].x-map_x_offset);
+    obstacles_local->grids->points[i][1] = y_scl*(msg->cells[i].y-map_y_offset);
     obstacles_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
   }
 
@@ -1155,30 +1175,6 @@ void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
   
   //ROS_INFO("New Inflated Obstacle List: \n");
   //print_point_list(inflated_obs_local->grids); 
-}
-
-
-void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
-{ 
-  if(costmap == NULL)
-    return;
-            
-  int length = msg->points.size();
-
-  float** cost = costmap->cost;
-  int width = costmap->width;
-  int height = costmap->height;
-  int y, x;
-  for(int i = 0; i < length; i++)
-  {
-    y = (int)msg->points[i].y;
-    x = (int)msg->points[i].x;
-            
-    if(x >= 0 && x < width && y >= 0 && y < height)  
-      cost[y][x] = 1-msg->points[i].z;  
-  }
-  display_flag = 1;
-  glutPostRedisplay(); 
 }
 
 /*----------------------- GLUT Callbacks --------------------------------*/
@@ -1387,12 +1383,14 @@ void key(unsigned char ch,int x,int y)
     menu_flag = 1; 
     glutPostRedisplay(); 
   }
+  /*
   else if (ch == 'c' || ch == 'C')
   {
     display_state = MOVEROBOT;
     menu_flag = 1; 
     glutPostRedisplay(); 
   }
+  */
   else if (ch == '[' || ch == '{')
   {
     max_grids_on_side *= 2;
@@ -1464,12 +1462,14 @@ void mouse(int button, int mouse_state, int x, int y)
         menu_flag = 1;
         glutPostRedisplay(); 
       }
+      /*
       else if(mouse_x >= 405*pxls-menu_half_width && mouse_x <= 495*pxls-menu_half_width)
       {
         mouseover_state = MOVEROBOT;
         menu_flag = 1;
         glutPostRedisplay(); 
       }
+      */
       else if(mouse_x >= 505*pxls-menu_half_width && mouse_x <= 545*pxls-menu_half_width)
       {
         mouseover_state = UPRES;
@@ -1558,8 +1558,8 @@ void mouse(int button, int mouse_state, int x, int y)
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
       float absolute_goal_y = (new_location_y + 1)/map_rad*costmap->resolution; // in meters
       
-      msg.goal.target_pose.pose.position.x = absolute_goal_x;
-      msg.goal.target_pose.pose.position.y = absolute_goal_y;
+      msg.goal.target_pose.pose.position.x = absolute_goal_x+map_x_offset;
+      msg.goal.target_pose.pose.position.y = absolute_goal_y+map_y_offset;
       msg.goal.target_pose.pose.position.z = 0;
       
       float theta = atan2(new_heading_y,new_heading_x);
@@ -1598,14 +1598,14 @@ void mouse(int button, int mouse_state, int x, int y)
       
       geometry_msgs::PoseStamped msg;
       
-      msg.header.frame_id = "/2Dmap";
+      msg.header.frame_id = "/map";
       
       float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
       float absolute_goal_y = (new_location_y + 1)/map_rad*costmap->resolution; // in meters
       
-      msg.pose.position.x = absolute_goal_x;
-      msg.pose.position.y = absolute_goal_y;
+      msg.pose.position.x = absolute_goal_x+map_x_offset;
+      msg.pose.position.y = absolute_goal_y+map_y_offset;
       msg.pose.position.z = 0;
       
       float theta = atan2(new_heading_y,new_heading_x);
@@ -1746,8 +1746,10 @@ void motion(int x,int y)
         mouseover_state = SETPOSE;
       else if(mouse_x >= 305*pxls-menu_half_width && mouse_x <= 395*pxls-menu_half_width)
         mouseover_state = RELOADMAP;
+      /*
       else if(mouse_x >= 405*pxls-menu_half_width && mouse_x <= 495*pxls-menu_half_width)
         mouseover_state = MOVEROBOT;
+      */
       else if(mouse_x >= 505*pxls-menu_half_width && mouse_x <= 545*pxls-menu_half_width)
         mouseover_state = UPRES;
       else if(mouse_x >= 555*pxls-menu_half_width && mouse_x <= 595*pxls-menu_half_width)

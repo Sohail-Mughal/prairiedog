@@ -36,6 +36,7 @@ Subscribes to:
 - \b "/TrajectoryPlannerROS/local_plan": [van_msgs::Path] Robot's local plan.
 - \b "/local_costmap/inflated_obstacles": [van_msgs::GridCells] Local Obstacles as they are inflated for planning.
 - \b "/local_costmap/obstacles": [van_msgs::GridCells] Local Obstacles.
+- \b "/static_map": [nav_msgs::GetMap] This is actually a service that requests and receives a cost map.
 
 Publishes to:
 - \b "/move_base/goal": [move_base_msgs::MoveBaseActionGoal] sets the robot goal.
