@@ -55,6 +55,7 @@
 #define MAP_MEMORY 100 // only used if PROBMAP is defined above
 
 #define SCANNER_RANGE 5.5 // the range of the scanner in meters;
+#define BUMPER_COST 1 // the cost associated with a bumper hit
 
 float MAP_INC = 1/(float)MAP_MEMORY; // each reading is worth this much probability
 
@@ -69,6 +70,7 @@ typedef struct MAP MAP;
 // global ROS subscriber handles
 ros::Subscriber laser_scan_sub;
 ros::Subscriber pose_sub;
+ros::Subscriber bumper_pose_sub;
 
 // global ROS publisher handles
 ros::Publisher map_changes_pub;
@@ -78,8 +80,10 @@ ros::ServiceServer get_map_srv;
 
 
 // globals
-MAP* costmap = NULL;
-vector<POINT> map_changes;
+MAP* laser_map = NULL;
+MAP* bumper_map = NULL;
+vector<POINT> laser_map_changes;
+vector<POINT> bumper_map_changes;
 float robot_radius = .2;
 
 /* -------------------------- POINT -------------------------------------*/
@@ -197,7 +201,7 @@ MAP* load_blank_map(int map_height, int map_width, float map_resolution, float c
 /*---------------------------- ROS Callbacks ----------------------------*/
 void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
 { 
-  if(costmap == NULL)
+  if(laser_map == NULL)
       return;
     
   int length = msg->cloud.points.size();
@@ -206,13 +210,12 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     return;
  
   
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
+  float x_scl = 1/laser_map->resolution;
+  float y_scl = 1/laser_map->resolution;
   
   // change map, and remember changes
   
-  
-  //zeroth pass transform to grid coords (super annoying error, can't figure out why this needs to be +1)
+  //zeroth pass transform to grid coords (super annoying bug, can't figure out why this needs to be +1)
   vector<POINT> scl_cloud_points;
   scl_cloud_points.resize(length);
   for(int i = 0; i < length; i++)
@@ -223,9 +226,10 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
       
   #ifdef HITMAP // just add new hits to the map
           
-    map_changes.resize(length);
+    laser_map_changes.resize(length);
     float xf, yf;
     int x, y;
+    int j=0;
     for(int i = 0; i < length; i++)
     {
       xf = scl_cloud_points[i].x;
@@ -236,13 +240,17 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     
       float this_cost = 1;
     
-      if(x >= 0 && x < costmap->width && y >= 0 && y < costmap->height)
-        costmap->cost[y][x] = this_cost;
+      if(x >= 0 && x < laser_map->width && y >= 0 && y < laser_map->height)
+      {
+        laser_map->cost[y][x] = this_cost;
     
-      map_changes[i].x = (float)x;
-      map_changes[i].y = (float)y;
-      map_changes[i].z = this_cost;
+        laser_map_changes[j].x = (float)x;
+        laser_map_changes[j].y = (float)y;
+        laser_map_changes[j].z = this_cost;
+        j++;
+      }
     }
+    laser_map_changes.resize(j);
     
   #elif defined(SIMPLEMAP) || defined(PROBMAP) // add new hits, but first remove old hits the sensor had to see through in order to see the new hits
            
@@ -268,8 +276,8 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     }
           
     int max_changes = ((int)max_x - (int)min_x + 2)*((int)max_y - (int)min_y + 2);  
-    int next_change = map_changes.size(); // remember previous changes that have not been sent out yet
-    map_changes.resize(next_change + max_changes);  
+    int next_change = laser_map_changes.size(); // remember previous changes that have not been sent out yet
+    laser_map_changes.resize(next_change + max_changes);  
           
     // create a small temp map to accumulate changes
     MAP*  tempmap = load_blank_map((int)max_y - (int)min_y + 1, (int)max_x - (int)min_x + 1, RESOLUTION, 0);
@@ -277,7 +285,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     // second pass, calculate empty spaces
     float rise, run, y_start = 0, y_end = 0, x_start = 0, x_end = 0;
     int direction_flag = -1;
-    float** cost = costmap->cost;
+    float** cost = laser_map->cost;
     float** tcost = tempmap->cost;
     int map_x_offset = (int)min_x;
     int map_y_offset = (int)min_y;
@@ -391,8 +399,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
         }
       } 
     }
-  
-  
+   
     // third pass, remember hits
     for(int i = 0; i < length; i++)
     {
@@ -412,13 +419,13 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
         tcost[(int)(scl_cloud_points[i].y) - map_y_offset][
               (int)(scl_cloud_points[i].x) - map_x_offset] += 1;   
       #endif
-      
     }  
 
     // fourth pass (first and only pass through the temp map)
-    int** in_list = costmap->in_list;
-    int height = costmap->height;
-    int width = costmap->width;
+    int** in_list = laser_map->in_list;
+    int height = laser_map->height;
+    int width = laser_map->width;
+    float** bumper = bumper_map->cost;
     for(int r = 0; r < tempmap->height; r++)
     {
       for(int c = 0; c < tempmap->width; c++)
@@ -436,9 +443,11 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
                 continue;
               if(tcost[r][c] > 0 && cost[global_r][global_c] == 1) // don't need to report this change
                 continue; 
+              if(bumper[global_r][global_c] != 0) // in bumber hit map, so we don't care what the laser scanner says
+                continue;
               
-              map_changes[next_change].x = (float)(global_c);
-              map_changes[next_change].y = (float)(global_r);
+              laser_map_changes[next_change].x = (float)(global_c);
+              laser_map_changes[next_change].y = (float)(global_r);
           
               in_list[global_r][global_c] = next_change;
               next_change++;
@@ -448,12 +457,12 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
               if(tcost[r][c] < 0)
               {
                 cost[global_r][global_c] = 0;
-                map_changes[in_list[global_r][global_c]].z = 0;
+                laser_map_changes[in_list[global_r][global_c]].z = 0;
               }
               else
               {
                 cost[global_r][global_c] = 1; 
-                map_changes[in_list[global_r][global_c]].z = 1; 
+                laser_map_changes[in_list[global_r][global_c]].z = 1; 
               }
             #elif defined(PROBMAP)
               float new_cost = cost[global_r][global_c] + MAP_INC*tcost[r][c];
@@ -461,17 +470,17 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
               if(new_cost < 0)
               {
                 cost[global_r][global_c] = 0;
-                map_changes[in_list[global_r][global_c]].z = 0;
+                laser_map_changes[in_list[global_r][global_c]].z = 0;
               }
               else if(new_cost > 1)
               {
                 cost[global_r][global_c] = 1;
-                map_changes[in_list[global_r][global_c]].z = 1;
+                laser_map_changes[in_list[global_r][global_c]].z = 1;
               }
               else
               {
                 cost[global_r][global_c] = new_cost;  
-                map_changes[in_list[global_r][global_c]].z = new_cost;
+                laser_map_changes[in_list[global_r][global_c]].z = new_cost;
               }
             #endif
 
@@ -479,7 +488,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
         }
       }
     }
-    map_changes.resize(next_change);
+    laser_map_changes.resize(next_change);
     destroy_map(tempmap);
   
   #endif
@@ -488,17 +497,17 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
 
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
-  if(costmap == NULL)
+  if(laser_map == NULL)
     return;
       
   // mark grids within the radius of the robot as safe 
-  float resolution = costmap->resolution;
+  float resolution = laser_map->resolution;
   float pose_x = msg->pose.position.x/resolution;
   float pose_y = msg->pose.position.y/resolution;
   float rob_rad = robot_radius/resolution;
   
-  int width = costmap->width;
-  int height = costmap->height;
+  int width = laser_map->width;
+  int height = laser_map->height;
   
   int start_r = (int)(pose_y - rob_rad);
   if(start_r < 0)
@@ -517,14 +526,14 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     end_c = width-1;
   
   int max_changes = (end_r - start_r)*(end_c - start_c);
-  float** cost = costmap->cost;
+  float** cost = laser_map->cost;
   
   #if defined(SIMPLEMAP) || defined(PROBMAP)
-  int** in_list = costmap->in_list;
+  int** in_list = laser_map->in_list;
   #endif
   
-  int next_change = map_changes.size();
-  map_changes.resize(next_change+max_changes);
+  int next_change = laser_map_changes.size();
+  laser_map_changes.resize(next_change+max_changes);
   
   float dist;
   for(int r = start_r; r <= end_r; r++)
@@ -539,111 +548,152 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
       if(dist < rob_rad)
       {
         #if defined(SIMPLEMAP) || defined(PROBMAP)
-          if(in_list[r][c] == -1) // not already in list
+          if(in_list[r][c] == -1) // not already in list (these get accumulated forever)
           {  
             if(cost[r][c] == 0) // don't need to report this change
               continue;
 
-            map_changes[next_change].x = (float)c;
-            map_changes[next_change].y = (float)r;
+            laser_map_changes[next_change].x = (float)c;
+            laser_map_changes[next_change].y = (float)r;
             in_list[r][c] = next_change;
             next_change++;
           }
         
-          // change costmap
+          // change laser_map
           cost[r][c] = 0;
-          map_changes[in_list[r][c]].z = 0; 
+          laser_map_changes[in_list[r][c]].z = 0; 
         #elif defined(HITMAP)    
           if(cost[r][c] == 0) // don't need to report this change
             continue;
 
-          map_changes[next_change].x = (float)c;
-          map_changes[next_change].y = (float)r;
+          laser_map_changes[next_change].x = (float)c;
+          laser_map_changes[next_change].y = (float)r;
           next_change++;   
           
-          // change costmap
+          // change laser_map
           cost[r][c] = 0;
         #endif
       }
     }
   }
-  map_changes.resize(next_change);
-      
+  laser_map_changes.resize(next_change);
+}
+
+void bumper_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{ 
+  if(bumper_map == NULL)
+    return;
+  
+  float x_scl = 1/laser_map->resolution;
+  float y_scl = 1/laser_map->resolution;
+  
+  // transform bumper points to map coords and remember them
+  float x = (int)(x_scl*msg->pose.position.x + 1); // same + 1 annoying bug as in laser scan callback
+  float y = (int)(y_scl*msg->pose.position.y + 1); // same + 1 annoying bug as in laser scan callback
+          
+  int list_ind = bumper_map_changes.size(); 
+  bumper_map_changes.resize(list_ind+1);
+
+  if(x >= 0 && x < laser_map->width && y >= 0 && y < laser_map->height)
+  {
+    bumper_map->cost[(int)y][(int)x] = BUMPER_COST;
+    
+    bumper_map_changes[list_ind].x = (float)x;
+    bumper_map_changes[list_ind].y = (float)y;
+    bumper_map_changes[list_ind].z = BUMPER_COST;
+    
+    #if defined(SIMPLEMAP) || defined(PROBMAP)
+      bumper_map->in_list[(int)y][(int)x] = list_ind;
+    #endif
+  }
 }
 
 bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &resp)
 {
- if(costmap == NULL)
+ if(laser_map == NULL || bumper_map == NULL)
    return false;
   
-  int width = costmap->width;
-  int height = costmap->height;
+  int width = laser_map->width;
+  int height = laser_map->height;
   
   resp.map.header.frame_id = "/2Dmap";
   resp.map.info.width = width;
   resp.map.info.height = height;
-  resp.map.info.resolution = costmap->resolution;
+  resp.map.info.resolution = laser_map->resolution;
            
   resp.map.data.resize(height*width);
           
-  float** cost = costmap->cost;
-
-  #if defined(SIMPLEMAP) || defined(PROBMAP)
-  int** in_list = costmap->in_list;
-  #endif
+  float** laser_cost = laser_map->cost;
+  float** bumper_cost = bumper_map->cost;
           
   int i = 0;
   for(int r = 0; r < height; r++)
   {
     for(int c = 0; c < width; c++)
     {
-      resp.map.data[i] = (uint8_t)(100*cost[r][c]);
-      #if defined(SIMPLEMAP) || defined(PROBMAP)
-        in_list[r][c] = -1;
-      #endif
+      if(bumper_cost[r][c] != 0) // bumper hit
+        resp.map.data[i] = (uint8_t)(100*bumper_cost[r][c]);
+      else // laser cost
+        resp.map.data[i] = (uint8_t)(100*laser_cost[r][c]);
       i++;
     }
   }
-  
-   return true;
+  return true;
 }
 
 
 /*---------------------- ROS Publisher Functions ------------------------*/
 void publish_map_changes()
 {
-  int length = map_changes.size();
+  int length = laser_map_changes.size();
+  int bumper_length = bumper_map_changes.size();
     
   if(length <= 0)
       return;
   
   sensor_msgs::PointCloud msg;  
   
-  msg.points.resize(length);
+  msg.points.resize(length+bumper_length);
 
   #if defined(SIMPLEMAP) || defined(PROBMAP)
-  int** in_list = costmap->in_list;
+  int** in_laser_list = laser_map->in_list;
+  int** in_bumper_list = bumper_map->in_list;
   #endif
   
-  for(int i = 0; i < length; i++)
-  {
-  
-    msg.points[i].x = map_changes[i].x;
-    msg.points[i].y = map_changes[i].y;
-    msg.points[i].z = map_changes[i].z;
+  // add laser data to message
+  int i;
+  for(i = 0; i < length; i++)
+  {  
+    msg.points[i].x = laser_map_changes[i].x;
+    msg.points[i].y = laser_map_changes[i].y;
+    msg.points[i].z = laser_map_changes[i].z;
     
     #if defined(SIMPLEMAP) || defined(PROBMAP)
-    // mark as not in change list
-    in_list[(int)map_changes[i].y][(int)map_changes[i].x] = -1;
+      // mark as not in change list
+      in_laser_list[(int)laser_map_changes[i].y][(int)laser_map_changes[i].x] = -1;
     #endif
   } 
   
+  // add bumper data to message (bumper overrides laser, hence it is last)
+  for(int j = 0; j < bumper_length; j++)
+  {
+    msg.points[i].x = bumper_map_changes[j].x;
+    msg.points[i].y = bumper_map_changes[j].y;
+    msg.points[i].z = bumper_map_changes[j].z;
+    
+    #if defined(SIMPLEMAP) || defined(PROBMAP)
+      // mark as not in change list
+      in_bumper_list[(int)bumper_map_changes[i].y][(int)bumper_map_changes[i].x] = -1;
+    #endif
+    
+    i++;
+  }
+  
   map_changes_pub.publish(msg);
  
-  map_changes.resize(0);
+  laser_map_changes.resize(0);
+  bumper_map_changes.resize(0);
 }
-
-
 
 int main(int argc, char** argv) 
 {
@@ -651,12 +701,15 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ros::Rate loop_rate(100);
     
-    destroy_map(costmap);
-    costmap = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
-
+    destroy_map(laser_map);
+    destroy_map(bumper_map);
+    laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
+    bumper_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, 0);
+    
     // set up subscribers
     laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   	pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+    bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
     
     // set up publishers
     map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
@@ -664,17 +717,19 @@ int main(int argc, char** argv)
     // set up service servers
     get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
  
-   while (ros::ok()) 
-   {
-       publish_map_changes();
+    while (ros::ok()) 
+    {
+      publish_map_changes();
        
-       ros::spinOnce();
-       loop_rate.sleep();
-   }
+      ros::spinOnce();
+      loop_rate.sleep();
+    }
     
     laser_scan_sub.shutdown();
+    pose_sub.shutdown();
+    bumper_pose_sub.shutdown();
     map_changes_pub.shutdown();
-      
-    destroy_map(costmap);
- 
+     
+    destroy_map(bumper_map);
+    destroy_map(laser_map);
 }

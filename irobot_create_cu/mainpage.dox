@@ -61,5 +61,6 @@ Subscribes to:
 
 Publishes to:
 - \b "/cu/odometer_pose_cu": [geometry_msgs::Pose2D] 2D pose created using only the wheel odometers.
+- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] The position of a bumper hit.
 
 */

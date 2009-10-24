@@ -57,6 +57,9 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
+      
+#define BUMPER_BACKUP_DIST .03 //(m) after a bumper hit, the robot backs up this much before going again
+#define BACKUP_SPEED -.2
         
 using namespace std;
 
@@ -68,6 +71,7 @@ IRobotCreateController * controller = (IRobotCreateController*) NULL;
 
 // publisher handles
 ros::Publisher odometer_pose_pub;
+ros::Publisher bumper_pose_pub;
 
 // subscriber handles
 ros::Subscriber user_control_sub;
@@ -95,6 +99,9 @@ POSE* local_goal_pose = NULL;
 POSE* global_goal_pose = NULL;
 
 vector<POSE> global_path;
+
+#define BUMPER_THETA_OFFSET PI/6  // rad in robot coordinate system
+#define BUMPER_OFFSET .22  // distance in robot coordinate system
 
 /* Print the current state info to the console
 void print_state() 
@@ -279,6 +286,32 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
   } 
   new_global_path = 1;
 }
+
+/*------------------------- ROS publisher functions ---------------------*/
+
+void publish_bumper(bool left, bool right)
+{
+  float theta;  
+  if(left && right)
+    theta = 0;
+  else if(left)
+    theta = -BUMPER_THETA_OFFSET;
+  else
+    theta = BUMPER_THETA_OFFSET;
+  
+  // transform 1, from range and degree in robot local to x and y in robot local coordinate frame
+  float x = BUMPER_OFFSET*sin(theta);
+  float y = BUMPER_OFFSET*cos(theta);
+  
+  // transform 2 from local x, y to global x, y     
+  geometry_msgs::Pose2D msg;
+  msg.x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+  msg.y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+    
+  bumper_pose_pub.publish(msg); 
+}
+
+
 
 /* ---------------------- navigation functions --------------------------*/
 
@@ -536,6 +569,7 @@ int main(int argc, char * argv[])
     
     // set up publishers
     odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
+    bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 1);
     
     // set up subscribers
     user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
@@ -548,11 +582,27 @@ int main(int argc, char * argv[])
     local_goal_pose = make_pose(0,0,0);
     global_goal_pose = make_pose(0,0,0);
    
-    
+    float backup_start_x = 0, backup_start_y = 0; // remembers where a bumper hit occoured
+    bool backing_up = false; // set to true if robot gets a bumper hit
     while (nh.ok()) 
     {   
         // control robot
-        if(user_e_stop == 0)
+        if(backing_up)
+        {
+          float current_x = controller->getX();
+          float current_y = controller->getY();
+          
+          float dx = current_x - backup_start_x;
+          float dy = current_y - backup_start_y;
+          
+          if(sqrt(dx*dx + dy*dy) > BUMPER_BACKUP_DIST) // backed up enough after a bumper hit
+          {
+            setSpeed(0);
+            setTurn(0);   
+            backing_up = false;
+          }
+        }
+        else if(user_e_stop == 0)
         {
           if(within_dist_of_goal(.2) == 0)
             follow_path(global_path, .3, new_global_path);
@@ -564,8 +614,16 @@ int main(int argc, char * argv[])
         
         if (controller->isBumpedLeft() || controller->isBumpedRight()) 
         {
-          setSpeed(0);
+          // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
+            
+          publish_bumper(controller->isBumpedLeft(), controller->isBumpedRight());
+            
+          setSpeed(BACKUP_SPEED);
           setTurn(0);
+          
+          backup_start_x = controller->getX();
+          backup_start_y = controller->getY();
+          backing_up = true;
         }
         
         // broadcast odometer based pose
@@ -581,6 +639,7 @@ int main(int argc, char * argv[])
     
     // destroy subscribers and publishers
     odometer_pose_pub.shutdown();
+    bumper_pose_pub.shutdown();
     user_control_sub.shutdown();  
     pose_sub.shutdown();
     goal_sub.shutdown();

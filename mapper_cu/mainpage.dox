@@ -32,6 +32,7 @@ $ mapper_cu
 Subscribes to:
 - \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the global coordinate system.
 - \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's current pose in global coordinates.
+- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] The position of a bumper hit.
 
 Publishes to:
 - \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.

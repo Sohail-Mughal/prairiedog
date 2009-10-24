@@ -204,7 +204,7 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
       #ifdef FORCED_MAX_RANGE  
         if(msg->ranges[i] >= range_min || msg->ranges[i] == 0)
         {
-          // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame  
+          // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame  
           if(msg->ranges[i] <= range_max && msg->ranges[i] != 0)
           {
             x = msg->ranges[i]*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
@@ -227,7 +227,7 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
       #else
         if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
         {
-          // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame
+          // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame
           x = msg->ranges[i]*sin(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_X_OFFSET;
           y = msg->ranges[i]*cos(alpha-LASER_SCANNER_THETA_OFFSET) + LASER_SCANNER_Y_OFFSET;
           z = 0;
@@ -248,7 +248,7 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     if(origin == NULL)
       origin = make_pose(0,0,0);
     
-    // transform 1, from range and degree in laser scanner to x and y in laser coordinate frame
+    // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame
     x = LASER_SCANNER_X_OFFSET;
     y = LASER_SCANNER_Y_OFFSET;
     z = 0;
