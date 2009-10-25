@@ -58,8 +58,10 @@
   #define PI 3.1415926535897
 #endif
       
-#define BUMPER_BACKUP_DIST .03 //(m) after a bumper hit, the robot backs up this much before going again
+#define BUMPER_BACKUP_DIST .015 //(m) after a bumper hit, the robot backs up this much before going again
 #define BACKUP_SPEED -.2
+#define BUMPER_THETA_OFFSET PI/6  // rad in robot coordinate system
+#define BUMPER_OFFSET .25  // (m) distance in robot coordinate system
         
 using namespace std;
 
@@ -99,9 +101,6 @@ POSE* local_goal_pose = NULL;
 POSE* global_goal_pose = NULL;
 
 vector<POSE> global_path;
-
-#define BUMPER_THETA_OFFSET PI/6  // rad in robot coordinate system
-#define BUMPER_OFFSET .22  // distance in robot coordinate system
 
 /* Print the current state info to the console
 void print_state() 
@@ -235,7 +234,11 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 
 
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
-{    
+{  
+  // init pose
+  if(robot_pose == NULL)
+    robot_pose = make_pose(0,0,0);
+    
   robot_pose->x = msg->pose.position.x;
   robot_pose->y = msg->pose.position.y;
   robot_pose->z = msg->pose.position.z;
@@ -295,19 +298,19 @@ void publish_bumper(bool left, bool right)
   if(left && right)
     theta = 0;
   else if(left)
-    theta = -BUMPER_THETA_OFFSET;
-  else
     theta = BUMPER_THETA_OFFSET;
+  else
+    theta = -BUMPER_THETA_OFFSET;
   
   // transform 1, from range and degree in robot local to x and y in robot local coordinate frame
-  float x = BUMPER_OFFSET*sin(theta);
-  float y = BUMPER_OFFSET*cos(theta);
+  float y = BUMPER_OFFSET*sin(theta);
+  float x = BUMPER_OFFSET*cos(theta);
   
   // transform 2 from local x, y to global x, y     
   geometry_msgs::Pose2D msg;
   msg.x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
   msg.y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-    
+  
   bumper_pose_pub.publish(msg); 
 }
 
@@ -569,7 +572,7 @@ int main(int argc, char * argv[])
     
     // set up publishers
     odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
-    bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 1);
+    bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
     
     // set up subscribers
     user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
