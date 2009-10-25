@@ -34,6 +34,7 @@
 
 #include "geometry_msgs/Point32.h"
 #include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/Pose2D.h"
 
 #include "sensor_msgs/PointCloud.h"
 
@@ -579,7 +580,7 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   laser_map_changes.resize(next_change);
 }
 
-void bumper_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 { 
   if(bumper_map == NULL)
     return;
@@ -588,12 +589,12 @@ void bumper_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   float y_scl = 1/laser_map->resolution;
   
   // transform bumper points to map coords and remember them
-  float x = (int)(x_scl*msg->pose.position.x + 1); // same + 1 annoying bug as in laser scan callback
-  float y = (int)(y_scl*msg->pose.position.y + 1); // same + 1 annoying bug as in laser scan callback
+  float x = (int)(x_scl*msg->x + 1); // same + 1 annoying bug as in laser scan callback
+  float y = (int)(y_scl*msg->y + 1); // same + 1 annoying bug as in laser scan callback
           
   int list_ind = bumper_map_changes.size(); 
   bumper_map_changes.resize(list_ind+1);
-
+  
   if(x >= 0 && x < laser_map->width && y >= 0 && y < laser_map->height)
   {
     bumper_map->cost[(int)y][(int)x] = BUMPER_COST;
