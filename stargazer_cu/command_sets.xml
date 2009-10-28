@@ -1,24 +1,23 @@
 <?xml version="1.0" ?>
 <!-- These commands in each parent don't have to be in order, but they should. YOU MUST INCLUDE the CalcStop or CalcStart command. Note that the necessary ~# | and ` string format parameters specific to the pseudolite system will be included in the hagisonic code rather than here. Additionally, we have hardcoded the size of the command for memory constraints, so the length of the command and value should be under 30 characters. For the pseudolite, this should not be a problem. -->
-<PseudoLiteCommandsRoot>
+<StargazerRootMap>
 
-  <!-- This is the standard set of commands to initialize the stargazer. Other defaulted command values can be specified in a different xml child -->
-  <PseudoLiteCommandSet title="standard_init">
-    <PseudoCmd command="CalcStop" value="" </PseudoCmd>
-    <PseudoCmd command="ThrAlg" value="Auto" </PseudoCmd>
-    <PseudoCmd command="MarkType" value="Office" </PseudoCmd>
-    <PseudoCmd command="MarkDim" value="HLD2-2" </PseudoCmd>
-    <PseudoCmd command="MarkHeight" value="2140" </PseudoCmd>
-    <PseudoCmd command="SetEnd" value="" </PseudoCmd>
-    <PseudoCmd command="CalcStart" value="" </PseudoCmd>
-  </PseudoLiteCommandSet>
+    <!-- This is the standard set of commands to initialize the stargazer. Other defaulted command values can be specified in a different xml child -->
+    <StargazerCommandSet title="standard_init">
+        <StarCmd command="CalcStop" value=""></StarCmd>
+        <StarCmd command="ThrAlg" value="Auto"></StarCmd>
+        <StarCmd command="MarkType" value="Office"></StarCmd>
+        <StarCmd command="MarkDim" value="HLD2-2"></StarCmd>
+        <StarCmd command="MarkHeight" value="2140"></StarCmd>
+        <StarCmd command="SetEnd" value=""></StarCmd>
+        <StarCmd command="CalcStart" value=""></StarCmd>
+    </StargazerCommandSet>
 
-  <!-- This is the set of commands to have the stargazer automatically map the environment, instead of manual. This means that the stargazer will dynamically builds the map while the robot moves arouond, rather than loading the map in from an XML file. -->
-  <PseudoLiteCommmandSet title="auto-mapping">
-    <PseudoCmd command="CalcStop" value="" </PseudoCmd>
-    <PseudoCmd command="MarkMode" value="Map" </PseudoCmd>
-    <PseudoCmd command="MapMode" value="Start" </PseudoCmd>
-    <PseudoCmd command="CalcStart" value="" </PseudoCmd>
-  </PseudoLiteCommandSet>
-  
-</PseudoLiteCommandsRoot>
+    <!-- This is the set of commands to have the stargazer automatically map the environment, instead of manual. This means that the stargazer will dynamically builds the map while the robot moves arouond, rather than loading the map in from an XML file. -->
+    <StargazerCommandSet title="auto-mapping">
+        <StarCmd command="CalcStop" value=""></StarCmd>
+        <StarCmd command="MarkMode" value="Map"></StarCmd>
+        <StarCmd command="MapMode" value="Start"></StarCmd>
+        <StarCmd command="CalcStart" value=""></StarCmd>
+    </StargazerCommandSet>
+</StargazerRootMap>
