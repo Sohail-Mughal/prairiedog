@@ -55,13 +55,14 @@
 
 void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseudolite p_data );
 geometry_msgs::Pose2D convert2global ( geometry_msgs::Pose2D meas, Pseudolite p_data );
-void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file);
+void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file, const char * cmd_init_set);
 
 int main ( int argc, char ** argv ) {
 
   // Set the default values
   const char * pseudo_file = "pseudolites.xml";
   const char * command_file = "command_sets.xml";
+  const char * cmd_init_set = "standard_init"; // name for set of initialization commands in xml file.
   const char * stargazer_name = "new_stargazer";
   const char * port_name = "/dev/stargazer";
 
@@ -75,15 +76,17 @@ int main ( int argc, char ** argv ) {
       stargazer_name = argv[in+1];
     else if(!strcmp("-c",argv[in]))
       command_file = argv[in+1];
+    else if(!strcmp("-s",argv[in]))
+      cmd_init_set = argv[in+1];
     else if(!strcmp("-f",argv[in]))
       pseudo_file = argv[in+1];
     else if(!strcmp("-p",argv[in]))
       port_name = argv[in+1];
     else if(!strcmp("--help",argv[in])){
-      ROS_INFO("\n\tInput arguments:\n\t-n <name>: name of this ROS service\n\t-c <name>: Stargazer init xml file\n\t-p <name>: the portname of the Stargazer Module\n\t-f <name>: the name of the pseudolite location xml file\n");
+      ROS_INFO("\n\tInput arguments:\n\t-n <name>: name of this ROS service\n\t-c <name>: Stargazer init xml file\n\t-s <name>: name of command set within the command file\n\t-p <name>: the portname of the Stargazer Module\n\t-f <name>: the name of the pseudolite location xml file\n");
       return 0;}
     else
-      ROS_INFO("Unknown argument: %s\n", argv[in]);
+      ROS_INFO("Unknown argument: %s. Try --help next time. Continuing with default settings\n", argv[in]);
   }
 //  if (help) {break;}
 
@@ -102,7 +105,7 @@ int main ( int argc, char ** argv ) {
 	int port = setup_serial_port(port_name);
 
   // load configuration file to load things up
-  setup_stargazer( port, n, loop_rate, command_file );
+  setup_stargazer( port, n, loop_rate, command_file, cmd_init_set);
   
 	STATE = waiting_for_STX;
 	while ( n.ok() ) {
@@ -177,7 +180,7 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		  while ( meas.theta >= 2*M_PI ) meas.theta -= 2*M_PI;
 	
 		  // Output the data
-		  //ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
+		  ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
 		  data_pub->publish(meas);
     }else{ // If the measured Pseudolite ID was not found.
       //ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites: \n %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
@@ -204,13 +207,13 @@ geometry_msgs::Pose2D convert2global ( geometry_msgs::Pose2D meas, Pseudolite p_
  * from a config file currently hard-coded below
  * and perhaps later read in from command prompt
  */
-void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file)
+void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file, const char * cmd_init_set)
 {
 	// ****** Settings specific to pseudolite configuration **********************
 	// ****** You may need to edit these based on pseudolite version *************
 	// ****** or startup-command set *********************************************
 	TiXmlDocument doc( command_file ); // config file directory
-	const char * cmd_init_set = "standard_init"; // name for set of initialization commands in xml file.
+//	const char * cmd_init_set = "standard_init"; // name for set of initialization commands in xml file.
 	const char * cmd_start = "~#"; // Special symbols for pseudolite as a start command sequence
 	const char * cmd_end = "`"; // special end command sequence
 
@@ -224,14 +227,13 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	int i; // index variable, used mainly for managing  strings
 	char check_cmd, check_value;
         
-  if (!doc.LoadFile()) // if we couldn't successfully load the config file:
+  	if (!doc.LoadFile()) // if we couldn't successfully load the config file:
 	{
-		ROS_INFO("Pseudolite config settings file could not be loaded. Hopefully stuff works anyway...\n");
-		return; 
-
+		ROS_INFO("Stargazer config settings file could not be loaded. %s We kind of need that for everything to work...\n", doc.ErrorDesc());
+		return;
 	}
-	
-	ROS_INFO("Pseudolite config settings file was loaded successfully.\n");
+
+  	ROS_INFO("Stargazer config settings file was loaded successfully.\n");
 
 	// ***************** Methodology ***************************************
 	// Find proper set of commands to issue, from xml file
@@ -242,8 +244,9 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	
 	// Stuff for xml config file
 	TiXmlElement *parent = doc.RootElement();
-  TiXmlElement *cmd_category = 0;
-  TiXmlElement *cmd_child = 0;
+  	TiXmlElement *cmd_category = 0;
+  	TiXmlElement *cmd_child = 0;
+  	const char *cmd_set = "\0"; 
 	
 	// start communicating with board
 	//ROS_INFO("Initializing parameters for our world");
@@ -257,7 +260,15 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	// The one we are looking for is stored in cmd_init_set
 	do{
 		cmd_category = (TiXmlElement *)(parent->IterateChildren( cmd_category ) );
-	} while ( strcmp( (cmd_category->Attribute("title")), cmd_init_set ) != 0 );
+		if (cmd_category){
+			ROS_INFO("cmd_category = %s", cmd_category);
+			if(!cmd_category->Attribute("title") ) {
+				cmdset = "\0";
+			}
+			else cmdset = cmd_category->Attribute("title");
+		}
+	} while ( strcmp( cmdset, cmd_init_set ) != 0 && cmd_category);
+	// TODO: need to add check to ensure we're not at the end of the file, otherwise we get a null cmd_category at some point
 
 	// iterate through sending commands, almost all of which come with its own response
 	// Make sure the node is ok to talk, and while there are still commands to send
@@ -291,7 +302,7 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 						STATE = send_cmd; 
 					}
 					else {
-                        //ROS_INFO("Uh oh, couldn't read properly. Trying again");
+                        ROS_INFO("Uh oh, couldn't read properly. Trying again");
                     }
 				}
 
