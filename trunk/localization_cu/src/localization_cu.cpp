@@ -41,6 +41,8 @@
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/GridCells.h"
 
+#include "localization_cu/GetPose.h"
+
 #ifndef PI
   #define PI 3.1415926535897
 #endif
@@ -59,6 +61,9 @@ ros::Publisher pose_pub;
 ros::Subscriber odometer_pose_sub;
 ros::Subscriber user_pose_sub;
 ros::Subscriber stargazer_pose_sub;
+
+// global ROS provide service server handles
+ros::ServiceServer get_pose_srv;
 
 // globals
 POSE* posterior_pose = NULL; // our best idea of where we are in the global coordinate system
@@ -288,6 +293,27 @@ void publish_pose()
   //print_pose(posterior_pose);
 }
 
+// service that provides pose
+bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::GetPose::Response &resp)
+{  
+ if(USING_GPS && !received_gps)
+    return false;
+  
+  geometry_msgs::PoseStamped msg;
+  resp.pose.header.frame_id = "/2Dmap";
+  resp.pose.pose.position.x = posterior_pose->x;
+  resp.pose.pose.position.y = posterior_pose->y;
+  resp.pose.pose.position.z = posterior_pose->z;  
+  resp.pose.pose.orientation.w = posterior_pose->qw; 
+  resp.pose.pose.orientation.x = posterior_pose->qx;
+  resp.pose.pose.orientation.y = posterior_pose->qy;
+  resp.pose.pose.orientation.z = posterior_pose->qz; 
+  
+  //printf(" published pose via service %d\n",num_its++);
+  //print_pose(posterior_pose);
+  
+  return true;
+}
 
 int main(int argc, char** argv) 
 {
@@ -306,6 +332,9 @@ int main(int argc, char** argv)
     user_pose_sub = nh.subscribe("/cu/user_pose_cu", 1, user_pose_callback);
     stargazer_pose_sub = nh.subscribe("/cu/stargazer_pose_cu", 1, stargazer_pose_callback);
 
+    // set up service servers
+    get_pose_srv = nh.advertiseService("/cu/get_pose_cu", get_pose_callback);
+    
     while (ros::ok()) 
     {
       //printf(" This is the localization system \n");
@@ -323,7 +352,8 @@ int main(int argc, char** argv)
     
     odometer_pose_sub.shutdown();
     user_pose_sub.shutdown();
-    
+    get_pose_srv.shutdown();
+        
     destroy_pose(odometer_pose);
     destroy_pose(posterior_pose);
 }

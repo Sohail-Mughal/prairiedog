@@ -38,5 +38,8 @@ Subscribes to:
 Publishes to:
 - \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
 
+\subsubsection services ROS services
+- \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] provides the current pose in world coordinates.
+
 
 */

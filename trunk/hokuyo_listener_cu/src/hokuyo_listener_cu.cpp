@@ -327,7 +327,6 @@ int main(int argc, char** argv)
     // set up publishers
     laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
     
-    
 	while (nh.ok()) 
     {   
         publish_point_cloud();

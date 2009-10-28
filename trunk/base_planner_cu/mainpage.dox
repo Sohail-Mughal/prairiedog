@@ -34,6 +34,7 @@ Subscribes to:
 - \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
 - \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero
 - \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] This is actually a service this node requests, it requests a map and then receives one. This is generally only used once to get the initial map, after which all map changes are handled by "/cu/map_changes_cu". Note: map must be positive and non-zero.
+- \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] this is actually a service provides that provides the current pose in world coordinates
 
 Publishes to:
 - \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in world coordinates.

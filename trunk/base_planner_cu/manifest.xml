@@ -8,4 +8,6 @@
   <depend package="nav_msgs"/>
   <depend package="geometry_msgs"/>
   <depend package="sensor_msgs"/>
+  <depend package="mapper_cu"/>
+  <depend package="localization_cu"/>
 </package>
