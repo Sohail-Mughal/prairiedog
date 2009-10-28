@@ -105,7 +105,7 @@ int main ( int argc, char ** argv ) {
 	int port = setup_serial_port(port_name);
 
   // load configuration file to load things up
-  setup_stargazer( port, n, loop_rate, command_file, cmd_init_set);
+//  setup_stargazer( port, n, loop_rate, command_file, cmd_init_set);
   
 	STATE = waiting_for_STX;
 	while ( n.ok() ) {
@@ -180,7 +180,7 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		  while ( meas.theta >= 2*M_PI ) meas.theta -= 2*M_PI;
 	
 		  // Output the data
-		  ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
+		  //ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
 		  data_pub->publish(meas);
     }else{ // If the measured Pseudolite ID was not found.
       //ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites: \n %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
@@ -262,12 +262,12 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 		cmd_category = (TiXmlElement *)(parent->IterateChildren( cmd_category ) );
 		if (cmd_category){
 			ROS_INFO("cmd_category = %s", cmd_category);
-			if(!cmd_category->Attribute("title") ) {
-				cmdset = "\0";
-			}
-			else cmdset = cmd_category->Attribute("title");
+			//if(!cmd_category->Attribute("title") ) {
+				//cmdset = 0;
+			//}
+			//else cmdset = cmd_category->Attribute("title");
 		}
-	} while ( strcmp( cmdset, cmd_init_set ) != 0 && cmd_category);
+	} while ( strcmp( cmd_category->Attribute("title"), cmd_init_set ) != 0 && cmd_category);
 	// TODO: need to add check to ensure we're not at the end of the file, otherwise we get a null cmd_category at some point
 
 	// iterate through sending commands, almost all of which come with its own response
