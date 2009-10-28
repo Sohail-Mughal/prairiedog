@@ -44,6 +44,8 @@
 
 #include "sensor_msgs/PointCloud.h"
 
+#include "localization_cu/GetPose.h"
+
 #define MAINFILE
 #define NOGLUT
 #define CPP
@@ -755,6 +757,55 @@ bool load_map()
   return true;
 }
 
+bool load_pose()
+{
+  localization_cu::GetPose::Request req;
+  localization_cu::GetPose::Response resp;
+  //ROS_INFO("Requesting the pose...\n");
+  if( !ros::service::call("/cu/get_pose_cu", req, resp) )
+  {
+    ROS_INFO("load pose failed\n");
+    return false;
+  }
+  
+   if(raw_map == NULL)
+    return false;
+
+  if((int)(resp.pose.pose.position.x/raw_map->resolution) < 1)
+    return false;
+  if((int)(resp.pose.pose.position.x/raw_map->resolution) > raw_map->width - 1)
+    return false;
+  if((int)(resp.pose.pose.position.y/raw_map->resolution) < 1)
+    return false;
+  if((int)(resp.pose.pose.position.y/raw_map->resolution) > raw_map->height - 1)
+    return false;
+
+  if(robot_pose == NULL)
+    robot_pose = make_pose(0,0,0);
+
+  robot_pose->x = resp.pose.pose.position.x;
+  robot_pose->y = resp.pose.pose.position.y;
+  robot_pose->z = resp.pose.pose.position.z;
+  robot_pose->qw = resp.pose.pose.orientation.w;
+  robot_pose->qx = resp.pose.pose.orientation.x;
+  robot_pose->qy = resp.pose.pose.orientation.y;
+  robot_pose->qz = resp.pose.pose.orientation.z; 
+  
+  float qw = robot_pose->qw;
+  float qx = robot_pose->qx;
+  float qy = robot_pose->qy;
+  float qz = robot_pose->qz; 
+  
+  robot_pose->cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
+  robot_pose->sin_alpha = 2*qw*qz + 2*qx*qy;
+  robot_pose->alpha = atan2(robot_pose->sin_alpha, robot_pose->cos_alpha);
+  //printf(" new pose: \n");
+  //print_pose(robot_pose);
+  //getchar();
+  
+  return true;
+}
+
 int main(int argc, char** argv) 
 {
   ros::init(argc, argv, "base_planner_cu");
@@ -816,13 +867,20 @@ int main(int argc, char** argv)
     change_token_used = true;
 
     time_counter++;
-    //printf(" This is the base planner \n");
+    //printf(" This is the base planner %d\n", time_counter); // heartbeat for debugging
 
     if(new_goal)
     {
       printf("reinitializing \n");
       initialize_search(true); // true := reuse the old map
       new_goal = false;   
+      
+      // get best estimate of pose
+      while(!load_pose())
+      {
+        // wait for most up to date pose
+      }
+      printf(" recieved pose via service \n");    
     }
     
     

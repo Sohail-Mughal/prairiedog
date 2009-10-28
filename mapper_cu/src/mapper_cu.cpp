@@ -730,6 +730,7 @@ int main(int argc, char** argv)
     pose_sub.shutdown();
     bumper_pose_sub.shutdown();
     map_changes_pub.shutdown();
+    get_map_srv.shutdown();
      
     destroy_map(bumper_map);
     destroy_map(laser_map);
