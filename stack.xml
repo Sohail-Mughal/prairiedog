@@ -13,6 +13,7 @@
   <depend package="hokuyo_listener_cu"/>
   
   <depend package="localization_cu"/>
+  <depend package="goal_server_cu"/>
   <depend package="mapper_cu"/>
   <depend package="base_planner_cu"/>
   
