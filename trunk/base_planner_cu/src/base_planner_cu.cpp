@@ -818,6 +818,67 @@ bool load_pose()
   return true;
 }
 
+bool load_goal()
+{
+  localization_cu::GetPose::Request req;
+  localization_cu::GetPose::Response resp;
+  //ROS_INFO("Requesting the pose...\n");
+  if( !ros::service::call("/cu/get_goal_cu", req, resp) )
+  {
+    ROS_INFO("load pose failed\n");
+    return false;
+  }
+  
+   if(raw_map == NULL)
+    return false;
+   else if(goal_pose->x == resp.pose.pose.position.x && 
+          goal_pose->y == resp.pose.pose.position.y &&
+          goal_pose->z == resp.pose.pose.position.z && 
+          goal_pose->qw == resp.pose.pose.orientation.w && 
+          goal_pose->qx == resp.pose.pose.orientation.x && 
+          goal_pose->qy == resp.pose.pose.orientation.y && 
+          goal_pose->qz == resp.pose.pose.orientation.z) // if it is the same as the old pose, then do nothing
+   return false;
+  
+  printf("new goal via service -------------------------------------------------------------------\n");
+  
+  if((int)(resp.pose.pose.position.x/raw_map->resolution) < 1)
+    return false;
+  if((int)(resp.pose.pose.position.x/raw_map->resolution) > raw_map->width - 1)
+    return false;
+  if((int)(resp.pose.pose.position.y/raw_map->resolution) < 1)
+    return false;
+  if((int)(resp.pose.pose.position.y/raw_map->resolution) > raw_map->height - 1)
+    return false;
+
+  if(robot_pose == NULL)
+    robot_pose = make_pose(0,0,0);
+
+  goal_pose->x = resp.pose.pose.position.x;
+  goal_pose->y = resp.pose.pose.position.y;
+  goal_pose->z = resp.pose.pose.position.z;
+  goal_pose->qw = resp.pose.pose.orientation.w;
+  goal_pose->qx = resp.pose.pose.orientation.x;
+  goal_pose->qy = resp.pose.pose.orientation.y;
+  goal_pose->qz = resp.pose.pose.orientation.z; 
+  
+  float qw = goal_pose->qw;
+  float qx = goal_pose->qx;
+  float qy = goal_pose->qy;
+  float qz = goal_pose->qz; 
+  
+  goal_pose->cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
+  goal_pose->sin_alpha = 2*qw*qz + 2*qx*qy;
+  goal_pose->alpha = atan2(goal_pose->sin_alpha, goal_pose->cos_alpha);
+  //printf(" new goal: \n");
+  //print_pose(goal_pose);
+  //getchar();
+  
+  new_goal = true;
+    
+  return true;
+}
+
 int main(int argc, char** argv) 
 {
   ros::init(argc, argv, "base_planner_cu");
@@ -881,6 +942,8 @@ int main(int argc, char** argv)
     time_counter++;
     //printf(" This is the base planner %d\n", time_counter); // heartbeat for debugging
 
+    load_goal();
+    
     if(new_goal)
     {
       printf("reinitializing \n");
