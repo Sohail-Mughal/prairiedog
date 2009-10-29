@@ -1,0 +1,43 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b localization_cu Keeps track of the current goal and makes this available to the system.
+
+\section rosapi ROS API
+
+
+List of nodes:
+- \b goal_server_cu
+
+<hr>
+
+\subsection goal_server_cu
+
+goal_server_cu subscribes to a topic where incoming messages are remembered as the current goal, which is then published and also available via a service.
+
+\subsubsection Usage
+\verbatim
+$ goal_server_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ goal_server_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Subscribes to:
+- \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] a new robot goal in world coordinates.
+
+Publishes to:
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] the robot's goal in world coordinates.
+
+\subsubsection services ROS services
+- \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] provides the current goal in world coordinates.
+
+
+*/

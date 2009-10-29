@@ -1974,7 +1974,7 @@ int main(int argc, char *argv[])
   map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
   
   // set up ROS topic publishers
-  goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
+  goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
   new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
   user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
   

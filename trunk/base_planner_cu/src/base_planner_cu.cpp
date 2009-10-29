@@ -343,7 +343,7 @@ void update_search_map_and_tree(int* y_bound, int* x_bound, bool update_search_t
     printf(" trying to update to invalid map\n"); 
     return;
   }
-
+  //printf("propogating changes \n");
   float dilation_rad = (robot_radius+safety_distance)/raw_map->resolution;
   float dilation_rad_extra = (robot_radius+safety_distance+extra_dilation)/raw_map->resolution;  
   int dilation_rad_int = (int)dilation_rad+1;
@@ -596,7 +596,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {   
   if(raw_map == NULL)
     return;
-
+ 
   if((int)(msg->pose.position.x/raw_map->resolution) < 1)
     return;
   if((int)(msg->pose.position.x/raw_map->resolution) > raw_map->width - 1)
@@ -608,7 +608,19 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 
   if(goal_pose == NULL)
     goal_pose = make_pose(0,0,0);
+  else if(goal_pose->x == msg->pose.position.x && 
+          goal_pose->y == msg->pose.position.y &&
+          goal_pose->z == msg->pose.position.z && 
+          goal_pose->qw == msg->pose.orientation.w && 
+          goal_pose->qx == msg->pose.orientation.x && 
+          goal_pose->qy == msg->pose.orientation.y && 
+          goal_pose->qz == msg->pose.orientation.z) // if it is the same as the old pose, then do nothing
+      return;
+  
+  printf("new goal -------------------------------------------------------------------\n");
     
+  
+  
   while(change_token_used)
     {printf(" change token used, goal \n");}
   change_token_used = true;
@@ -874,6 +886,13 @@ int main(int argc, char** argv)
       printf("reinitializing \n");
       initialize_search(true); // true := reuse the old map
       new_goal = false;   
+     
+      
+      if(old_path != NULL)
+      {
+        deleteMapPath(old_path);
+        old_path = NULL;
+      }
       
       // get best estimate of pose
       while(!load_pose())
@@ -964,6 +983,12 @@ int main(int argc, char** argv)
       publish_global_path(pathToGoalWithLookAhead); 
       //printf("path1 is better %d %f\n", time_counter, path1_cost);
       
+      if(old_path != NULL)
+      {
+        deleteMapPath(old_path);
+        old_path = NULL;
+      }
+      
       old_path = pathToGoalWithLookAhead;
       deleteMapPath(pathToGoalMine);
     }
@@ -971,6 +996,12 @@ int main(int argc, char** argv)
     {
       publish_global_path(pathToGoalMine);  
       //printf("path2 is better %d %f\n", time_counter, path2_cost);
+      
+      if(old_path != NULL)
+      {
+        deleteMapPath(old_path);
+        old_path = NULL;
+      }
       
       old_path = pathToGoalMine;
       deleteMapPath(pathToGoalWithLookAhead);
