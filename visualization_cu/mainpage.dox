@@ -39,7 +39,7 @@ Subscribes to:
 - \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] This is actually a service this node requests, it requests a map and then receives one. This is generally only used once to get the initial map, after which all map changes are handled by "/cu/map_changes_cu". Note: map must be positive and non-zero.
 
 Publishes to:
-- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
+- \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] new pose of the goal in world coordinates
 - \b "/cu/user_pose_cu": [geometry_msgs::PoseStamped] a user defined pose, used to manually define the robots starting position with a GUI.
 - \b "/cu/user_control_cu": geometry_msgs::Pose2D this is simple control message for the robot base, y is forward speed and theta is turn (x is currently unused)
 
