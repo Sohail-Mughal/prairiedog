@@ -85,9 +85,10 @@ float safety_distance = .1; //(m)
 bool new_goal = false;       
 bool change_token_used = false;
 
-bool high_cost_safety_region = false; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
+bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
 float extra_dilation = .2; //(m)
 float extra_dilation_mult = 100;
+bool extra_dilation_mult_from_dist = true; // when true (and also using high cost safety region), this causes extra_dilation_mult to be calculated as a function of distance (i.e. so that the path is pushed to the center of narrow hallways)
 
 float old_path_discount = .95; // if the old path length multiplied by this is less than the current path, then stick with the old path
 
@@ -307,10 +308,16 @@ void populate_map_from_raw_map()
         {
           for(int dc = dilate_c_start; dc < dilate_c_end; dc++)
           { 
-            if(sqrt(((dr - r)*(dr - r)) + ((dc - c)*(dc - c))) > dilation_rad_extra)
+            float this_dist = sqrt(((dr - r)*(dr - r)) + ((dc - c)*(dc - c)));  
+            if(this_dist > dilation_rad_extra)
               continue;
-            else if(sqrt(((dr - r)*(dr - r)) + ((dc - c)*(dc - c))) > dilation_rad)
+            else if(this_dist > dilation_rad)
             {
+                
+              if(extra_dilation_mult_from_dist)
+                //extra_dilation_mult = (this_dist-dilation_rad)/(dilation_rad_extra-dilation_rad);
+                extra_dilation_mult = (this_dist)/(dilation_rad_extra);
+                 
               if(raw_map_cost[dr][dc]*extra_dilation_mult > max_val)
                 max_val = raw_map_cost[dr][dc]*extra_dilation_mult;  
             }

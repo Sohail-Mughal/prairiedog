@@ -1,19 +1,19 @@
 /*  Copyright Michael Otte, University of Colorado, 9-9-2009
  *
- *  This file is part of Localization_CU.
+ *  This file is part of goal_server_cu.
  *
- *  Localization_CU is free software: you can redistribute it and/or modify
+ *  goal_server_cu is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Localization_CU is distributed in the hope that it will be useful,
+ *  goal_server_cu is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Localization_CU. If not, see <http://www.gnu.org/licenses/>.
+ *  along with goal_server_cu. If not, see <http://www.gnu.org/licenses/>.
  *
  *
  *  If you require a different license, contact Michael Otte at
