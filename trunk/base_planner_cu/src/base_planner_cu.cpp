@@ -91,6 +91,8 @@ float extra_dilation_mult = 100;
 
 float old_path_discount = .95; // if the old path length multiplied by this is less than the current path, then stick with the old path
 
+float MAX_POSE_JUMP = 50;//(map grids)
+
 /*---------------------- MAP --------------------------------------------*/
 struct MAP
 {
@@ -565,7 +567,20 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 
   if(robot_pose == NULL)
     robot_pose = make_pose(0,0,0);
-
+  else
+  {
+    float dx = msg->pose.position.x - robot_pose->x;
+    float dy = msg->pose.position.y - robot_pose->y;
+    if(sqrt(dx*dx + dy*dy)/raw_map->resolution > MAX_POSE_JUMP)
+    {
+      // it is probably easier to replan from scratch than to update the current search tree
+      // so we'll pretend we got a new goal, which will cause that to happen.
+      printf("too far of a pose jump, so rebuilding tree from scratch \n");
+      new_goal = true;  
+    }
+  }
+  
+  
   while(change_token_used)
     {printf(" change token used, pose \n");}
   change_token_used = true;
@@ -794,7 +809,19 @@ bool load_pose()
 
   if(robot_pose == NULL)
     robot_pose = make_pose(0,0,0);
-
+  else
+  {
+    float dx = resp.pose.pose.position.x - robot_pose->x;
+    float dy = resp.pose.pose.position.y - robot_pose->y;
+    if(sqrt(dx*dx + dy*dy)/raw_map->resolution > MAX_POSE_JUMP)
+    {
+      // it is probably easier to replan from scratch than to update the current search tree
+      // so we'll pretend we got a new goal, which will cause that to happen.
+      printf("too far of a pose jump, so rebuilding tree from scratch (service) \n");
+      new_goal = true;  
+    }
+  }
+  
   robot_pose->x = resp.pose.pose.position.x;
   robot_pose->y = resp.pose.pose.position.y;
   robot_pose->z = resp.pose.pose.position.z;
