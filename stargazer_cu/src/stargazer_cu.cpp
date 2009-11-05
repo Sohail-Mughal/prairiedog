@@ -105,7 +105,7 @@ int main ( int argc, char ** argv ) {
 	int port = setup_serial_port(port_name);
 
   // load configuration file to load things up
-//  setup_stargazer( port, n, loop_rate, command_file, cmd_init_set);
+  setup_stargazer( port, n, loop_rate, command_file, cmd_init_set);
   
 	STATE = waiting_for_STX;
 	while ( n.ok() ) {
@@ -170,21 +170,22 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		meas.y = y/100;
         
 		// Find the pseudolite data based on the ID. Implement this with a hash table.
-    if (p_data.getPseudoliteById(ID)){
+		if (p_data.getPseudoliteById(ID)){
 
-      // Convert to the global coordinate system.
-      meas = convert2global(meas, p_data);
+			// Convert to the global coordinate system.
+			meas = convert2global(meas, p_data);
 
-      // Keep the angles in [0, 2*pi].
-		  while ( meas.theta < 0 ) meas.theta += 2*M_PI;
-		  while ( meas.theta >= 2*M_PI ) meas.theta -= 2*M_PI;
-	
-		  // Output the data
-		  //ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
-		  data_pub->publish(meas);
-    }else{ // If the measured Pseudolite ID was not found.
-      //ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites: \n %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
-    }
+			// Keep the angles in [0, 2*pi].
+			while ( meas.theta < 0 ) meas.theta += 2*M_PI;
+			while ( meas.theta >= 2*M_PI ) meas.theta -= 2*M_PI;
+			
+			// Output the data
+			//ROS_INFO("Mode: %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
+			data_pub->publish(meas);
+		}else{ // If the measured Pseudolite ID was not found.
+			ROS_INFO("Error: Measured ID not in list of candidate Pseudo-lites: \n %c, ID: %i, x: %f, y: %f, Angle: %f", mode, ID, meas.x*100, meas.y*100, meas.theta*180/M_PI);
+			// TODO: call the pseudolite ADD function to add it to the strucutre;
+		}
 	}
 
 }
@@ -229,9 +230,9 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
         
   	if (!doc.LoadFile()) // if we couldn't successfully load the config file:
 	{
-		ROS_INFO("Stargazer config settings file could not be loaded. %s We kind of need that for everything to work...\n", doc.ErrorDesc());
-		return;
+		ROS_INFO("Stargazer config settings file could not be loaded. %s We kind of need that for everything to work...\nStarting with no configuration commands...", doc.ErrorDesc());
 	}
+	else { // loaded file correctly
 
   	ROS_INFO("Stargazer config settings file was loaded successfully.\n");
 
@@ -243,9 +244,9 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	// ************************************************************************************
 	
 	// Stuff for xml config file
-	TiXmlElement *parent = doc.RootElement();
-  	TiXmlElement *cmd_category = 0;
-  	TiXmlElement *cmd_child = 0;
+	TiXmlElement *rootElem = doc.RootElement(); // representing the root element "StargazerRootMap"
+  	TiXmlElement *cmd_category; // representing the command set categories "StargazerCommandSet" 
+  	TiXmlElement *cmd_child;    // representing the actual command elements "StarCmd"
   	const char *cmd_set = "\0"; 
 	
 	// start communicating with board
@@ -256,31 +257,55 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	// This means that the first message will be a localization calculation.
 	STATE = waiting_for_STX;
 	
-	// iterate through the command categories in the xml file, since there could be multiple sets of command categories.
-	// The one we are looking for is stored in cmd_init_set
-	do{
-		cmd_category = (TiXmlElement *)(parent->IterateChildren( cmd_category ) );
-		if (cmd_category){
-			ROS_INFO("cmd_category = %s", cmd_category);
-			//if(!cmd_category->Attribute("title") ) {
-				//cmdset = 0;
-			//}
-			//else cmdset = cmd_category->Attribute("title");
-		}
-	} while ( strcmp( cmd_category->Attribute("title"), cmd_init_set ) != 0 && cmd_category);
-	// TODO: need to add check to ensure we're not at the end of the file, otherwise we get a null cmd_category at some point
+	// Find the first command category in the xml file that matches what was given/stored in cmd_init_set
+	// TODO:Note that "StargazerCommandSet" is hardcoded here. Should be fine as long as the command xml file has the expected structure.
 
-	// iterate through sending commands, almost all of which come with its own response
-	// Make sure the node is ok to talk, and while there are still commands to send
-	while ( n.ok() && ( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child )) ) )
-	{
+
+	// Iterate through command categories "StargazerCommandSet" until we find one with the title stored in cmd_init_set
+	cmd_category = rootElem->FirstChildElement( "StargazerCommandSet" ); // Start out at root element
+	if ( cmd_category && cmd_category->Attribute("title")) 
+		cmd_set = cmd_category->Attribute("title");
+	while (cmd_category && strcmp(cmd_set, cmd_init_set))
+	{ 
+		// Debugging info to see where we're iterating through the xml file
+		if (cmd_category->Attribute("title"))
+		{
+			ROS_INFO("iterating through categories: %s", cmd_category->Attribute("title"));
+		}
+		else if (cmd_category->Attribute("command"))
+			ROS_INFO("iterating through unknown cat level: %s", cmd_category->Attribute("command"));
+		else
+			ROS_INFO("iterating through unknown cat level %s", cmd_category);
+
+		cmd_category = cmd_category->NextSiblingElement(); // Iterate through category siblings
+		if ( cmd_category && cmd_category->Attribute("title")) 
+			cmd_set = cmd_category->Attribute("title");
+	} 
+
+	// Debugging info
+	cmd_category->Print(stdout,2);
+
+	if ( !cmd_category ) 
+	{ // the specific command set was not found
+		ROS_INFO("Could not find cmd_category %s\nStargazer will start up on default with no specific commands.", cmd_init_set);
+	}
+	else // (cmd_category != NULL)
+	{ // command set was found
+		ROS_INFO("Found cmd_category %s.", cmd_init_set);
+		// iterate through sending commands, almost all of which come with its own response
+		// Make sure the robot node is ok to talk, and while there are still commands to send
+		cmd_child = 0;
+		while ( n.ok() && ( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child )) ) )
+		{
+			ROS_INFO("in while, %d", STATE);
+			cmd_child->Print(stdout,2);
 		switch ( STATE )
 		{
 			case waiting_for_STX:
 				// Waiting for response from card
-				strcpy( rec_msg, '\0');
+				strcpy( rec_msg, "0\0");
 				// looking for a ~ to indicate the start of a response, as set at the top of this function
-				while ( strcmp( rec_msg, cmd_start ) != 0 ) {
+				while ( n.ok() && (rec_msg == NULL || strcmp( rec_msg, cmd_start ) != 0 ) ) {
 					read ( port, rec_msg, 1 );
 					loop_rate.sleep();
 				}
@@ -292,7 +317,7 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 				i = 0;
 				// read the incoming response. The response
 				// ends with a ` character as set at the top of the function
-				while ( strcmp(rec_msg, cmd_end) != 0 ) {
+				while ( n.ok() && strcmp(rec_msg, cmd_end) != 0 ) {
 					++i;
 					if ( read ( port, rec_msg + i, 1 ) )
         				{
@@ -302,16 +327,15 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 						STATE = send_cmd; 
 					}
 					else {
-                        ROS_INFO("Uh oh, couldn't read properly. Trying again");
-                    }
+	                        		ROS_INFO("Uh oh, couldn't read properly. Trying again");
+                    			}
 				}
 
-	      // Check if the received data is a parameter response, starting with ~!
-	      sscanf(rec_msg, "~!%s|%s`", &check_cmd, &check_value);
-	      if ( strcmp(rec_msg, send_msg) ) // Make sure the sent command is same as received
-	      	ROS_INFO("Correctly set %s to %s", &check_cmd, &check_value);
-	      else ROS_INFO("Warning: Different commands! Sent %s, received %s", send_msg, rec_msg); 
-
+	      			// Check if the received data is a parameter response, starting with ~!
+	      			sscanf(rec_msg, "~!%s|%s`", &check_cmd, &check_value);
+	      			if ( strcmp(rec_msg, send_msg) ) // Make sure the sent command is same as received
+	      			ROS_INFO("Correctly set %s to %s", &check_cmd, &check_value);
+				else ROS_INFO("Warning: Different commands! Sent %s, received %s", send_msg, rec_msg); 
 				break;
 
 			case send_cmd:
@@ -336,7 +360,7 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 					// send the command through the serial port
 					if ( ! write ( port, send_msg + i, 1) )
             					ROS_INFO("Uh Oh, couldn't send command");
-				} while ( strcmp( send_msg, cmd_end) != 0);
+				} while ( n.ok() && strcmp( send_msg, cmd_end) != 0);
 
 				STATE = waiting_for_STX;
 				break;
@@ -344,8 +368,10 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 			default:
 				ROS_INFO("onoz!: System has reached an unknown state\n");
 				break;
-		}
-	}
+		} // end switch
+		} // end while
+	} // end else (command set was found)
+	} // end else (doc was loaded)
 
 	free( send_msg );
 	free( rec_msg );

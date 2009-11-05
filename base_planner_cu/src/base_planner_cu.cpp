@@ -92,7 +92,7 @@ bool extra_dilation_mult_from_dist = true; // when true (and also using high cos
 
 float old_path_discount = .95; // if the old path length multiplied by this is less than the current path, then stick with the old path
 
-float MAX_POSE_JUMP = 50;//(map grids)
+float MAX_POSE_JUMP = 15;//(map grids)
 
 /*---------------------- MAP --------------------------------------------*/
 struct MAP
