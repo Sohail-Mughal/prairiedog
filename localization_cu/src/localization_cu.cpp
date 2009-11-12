@@ -49,7 +49,7 @@
   
 #define MOVEMULT 2 // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data)
    
-bool USING_GPS = false; //true; // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
+bool USING_GPS = true; //true; // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
         
 struct POSE;
 typedef struct POSE POSE;
