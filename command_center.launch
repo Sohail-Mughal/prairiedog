@@ -1,0 +1,9 @@
+<launch>
+
+
+  <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+
+
+
+</launch>
