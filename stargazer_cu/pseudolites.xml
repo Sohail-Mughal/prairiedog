@@ -15,10 +15,10 @@
     <PseudoLite id="1956" x="12.18" y="6.49" angle="4.7124"></PseudoLite>
     <PseudoLite id="1954" x="15.41" y="6.49" angle="4.7124"></PseudoLite>
     <PseudoLite id="1932" x="15.41" y="8.79" angle="4.7124"></PseudoLite>
-    <PseudoLite id="1894" x="13.62" y="10.62" angle="0.0"></PseudoLite>
-    <PseudoLite id="1958" x="12.18" y="10.62" angle="0.0"></PseudoLite>
-    <PseudoLite id="1942" x="14.29" y="11.9" angle="1.5708"></PseudoLite>
-    <PseudoLite id="1938" x="14.29" y="14.34" angle="0.0"></PseudoLite>
+    <PseudoLite id="1894" x="14.32" y="10.42" angle="0.0"></PseudoLite>
+    <PseudoLite id="1958" x="12.18" y="10.42" angle="0.0"></PseudoLite>
+    <PseudoLite id="1942" x="15.19" y="11.9" angle="1.5708"></PseudoLite>
+    <PseudoLite id="1938" x="15.19" y="14.34" angle="0.0"></PseudoLite>
     <PseudoLite id="1940" x="11.76" y="13.39" angle="0.0"></PseudoLite>
     <PseudoLite id="1926" x="11.76" y="15.30" angle="4.7124"></PseudoLite>
 </PseudoLiteMap>
