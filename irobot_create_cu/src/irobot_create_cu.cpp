@@ -615,7 +615,14 @@ int main(int argc, char * argv[])
           new_global_path = 0;
         }
         
-        if (controller->isBumpedLeft() || controller->isBumpedRight()) 
+        
+        if(user_e_stop == 1)
+        { 
+          setSpeed(0);
+          setTurn(0);   
+          backing_up = false; 
+        }
+        else if (controller->isBumpedLeft() || controller->isBumpedRight()) 
         {
           // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
             
