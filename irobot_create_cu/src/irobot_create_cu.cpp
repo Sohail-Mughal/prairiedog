@@ -117,6 +117,10 @@ void print_state()
 }
 */
 
+/* ------------------- a few function headers ---------------------------*/
+float setSpeed(float newspeed);
+float setTurn(float x);
+
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
 {
@@ -186,46 +190,59 @@ void print_pose(POSE* pose)
 void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 {
     
-  if(msg->y > 0)
-  {
-    speed += use_input_speed_increment;
-    if(speed > max_speed)
-        speed = max_speed;
-  }
-  else if(msg->y < 0)
-  {
-    speed -= use_input_speed_increment;
-    if(speed < -max_speed)
-        speed = -max_speed;
-  }
-  else
-  {
-    speed = 0;
-  }
-
-  if(msg->theta > 0)
-  {
-    turn += use_input_turn_increment;
-    if(turn > max_turn)
-        turn = max_turn;
-  }
-  else if(msg->theta < 0)
-  {
-    turn -= use_input_turn_increment;
-    if(turn < -max_turn)
-        turn = -max_turn;  
-  }
-  else
-  {
-    turn = 0;
-  }
-
   if(msg->y == 0 && msg->theta == 0)
   {
-    if(user_e_stop == 0)
-      user_e_stop = 1;
-    else
+    if(user_e_stop == 1 && (speed != 0 || turn != 0))
+    {
+       // if moving in user control mode, just stop the robot
+       setSpeed(0);
+       setTurn(0);    
+    }
+    else if(user_e_stop == 0)
+    {
+       // if moving in path planning mode stop the robot and change to user controled mode
+       setSpeed(0);
+       setTurn(0);   
+       user_e_stop = 1;
+    }
+    else // (not moving in user control mode so change to path planning mode
       user_e_stop = 0;   
+  }
+  else
+  {
+  	if(msg->y > 0)
+    {
+        speed += use_input_speed_increment;
+        if(speed > max_speed)
+            speed = max_speed;
+    }
+    else if(msg->y < 0)
+    {
+        speed -= use_input_speed_increment;
+        if(speed < -max_speed)
+            speed = -max_speed;
+    }
+    else
+    {
+        speed = 0;
+    }
+
+    if(msg->theta > 0)
+    {
+        turn += use_input_turn_increment;
+        if(turn > max_turn)
+            turn = max_turn;
+    }
+    else if(msg->theta < 0)
+    {
+        turn -= use_input_turn_increment;
+        if(turn < -max_turn)
+            turn = -max_turn;  
+    }
+    else
+    {
+        turn = 0;
+    }    
   }
       
   //ROS_INFO_STREAM("speed: " << speed << "turn: " << turn );
@@ -614,12 +631,11 @@ int main(int argc, char * argv[])
            
           new_global_path = 0;
         }
+
         
         
         if(user_e_stop == 1)
         { 
-          setSpeed(0);
-          setTurn(0);   
           backing_up = false; 
         }
         else if (controller->isBumpedLeft() || controller->isBumpedRight()) 
