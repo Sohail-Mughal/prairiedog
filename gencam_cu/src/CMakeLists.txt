@@ -1,0 +1,1 @@
+rospack_add_executable(gencam_cu gencam_cu.cpp)

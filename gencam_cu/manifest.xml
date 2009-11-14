@@ -1,0 +1,16 @@
+<package>
+  <description brief="A generic driver for USB camera using OpenCV"></description>
+  <author>Nikolaus Correll</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <depend package="roscpp"/>
+  <depend package="std_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="self_test"/>
+  <depend package="opencv2"/>
+  <depend package="image_transport"/>
+  <export>
+    <cpp cflags="-I${prefix}/include -I${prefix}/msg/cpp" lflags="-L${prefix}/lib"/>
+  </export>
+</package>
+
