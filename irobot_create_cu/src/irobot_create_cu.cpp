@@ -61,7 +61,7 @@
 #define BUMPER_BACKUP_DIST .015 //(m) after a bumper hit, the robot backs up this much before going again
 #define BACKUP_SPEED -.2
 #define BUMPER_THETA_OFFSET PI/6  // rad in robot coordinate system
-#define BUMPER_OFFSET .25  // (m) distance in robot coordinate system
+#define BUMPER_OFFSET .35  // (m) distance in robot coordinate system
         
 using namespace std;
 
