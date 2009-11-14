@@ -859,7 +859,7 @@ bool load_goal()
   //ROS_INFO("Requesting the pose...\n");
   if( !ros::service::call("/cu/get_goal_cu", req, resp) )
   {
-    ROS_INFO("load pose failed\n");
+    ROS_INFO("load goal failed\n");
     return false;
   }
   
@@ -999,6 +999,7 @@ int main(int argc, char** argv)
       printf(" recieved pose via service \n");    
     }
     
+    load_pose(); // if services lag then this is a bad idea, but have had problems on netbooks never getting new pose
     
     // find the new exact coordinates of the robot 
     robot_pos_x = robot_pose->x/raw_map->resolution; // need to add global offset ability
