@@ -30,7 +30,7 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *
  *********************************************************************/
-#define OUTPUT_ENABLED
+//define OUTPUT_ENABLED
 
 #include <stdio.h>
 #include <iostream>
@@ -71,8 +71,8 @@ public:
     image_transport::ImageTransport it(node);
 
     image_pub = it.advertise("image_raw", 1);
-
-    if(NULL==(capture = cvCaptureFromCAM(-1)))
+//cvCaptureFromCAM(-1) uses any camera
+    if(NULL==(capture = cvCaptureFromCAM(1)))
   	{
     		printf("\nError on cvCaptureFromCAM");
   	}
