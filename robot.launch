@@ -17,7 +17,7 @@
   <node name="hokuyo_listener_cu" pkg="hokuyo_listener_cu" type="hokuyo_listener_cu" respawn="true" output="screen" />
   <node name="localization_cu" pkg="localization_cu" type="localization_cu" respawn="true" output="screen" />
   <node name="goal_server_cu" pkg="goal_server_cu" type="goal_server_cu" output="screen" />
-  <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" respawn="true" output="screen" />
+  <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
   <node name="base_planner_cu" pkg="base_planner_cu" type="base_planner_cu" respawn="true" output="screen" />
   <inode name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
 
