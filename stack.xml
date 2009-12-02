@@ -8,16 +8,11 @@
   <license>GNU GPL V3</license>
   <review status="unreviewed" notes=""/>
   <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/PrairieDog</url>
-  <depend package="irobot_create_cu"/>
-  <depend package="stargazer_cu"/>
-  <depend package="hokuyo_listener_cu"/>
-  
-  <depend package="localization_cu"/>
-  <depend package="goal_server_cu"/>
-  <depend package="mapper_cu"/>
-  <depend package="base_planner_cu"/>
-  
-  <depend package="visualization_cu"/>
+
+  <depend stack="ros"/> 
+  <depend stack="ros-brown-pkg"/> 
+  <depend stack="common_msgs"/> 
+  <depend stack="laser_drivers"/> 
 </stack>
 
 
