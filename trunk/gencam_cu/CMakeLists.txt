@@ -3,11 +3,11 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 set(ROS_BUILD_TYPE Debug)
-rospack(gencam_cu)
+rosbuild_init()
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
-gensrv()
-rospack_add_boost_directories()
+rosbuild_gensrv()
+rosbuild_add_boost_directories()
 
 add_subdirectory(src)

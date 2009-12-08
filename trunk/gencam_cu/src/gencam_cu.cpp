@@ -71,8 +71,12 @@ public:
     image_transport::ImageTransport it(node);
 
     image_pub = it.advertise("image_raw", 1);
+    int camera_num = 1;
+    ros::NodeHandle nh("~");
+    nh.getParam("camera_index", camera_num);
+    printf("%d", camera_num);
 //cvCaptureFromCAM(-1) uses any camera
-    if(NULL==(capture = cvCaptureFromCAM(1)))
+    if(NULL==(capture = cvCaptureFromCAM(camera_num)))
   	{
     		printf("\nError on cvCaptureFromCAM");
   	}
