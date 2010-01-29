@@ -10,7 +10,6 @@
   <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/PrairieDog</url>
 
   <depend stack="ros"/> 
-  <depend stack="ros-brown-pkg"/> 
   <depend stack="common_msgs"/> 
   <depend stack="laser_drivers"/> 
 </stack>

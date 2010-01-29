@@ -7,8 +7,8 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
-rospack(localization_cu)
+set(ROS_BUILD_TYPE RelWithDebInfo)
+#rospack(localization_cu)
 
 rosbuild_init()
 
@@ -30,4 +30,4 @@ rosbuild_gensrv()
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
 
-rospack_add_executable(localization_cu src/localization_cu.cpp)
+rosbuild_add_executable(localization_cu src/localization_cu.cpp)

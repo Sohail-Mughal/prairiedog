@@ -7,8 +7,8 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
-rospack(nav_view_cu)
+set(ROS_BUILD_TYPE RelWithDebInfo)
+#rospack(nav_view_cu)
 
 rosbuild_init()
 
@@ -36,5 +36,5 @@ find_package(OpenGL)
 
 set(GRAPHICSLIBS ${GLUT_LIBRARY} ${OPENGL_LIBRAR})
 
-rospack_add_executable(nav_view_cu src/nav_view_cu.cpp)
+rosbuild_add_executable(nav_view_cu src/nav_view_cu.cpp)
 target_link_libraries(nav_view_cu ${GRAPHICSLIBS})
