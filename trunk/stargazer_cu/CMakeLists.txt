@@ -7,7 +7,7 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
+set(ROS_BUILD_TYPE RelWithDebInfo)
 
 rosbuild_init()
 
@@ -20,12 +20,12 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #rosbuild_genmsg()
 #uncomment if you have defined services
 #rosbuild_gensrv()
-rospack_add_library(stargazer_cu include/tinyxml/tinyxml.cpp)
-rospack_add_library(stargazer_cu include/tinyxml/tinyxml.h)
-rospack_add_library(stargazer_cu include/tinyxml/tinyxmlerror.cpp)
-rospack_add_library(stargazer_cu include/tinyxml/tinyxmlparser.cpp)
-rospack_add_library(stargazer_cu include/tinyxml/tinystr.cpp)
-rospack_add_library(stargazer_cu include/tinyxml/tinystr.h)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinyxml.cpp)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinyxml.h)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinyxmlerror.cpp)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinyxmlparser.cpp)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinystr.cpp)
+rosbuild_add_library(stargazer_cu include/tinyxml/tinystr.h)
 #common commands for building c++ executables and libraries
 #rosbuild_add_library(hagisonic src/XMLite.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
@@ -33,4 +33,4 @@ rospack_add_library(stargazer_cu include/tinyxml/tinystr.h)
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
-rospack_add_executable(stargazer_cu src/stargazer_cu.cpp)
+rosbuild_add_executable(stargazer_cu src/stargazer_cu.cpp)
