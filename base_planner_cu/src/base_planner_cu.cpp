@@ -44,6 +44,8 @@
 
 #include "sensor_msgs/PointCloud.h"
 
+#include "std_msgs/Int32.h"
+
 #include "localization_cu/GetPose.h"
 
 #define MAINFILE
@@ -54,6 +56,8 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
+     
+ #define OBSTACLE_COST 10000
         
 struct MAP;
 typedef struct MAP MAP;
@@ -71,6 +75,7 @@ ros::Subscriber map_changes_sub;
 
 // global ROS publisher handles
 ros::Publisher global_path_pub;
+ros::Publisher system_update_pub;
 
 // this stores the raw map as it is received from the mapping system
 MAP* raw_map = NULL;
@@ -87,7 +92,7 @@ bool change_token_used = false;
 
 bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
 float extra_dilation = .2; //(m)
-float extra_dilation_mult = 100;
+float extra_dilation_mult = OBSTACLE_COST;
 bool extra_dilation_mult_from_dist = true; // when true (and also using high cost safety region), this causes extra_dilation_mult to be calculated as a function of distance (i.e. so that the path is pushed to the center of narrow hallways)
 
 float old_path_discount = .95; // if the old path length multiplied by this is less than the current path, then stick with the old path
@@ -232,7 +237,7 @@ float prob_to_cost(float prob)
   if(prob < .3)
     return 1;
   else
-    return 100;  
+    return OBSTACLE_COST;  
 }
         
 // this transfers the data from raw_map to the search map, dilating it 
@@ -749,6 +754,14 @@ void publish_global_path(MapPath* path)
   change_token_used = false;
 }
 
+void publish_system_update(int data)
+{
+  std_msgs::Int32 msg;  
+  
+  msg.data = data;
+  system_update_pub.publish(msg); 
+}
+
 
 /*----------------------- ROS service functions -------------------------*/
 // requests the map from the mapping system, stores it in raw_map
@@ -926,6 +939,7 @@ int main(int argc, char** argv)
     
   // set up ROS topic publishers
   global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
+  system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 10);
   
   // spin ros once
   ros::spinOnce();
@@ -1054,32 +1068,36 @@ int main(int argc, char** argv)
     // extract the path, this will be used to figure out where to move the robot  
     //printf("extract path1 %d \n", time_counter);
     MapPath* pathToGoalWithLookAhead = extractPathOneLookahead();
-    double path1_cost = calculatePathCost(pathToGoalWithLookAhead);
+    double path1_max_single_grid;
+    double path1_cost = calculatePathCost(pathToGoalWithLookAhead, path1_max_single_grid);
 
     //printf("extract path2 %d \n", time_counter);
     MapPath* pathToGoalMine = extractPathMine(0); // this uses gradient descent where possible
-    double path2_cost = calculatePathCost(pathToGoalMine);
+    double path2_max_single_grid;
+    double path2_cost = calculatePathCost(pathToGoalMine, path2_max_single_grid);
 
     
     double old_path_cost = LARGE;
+    double old_path_max_single_grid;
     if(old_path != NULL)
-      old_path_cost = calculatePathCost(old_path);
+      old_path_cost = calculatePathCost(old_path, old_path_max_single_grid);
     
     change_token_used = false;
 
     // use better path of the two to move the robot (or retain the old path if it is still better)
-    if(old_path != NULL && old_path_cost*old_path_discount <= path1_cost && old_path_cost*old_path_discount <= path2_cost)
+    if(old_path != NULL && old_path_cost*old_path_discount <= path1_cost && old_path_cost*old_path_discount <= path2_cost && old_path_max_single_grid < OBSTACLE_COST)
     {
       publish_global_path(old_path);
-      //printf("old path is about the same or better %d %f vs %f\n", time_counter, old_path_cost, (path1_cost+path2_cost)/2);  
-      
+      //printf("old path is about the same or better %d [%f vs %f] %f \n", time_counter, old_path_cost, (path1_cost+path2_cost)/2, old_path_max_single_grid);   
+        
       deleteMapPath(pathToGoalMine);  
       deleteMapPath(pathToGoalWithLookAhead);
     }
-    else if(path1_cost < path2_cost)
-    {        
+    else if(path1_cost < path2_cost && path1_max_single_grid < OBSTACLE_COST)
+    {         
       publish_global_path(pathToGoalWithLookAhead); 
-      //printf("path1 is better %d %f\n", time_counter, path1_cost);
+      //printf("path1 is better %d %f %f\n", time_counter, path1_cost, path1_max_single_grid);
+
       
       if(old_path != NULL)
       {
@@ -1090,10 +1108,10 @@ int main(int argc, char** argv)
       old_path = pathToGoalWithLookAhead;
       deleteMapPath(pathToGoalMine);
     }
-    else
+    else if(path2_max_single_grid < OBSTACLE_COST)
     {
       publish_global_path(pathToGoalMine);  
-      //printf("path2 is better %d %f\n", time_counter, path2_cost);
+      //printf("path2 is better %d %f %f\n", time_counter, path2_cost, path2_max_single_grid);
       
       if(old_path != NULL)
       {
@@ -1103,6 +1121,11 @@ int main(int argc, char** argv)
       
       old_path = pathToGoalMine;
       deleteMapPath(pathToGoalWithLookAhead);
+    }
+    else // all paths go through obstacles
+    {
+     //printf("Base Planner: No safe path exists to goal\n");   
+     publish_system_update(1);   
     }
 
     ros::spinOnce();
@@ -1118,6 +1141,7 @@ int main(int argc, char** argv)
   goal_sub.shutdown();
   map_changes_sub.shutdown();
   global_path_pub.shutdown();
+  system_update_pub.shutdown();
     
   destroy_pose(robot_pose);
   destroy_pose(goal_pose);

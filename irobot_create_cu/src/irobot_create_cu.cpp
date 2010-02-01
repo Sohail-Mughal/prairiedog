@@ -54,6 +54,8 @@
 
 #include "nav_msgs/Path.h"
 
+#include "std_msgs/Int32.h"
+
 #ifndef PI
   #define PI 3.1415926535897
 #endif
@@ -74,12 +76,15 @@ IRobotCreateController * controller = (IRobotCreateController*) NULL;
 // publisher handles
 ros::Publisher odometer_pose_pub;
 ros::Publisher bumper_pose_pub;
+ros::Publisher system_state_pub;
 
 // subscriber handles
 ros::Subscriber user_control_sub;
 ros::Subscriber pose_sub;
 ros::Subscriber goal_sub; // global goal
 ros::Subscriber global_path_sub;
+ros::Subscriber system_update_sub;
+ros::Subscriber user_state_sub;
 
 // globals for defining robot velocity
 float speed = 0;
@@ -91,9 +96,25 @@ float max_turn = 1;
 float use_input_speed_increment = .2;
 float use_input_turn_increment = .2;
 
-int user_e_stop = 0;
+int safe_path_exists = 0;
 
 int new_global_path = 1;
+
+int system_state = 0; // as advertised by this node
+                      // 0 = initial state (havn't recieved enough info to start moving)
+                      // 1 = planning and moving normally, 
+                      // 2 = bumper hit, backing up
+                      // 3 = no path to goal exists
+                      // 4 = manual stop
+                      // 5 = manual control
+
+int  user_state = 0;  // as advertised by the visualization node
+                      // 0 = passive, doing nothing
+                      // 1 = manual stop
+                      // 2 = manual control
+
+bool backing_up = false; // set to true if robot gets a bumper hit
+int state_prior_to_bumper_hit;
 
 // globals for robot and goal
 POSE* robot_pose = NULL;
@@ -189,26 +210,15 @@ void print_pose(POSE* pose)
 /*------------------------ ROS Callbacks --------------------------------*/
 void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 {
-    
-  if(msg->y == 0 && msg->theta == 0)
+  if(msg->y == 0 && msg->theta == 0) // two zeros means stop the robot, error on the side of caution
   {
-    if(user_e_stop == 1 && (speed != 0 || turn != 0))
-    {
-       // if moving in user control mode, just stop the robot
-       setSpeed(0);
-       setTurn(0);    
-    }
-    else if(user_e_stop == 0)
-    {
-       // if moving in path planning mode stop the robot and change to user controled mode
-       setSpeed(0);
-       setTurn(0);   
-       user_e_stop = 1;
-    }
-    else // (not moving in user control mode so change to path planning mode
-      user_e_stop = 0;   
+    setSpeed(0);
+    setTurn(0);   
+    
+    //ROS_INFO_STREAM("speed: " << speed << "turn: " << turn );
+    controller->setSpeeds(speed, turn);
   }
-  else
+  else if(system_state == 5) // in the user control state
   {
   	if(msg->y > 0)
     {
@@ -242,11 +252,10 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
     else
     {
         turn = 0;
-    }    
+    } 
+    //ROS_INFO_STREAM("speed: " << speed << "turn: " << turn );
+    controller->setSpeeds(speed, turn);
   }
-      
-  //ROS_INFO_STREAM("speed: " << speed << "turn: " << turn );
-  controller->setSpeeds(speed, turn);
 }
 
 
@@ -305,9 +314,41 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
     global_path[i].z = msg->poses[i].pose.position.z;   
   } 
   new_global_path = 1;
+  safe_path_exists = 1;
+}
+
+void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
+{      
+  int data = msg->data;
+ 
+  if(data == 1) // there is no safe path to the goal
+  {
+    safe_path_exists = 0;
+  }
+}
+
+void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
+{      
+  user_state = msg->data;
+ 
+  if(user_state == 1)
+  {
+    backing_up = false;
+    setSpeed(0);
+    setTurn(0);   
+  }
 }
 
 /*------------------------- ROS publisher functions ---------------------*/
+
+void publish_odometer_pose(float x, float y, float theta)
+{
+  geometry_msgs::Pose2D msg;
+  msg.x = x;
+  msg.y = y;
+  msg.theta = theta;
+  odometer_pose_pub.publish(msg);       
+}
 
 void publish_bumper(bool left, bool right)
 {
@@ -331,7 +372,21 @@ void publish_bumper(bool left, bool right)
   bumper_pose_pub.publish(msg); 
 }
 
-
+void publish_system_state(int state)
+{
+  // state: 0 = initial state (havn't recieved enough info to start moving)
+  //        1 = planning and moving normally, 
+  //        2 = bumper hit, backing up
+  //        3 = no path to goal exists
+  //        4 = manual stop
+  //        5 = manual control
+  
+    
+  std_msgs::Int32 msg;  
+  
+  msg.data = state;
+  system_state_pub.publish(msg); 
+}
 
 /* ---------------------- navigation functions --------------------------*/
 
@@ -575,105 +630,167 @@ int within_dist_of_goal(float dist)
     return 1;
   else
     return 0;
-
 }
 
 
 int main(int argc, char * argv[]) 
 {    
-    // init ROS
-    ros::init(argc, argv, "irobot_create_cu");
-    controller = new IRobotCreateController();
-    ros::NodeHandle nh;
-    ros::Rate loop_rate(100);
+  // init ROS
+  ros::init(argc, argv, "irobot_create_cu");
+  controller = new IRobotCreateController();
+  ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
     
-    // set up publishers
-    odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
-    bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
+  // set up publishers
+  odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
+  bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
+  system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 10);
+     
+  // set up subscribers
+  user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
+  pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+  goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
+  global_path_sub = nh.subscribe("/cu/global_path_cu", 1, global_path_callback);
+  system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
+  user_state_sub = nh.subscribe("/cu/user_state_cu", 1, user_state_callback);
     
-    // set up subscribers
-    user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
-    pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
-    goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
-    global_path_sub = nh.subscribe("/cu/global_path_cu", 1, global_path_callback);
+  // init pose and local goal
+  robot_pose = make_pose(0,0,0);
+  local_goal_pose = make_pose(0,0,0);
+  global_goal_pose = make_pose(0,0,0);
    
-    // init pose and local goal
-    robot_pose = make_pose(0,0,0);
-    local_goal_pose = make_pose(0,0,0);
-    global_goal_pose = make_pose(0,0,0);
-   
-    float backup_start_x = 0, backup_start_y = 0; // remembers where a bumper hit occoured
-    bool backing_up = false; // set to true if robot gets a bumper hit
-    while (nh.ok()) 
-    {   
-        // control robot
-        if(backing_up)
-        {
-          float current_x = controller->getX();
-          float current_y = controller->getY();
-          
-          float dx = current_x - backup_start_x;
-          float dy = current_y - backup_start_y;
-          
-          if(sqrt(dx*dx + dy*dy) > BUMPER_BACKUP_DIST) // backed up enough after a bumper hit
-          {
-            setSpeed(0);
-            setTurn(0);   
-            backing_up = false;
-          }
-        }
-        else if(user_e_stop == 0)
-        {
-          if(within_dist_of_goal(.2) == 0)
-            follow_path(global_path, .3, new_global_path);
-          else
-            move_toward_pose(global_goal_pose, .3, PI/12);
-           
-          new_global_path = 0;
-        }
-
-        
-        
-        if(user_e_stop == 1)
-        { 
-          backing_up = false; 
-        }
-        else if (controller->isBumpedLeft() || controller->isBumpedRight()) 
-        {
-          // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
+  float backup_start_x = 0, backup_start_y = 0; // remembers where a bumper hit occoured
+  while (nh.ok()) 
+  {   
+    // check for bumper hits
+    if (controller->isBumpedLeft() || controller->isBumpedRight()) 
+    {
+      // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
+      publish_bumper(controller->isBumpedLeft(), controller->isBumpedRight());
             
-          publish_bumper(controller->isBumpedLeft(), controller->isBumpedRight());
-            
-          setSpeed(BACKUP_SPEED);
-          setTurn(0);
+      setSpeed(BACKUP_SPEED);
+      setTurn(0);
           
-          backup_start_x = controller->getX();
-          backup_start_y = controller->getY();
-          backing_up = true;
-        }
-        
-        // broadcast odometer based pose
-        geometry_msgs::Pose2D msg;
-        msg.x = controller->getX();
-        msg.y = controller->getY();
-        msg.theta = controller->getRot();
-        odometer_pose_pub.publish(msg);   
-  
-        ros::spinOnce();
-        loop_rate.sleep();
+      backup_start_x = controller->getX();
+      backup_start_y = controller->getY();
+      backing_up = true;
+          
+      safe_path_exists = 0; // wait for a new path to come
+          
+      state_prior_to_bumper_hit = system_state;
+      system_state = 2;    
+    }   
+    else if(backing_up)
+    { 
+      // already backing up based on a prior bumper hit
+      if(system_state != 2)  // this may happen if something changes the state while the robot is already backing up
+      {
+        state_prior_to_bumper_hit = system_state;
+        system_state = 2;     
+      }
+    }  
+    else if(user_state == 1)
+    {
+      // user is doing a manual stop  
+      system_state = 4;    
+    }
+    else if(user_state == 2)
+    {
+      // user is doing manual movement  
+      system_state = 5;    
+    }
+    else if(safe_path_exists == 0)
+    {
+      // there is not a safe path to the goal
+      system_state = 3;
+    }
+    else if(system_state == 0)
+    {
+      // still in initial state
+    }
+    else
+    {
+      // we have a path to the goal and are in autonomous mode  
+      system_state = 1;  
     }
     
-    // destroy subscribers and publishers
-    odometer_pose_pub.shutdown();
-    bumper_pose_pub.shutdown();
-    user_control_sub.shutdown();  
-    pose_sub.shutdown();
-    goal_sub.shutdown();
-    global_path_sub.shutdown();
     
-    destroy_pose(robot_pose);
-    destroy_pose(local_goal_pose);
-    destroy_pose(global_goal_pose);
     
-    return 0;
+    if(system_state == 0) // initial state (havn't recieved enough info to start moving)    
+    {
+      setSpeed(0);
+      setTurn(0);   
+    }
+    else if(system_state == 1) // planning and moving normally, 
+    {
+      if(within_dist_of_goal(.2) == 0)
+        follow_path(global_path, .3, new_global_path);
+      else
+        move_toward_pose(global_goal_pose, .3, PI/12);
+            
+      new_global_path = 0;    
+    }
+    else if(system_state == 2) // bumper hit, backing up
+    {
+      float current_x = controller->getX();
+      float current_y = controller->getY();
+          
+      float dx = current_x - backup_start_x;
+      float dy = current_y - backup_start_y;
+          
+      if(sqrt(dx*dx + dy*dy) > BUMPER_BACKUP_DIST) // backed up enough after a bumper hit
+      {
+        setSpeed(0);
+        setTurn(0);   
+        backing_up = false;
+          
+        system_state = state_prior_to_bumper_hit;
+      }  
+    }
+    else if(system_state == 3) // no path to goal exists
+    {
+      //printf("irobot_create_cu: no safe path to goal exists \n"); 
+      
+      setSpeed(0);
+      setTurn(0);
+      
+      new_global_path = 0;
+    }
+    else if(system_state == 4) // manual stop
+    { 
+      setSpeed(0);
+      setTurn(0);    
+    }
+    else if(system_state == 5) // manual control
+    {
+       // manual navigation handled by callback functions     
+    }
+ 
+    
+    // broadcast odometer based pose
+    publish_odometer_pose(controller->getX(), controller->getY(), controller->getRot());
+     
+    // broadcast system state
+    publish_system_state(system_state);
+       
+    ros::spinOnce();
+    loop_rate.sleep();
+  } // end main control loop
+    
+  // destroy subscribers and publishers
+  odometer_pose_pub.shutdown();
+  bumper_pose_pub.shutdown();
+  system_state_pub.shutdown();
+  user_control_sub.shutdown();  
+  pose_sub.shutdown();
+  goal_sub.shutdown();
+  global_path_sub.shutdown();
+  system_update_sub.shutdown();
+  user_state_sub.shutdown(); 
+  
+  destroy_pose(robot_pose);
+  destroy_pose(local_goal_pose);
+  destroy_pose(global_goal_pose);
+  
+  return 0;
 }

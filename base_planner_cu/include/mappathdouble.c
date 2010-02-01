@@ -218,6 +218,64 @@ double calculatePathCost(MapPath* path)
   return total_cost;
 }
 
+// calculates the cost of traversing the path, returns by reference the cost of the single grid of most cost (used to help determine obstacle collision)
+double calculatePathCost(MapPath* path, double &max_single_grid)
+{
+  double total_cost = 0;
+  double new_cost;
+  max_single_grid = 0;
+  int i,n,m;
+  
+  for(i = 1; i < path->length; i++)
+  {
+    if(path->x[i-1] == path->x[i] && path->x[i] == (double)((int)(path->x[i]))) // path segment is on a vertical edge 
+    {
+      n = (int)double_min(path->y[i],path->y[i-1]); // this is the row of the map grid
+
+      // the edge is between map[n][path->x[i]-1] and map[][path->x[i], we want to use the least cost of the two
+      if(path->x[i]-1 < 0) // then on edge of map
+        new_cost = map[n][(int)(path->x[i])];
+      else if((int)(path->x[i]) == WIDTH) // on other edge of map
+        new_cost = map[n][(int)(path->x[i]-1)];
+      else if(map[n][(int)(path->x[i]-1)] < map[n][(int)(path->x[i])])
+        new_cost = map[n][(int)(path->x[i]-1)];
+      else
+        new_cost = map[n][(int)(path->x[i])];
+      
+      total_cost = total_cost + new_cost*(double_abs(path->y[i]-path->y[i-1]));
+    } 
+    else if(path->y[i-1] == path->y[i] && path->y[i] == (double)((int)(path->y[i]))) // path segment is on a horizontal edge
+    {
+      m = (int)double_min(path->x[i],path->x[i-1]); // this is the column of the map grid
+
+      // the edge is between map[path->y[i]-1][m] and map[path->y[i][m], we want to use the least cost of the two
+      if(path->y[i]-1 < 0) // then on edge of map
+        new_cost = map[(int)(path->y[i])][m];
+      else if((int)(path->y[i]) == HEIGHT) // on other edge of map
+        new_cost = map[(int)(path->y[i]-1)][m];
+      else if(map[(int)(path->y[i]-1)][m] < map[(int)(path->y[i])][m])
+        new_cost = map[(int)(path->y[i]-1)][m];
+      else
+        new_cost = map[(int)(path->y[i])][m];
+
+      total_cost = total_cost + new_cost*(double_abs(path->x[i]-path->x[i-1]));
+    }
+    else // path segment goes through the grid map[floor(min(path->y[i],path->y[i-1]))] [floor(min(path->x[i],path->x[i-1]))]
+    {
+      new_cost = (sqrt( ((path->y[i]-path->y[i-1])*(path->y[i]-path->y[i-1])) + ((path->x[i]-path->x[i-1])*(path->x[i]-path->x[i-1])))) * map[(int)double_min(path->y[i],path->y[i-1])][(int)double_min(path->x[i],path->x[i-1])];
+
+      total_cost = total_cost + new_cost;
+    }
+    
+    if(new_cost > max_single_grid)
+        max_single_grid = new_cost;
+    
+  }
+  //printf("single grid max :%f \n",max_single_grid);
+  return total_cost;
+}
+
+
 // deletes a MapPath
 void deleteMapPath(MapPath* path)
 {
