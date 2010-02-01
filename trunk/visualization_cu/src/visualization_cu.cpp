@@ -50,6 +50,8 @@
 
 #include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
+#include "std_msgs/Int32.h"
+
 #include <list>
 
 #ifndef PI
@@ -82,6 +84,9 @@ float LIGHT[] = {.9,.9,.9,1};
 float RED[] = {1,0,0,1};
 float BLUE[] = {0,0,1,1};
 float GREEN[] = {0,1,0,1};
+float ORANGE[] = {1,.5,0,1};
+float LIGHTBLUE[] = {0,1,1,1};
+float PURPLE[] = {1,0,1,1};
 
 // globals used for keeping track of display attributes
 int display_size_init = 600; // pixels
@@ -136,11 +141,14 @@ ros::Subscriber obstacles_local_sub;
 ros::Subscriber goal_sub;
 ros::Subscriber laser_scan_sub;
 ros::Subscriber map_changes_sub;
+ros::Subscriber system_state_sub;
+ros::Subscriber system_update_sub;
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
 ros::Publisher new_pose_pub;
 ros::Publisher user_control_pub;
+ros::Publisher user_state_pub;
 
 // other ROS globals
 ros::Rate loop_rate(100);
@@ -149,7 +157,21 @@ ros::Rate loop_rate(100);
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
 double change_turn = 0; // 0 = no, -1 = decrease turn, 1 = increase turn
 
+// globals for overall system state
+int advertised_control_state; // as recieved from the controller node (irobot_crate_cu)
+                              // 0 = initial state (havn't recieved enough info to start moving)
+                              // 1 = planning and moving normally, 
+                              // 2 = bumper hit, backing up
+                              // 3 = no path to goal exists
+                              // 4 = manual stop
+                              // 5 = manual control
 
+int user_control_state = 0; // as broadcast by this node
+                            // 0 = passive, doing nothing
+                            // 1 = manual stop
+                            // 2 = manual control
+int safe_path_exists = 0;
+        
 /*-------------------- basic drawing functions --------------------------*/
 
 int max(int a, int b)
@@ -847,10 +869,24 @@ void draw_robot(ROBOT* bot, float z_height)
     
     float scaled_rad = robot_display_radius/costmap->resolution;
     float pos[] = {bot->pose->x, bot->pose->y, 0};
-    draw_circle(pos, scaled_rad , BLUE);
     
+    float* BOT_CLR = NULL; 
+    if(advertised_control_state == 0) // initial state (havn't recieved enough info to start moving)
+      BOT_CLR = BLACK;
+    else if(advertised_control_state == 1)  // planning and moving normally, 
+      BOT_CLR = BLUE;
+    else if(advertised_control_state == 2)  // bumper hit, backing up
+      BOT_CLR = RED;
+    else if(advertised_control_state == 3) // no path to goal exists
+      BOT_CLR = ORANGE; 
+    else if(advertised_control_state == 4)  // manual stop
+      BOT_CLR = PURPLE;
+    else if(advertised_control_state == 5)  // manual control
+      BOT_CLR = LIGHTBLUE;
+    
+    draw_circle(pos, scaled_rad , BOT_CLR);
     float pos2[] = {bot->pose->x + scaled_rad*bot->pose->cos_alpha, bot->pose->y + scaled_rad*bot->pose->sin_alpha, 0};
-    draw_arrow(pos, pos2, BLUE);
+    draw_arrow(pos, pos2, BOT_CLR);
     
     glPopMatrix(); 
   }
@@ -890,7 +926,7 @@ void draw_menu(float z_height)
     drawRectangleOutline(pos_move_button, size_button, BLACK);
   }
   glColor3f(0, 0, 0);
-  draw_string(pos_move_button, 15*pxls, 8*pxls, "Move Map");
+  draw_string(pos_move_button, 8*pxls, 8*pxls, "Autonomous");
 
   
   float pos_goal_button[] = {105*pxls, 5*pxls, 0};
@@ -1059,6 +1095,9 @@ void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
     global_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
   }
 
+  if(length > 0)
+    safe_path_exists = 1;
+  
   display_flag = 1;
   glutPostRedisplay(); 
   
@@ -1236,6 +1275,44 @@ void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
   glutPostRedisplay(); 
 }
 
+void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
+{      
+  advertised_control_state = msg->data;
+}
+
+void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
+{      
+  int data = msg->data;
+ 
+  if(data == 1) // there is no safe path to the goal
+  {
+    if(safe_path_exists == 1)
+    {
+      safe_path_exists = 0;
+      display_flag = 1;
+      glutPostRedisplay();
+    }
+  }
+}
+
+/*----------------------- ROS Publisher Functions -----------------------*/
+void publish_user_control(int y, int theta)
+{
+  geometry_msgs::Pose2D msg;
+  msg.y = y;
+  msg.theta = change_turn;
+  user_control_pub.publish(msg); 
+}
+
+void publish_user_state(int u_state)
+{
+  std_msgs::Int32 msg;  
+  
+  msg.data = u_state;
+  user_state_pub.publish(msg); 
+}
+
+
 /*----------------------- GLUT Callbacks --------------------------------*/
 
 // this sets the projection in the current window
@@ -1296,16 +1373,16 @@ void display()
      }
      
      // draw the global path
-     if(global_path != NULL)
+     if(global_path != NULL && safe_path_exists == 1)
      {
        draw_point_list_2D_lines(global_path, GREEN, .97);
      }
    
      // draw the local path
-     if(local_path != NULL)
-     {
-       draw_point_list_2D_lines(local_path, BLUE, .975);
-     }
+    // if(local_path != NULL)
+    // {
+    //   draw_point_list_2D_lines(local_path, BLUE, .975);
+    // }
    
      if(goal_pose != NULL)
      {
@@ -1429,10 +1506,9 @@ void special(int key,int x,int y)
       change_speed = -1;
     }
     
-    geometry_msgs::Pose2D msg;
-    msg.y = change_speed;
-    msg.theta = change_turn;
-    user_control_pub.publish(msg);   
+    publish_user_control(change_speed, change_turn);
+    user_control_state = 2;
+    publish_user_state(user_control_state);  
     
     change_turn = 0;
     change_speed = 0;
@@ -1463,18 +1539,27 @@ void key(unsigned char ch,int x,int y)
   }
   else if (ch == 'm' || ch == 'M')
   {
+    user_control_state = 0;
+    publish_user_state(user_control_state);    
+      
     display_state = MOVE;
     menu_flag = 1;
     glutPostRedisplay();  
   }
   else if (ch == 'g' || ch == 'G')
   {
+    user_control_state = 0;
+    publish_user_state(user_control_state);   
+      
     display_state = SETGOAL;
     menu_flag = 1;
     glutPostRedisplay();  
   }
   else if (ch == 'p' || ch == 'P')
   {
+    user_control_state = 0;
+    publish_user_state(user_control_state);   
+      
     display_state = SETPOSE;
     menu_flag = 1; 
     glutPostRedisplay(); 
@@ -1487,8 +1572,15 @@ void key(unsigned char ch,int x,int y)
   }
   else if (ch == 'c' || ch == 'C')
   {
+    if(display_state != MOVEROBOT)
+      publish_user_control(0,0);
+    
+    user_control_state = 2;
+    publish_user_state(user_control_state);  
+    
     display_state = MOVEROBOT;
     menu_flag = 1; 
+    
     glutPostRedisplay(); 
   }
   else if (ch == '[' || ch == '{')
@@ -1512,10 +1604,20 @@ void key(unsigned char ch,int x,int y)
     change_turn = 0;
     change_speed = 0;
 
-    geometry_msgs::Pose2D msg;
-    msg.y = change_speed;
-    msg.theta = change_turn;
-    user_control_pub.publish(msg);   
+    if(user_control_state == 0 || user_control_state == 2)
+    {
+      publish_user_control(0,0);
+      user_control_state = 1;
+      publish_user_state(user_control_state);
+    }
+    else // user_control_state == 1
+    {
+      if(display_state == MOVEROBOT)
+        user_control_state = 2;
+      else
+        user_control_state = 0;
+      publish_user_state(user_control_state);  
+    }
   }
 
 
@@ -1600,14 +1702,29 @@ void mouse(int button, int mouse_state, int x, int y)
     
     if(mousedown_state != NONE && button == GLUT_LEFT_BUTTON && mouse_state == GLUT_UP)
     {
-        if(mousedown_state == mouseover_state)
-        {
-          display_state = mousedown_state;
+      if(mousedown_state == mouseover_state)
+      {      
+        int previous_display_state = display_state;  
+        display_state = mousedown_state;
+          
+        if(display_state == MOVE || display_state == SETGOAL || display_state == SETPOSE)
+        {  
+          user_control_state = 0;
+          publish_user_state(user_control_state);     
         }
-        mousedown_state = NONE;   
-        left_pressed = 0;
-        menu_flag = 1;
-        glutPostRedisplay(); 
+        else if(display_state == MOVEROBOT)
+        {
+          if(previous_display_state != MOVEROBOT)
+            publish_user_control(0,0);
+          
+          user_control_state = 2;
+          publish_user_state(user_control_state);   
+        }  
+      }
+      mousedown_state = NONE;   
+      left_pressed = 0;
+      menu_flag = 1;
+      glutPostRedisplay();   
     }
     return;
   }
@@ -1912,6 +2029,8 @@ void idle()
     display_state = MOVE;
   }
   
+  publish_user_state(user_control_state);
+  
   ros::spinOnce();
     
   if(display_flag == 1 || menu_flag == 1)
@@ -1932,10 +2051,13 @@ void cleanup()
   goal_sub.shutdown();
   laser_scan_sub.shutdown();
   map_changes_sub.shutdown();
+  system_state_sub.shutdown();
+  system_update_sub.shutdown();
   
   goal_pub.shutdown();
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
+  user_state_pub.shutdown();
   
   destroy_map(costmap);
   destroy_robot(robot);
@@ -1972,11 +2094,14 @@ int main(int argc, char *argv[])
   goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
+  system_state_sub = nh.subscribe("/cu/system_state_cu", 10, system_state_callback);
+  system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
   new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
   user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
+  user_state_pub = nh.advertise<std_msgs::Int32>("/cu/user_state_cu", 1);
   
   //  Initialize GLUT
   glutInit(&argc,argv);

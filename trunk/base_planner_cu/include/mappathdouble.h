@@ -51,6 +51,9 @@ MapPath* removeRepeatedPoints(MapPath* path);
 // calculates the cost of traversing the path
 double calculatePathCost(MapPath* path);
 
+// calculates the cost of traversing the path, returns by reference the cost of the single grid of most cost (used to help determine obstacle collision)
+double calculatePathCost(MapPath* path, double &max_single_grid);
+
 // deletes a MapPath
 void deleteMapPath(MapPath* path);
 
