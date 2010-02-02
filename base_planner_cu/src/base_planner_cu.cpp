@@ -89,15 +89,17 @@ float safety_distance = .1; //(m)
 
 bool new_goal = false;       
 bool change_token_used = false;
+bool reload_map = false; 
 
 bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
 float extra_dilation = .2; //(m)
 float extra_dilation_mult = OBSTACLE_COST;
 bool extra_dilation_mult_from_dist = true; // when true (and also using high cost safety region), this causes extra_dilation_mult to be calculated as a function of distance (i.e. so that the path is pushed to the center of narrow hallways)
 
-float old_path_discount = .95; // if the old path length multiplied by this is less than the current path, then stick with the old path
+float old_path_discount = .95; // if (current path length)*old_path_discount < (old path length) < (current path length)/old_path_discount, then stick with the old path
 
 float MAX_POSE_JUMP = 15;//(map grids)
+
 
 /*---------------------- MAP --------------------------------------------*/
 struct MAP
@@ -751,6 +753,7 @@ void publish_global_path(MapPath* path)
   } 
   global_path_pub.publish(msg); 
 
+  //printf("sending global path %d \n",length);
   change_token_used = false;
 }
 
@@ -992,13 +995,32 @@ int main(int argc, char** argv)
 
     load_goal();
     
-    if(new_goal)
-    {
-      printf("reinitializing \n");
-      initialize_search(true); // true := reuse the old map
-      new_goal = false;   
-     
+    if(new_goal || reload_map)
+    {  
+      if(reload_map)
+      {
+        printf("reinitializing map and searchtree \n");
+        
+        change_token_used = false;
+        // wait for a map
+        while(!load_map() && ros::ok())
+        {
+          ros::spinOnce();
+          loop_rate.sleep(); 
+        }
+        change_token_used = true;
+        
+        initialize_search(false); // false := reset map based in what is in raw_map (raw_map was just re-populated with info from the map server)
+      }
+      else // new_goal
+      {
+        printf("reinitializing search tree, reusing map \n");
+        initialize_search(true); // true := reuse the old map
+      }
       
+      new_goal = false;   
+      reload_map = false;
+ 
       if(old_path != NULL)
       {
         deleteMapPath(old_path);
@@ -1010,10 +1032,10 @@ int main(int argc, char** argv)
       {
         // wait for most up to date pose
       }
-      printf(" recieved pose via service \n");    
+      printf(" recieved pose via service \n");       
     }
-    
-    load_pose(); // if services lag then this is a bad idea, but have had problems on netbooks never getting new pose
+    else
+      load_pose(); // if services lag then this is a bad idea, but have had problems on netbooks never getting new pose
     
     // find the new exact coordinates of the robot 
     robot_pos_x = robot_pose->x/raw_map->resolution; // need to add global offset ability
@@ -1085,7 +1107,9 @@ int main(int argc, char** argv)
     change_token_used = false;
 
     // use better path of the two to move the robot (or retain the old path if it is still better)
-    if(old_path != NULL && old_path_cost*old_path_discount <= path1_cost && old_path_cost*old_path_discount <= path2_cost && old_path_max_single_grid < OBSTACLE_COST)
+    if(old_path != NULL && path1_cost*old_path_discount <= old_path_cost && old_path_cost <= path1_cost/old_path_discount
+                        && path2_cost*old_path_discount <= old_path_cost && old_path_cost <= path2_cost/old_path_discount 
+                        && old_path_max_single_grid < OBSTACLE_COST)
     {
       publish_global_path(old_path);
       //printf("old path is about the same or better %d [%f vs %f] %f \n", time_counter, old_path_cost, (path1_cost+path2_cost)/2, old_path_max_single_grid);   
@@ -1124,8 +1148,9 @@ int main(int argc, char** argv)
     }
     else // all paths go through obstacles
     {
-     //printf("Base Planner: No safe path exists to goal\n");   
+     printf("Base Planner: No safe path exists to goal %f %f %f\n", old_path_cost, path1_cost, path2_cost);   
      publish_system_update(1);   
+     reload_map = true;
     }
 
     ros::spinOnce();

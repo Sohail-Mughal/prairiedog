@@ -170,6 +170,7 @@ int user_control_state = 0; // as broadcast by this node
                             // 0 = passive, doing nothing
                             // 1 = manual stop
                             // 2 = manual control
+
 int safe_path_exists = 0;
         
 /*-------------------- basic drawing functions --------------------------*/
@@ -1277,7 +1278,16 @@ void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
 
 void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
 {      
-  advertised_control_state = msg->data;
+  
+  if(advertised_control_state != msg->data)
+  {
+    advertised_control_state = msg->data;
+    if(advertised_control_state == 0 || advertised_control_state == 3)  
+      safe_path_exists = 0;
+    
+    display_flag = 1;
+    glutPostRedisplay(); 
+  }
 }
 
 void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
@@ -1547,19 +1557,13 @@ void key(unsigned char ch,int x,int y)
     glutPostRedisplay();  
   }
   else if (ch == 'g' || ch == 'G')
-  {
-    user_control_state = 0;
-    publish_user_state(user_control_state);   
-      
+  {   
     display_state = SETGOAL;
     menu_flag = 1;
     glutPostRedisplay();  
   }
   else if (ch == 'p' || ch == 'P')
-  {
-    user_control_state = 0;
-    publish_user_state(user_control_state);   
-      
+  {   
     display_state = SETPOSE;
     menu_flag = 1; 
     glutPostRedisplay(); 
@@ -1707,7 +1711,7 @@ void mouse(int button, int mouse_state, int x, int y)
         int previous_display_state = display_state;  
         display_state = mousedown_state;
           
-        if(display_state == MOVE || display_state == SETGOAL || display_state == SETPOSE)
+        if(display_state == MOVE)
         {  
           user_control_state = 0;
           publish_user_state(user_control_state);     
@@ -1801,6 +1805,9 @@ void mouse(int button, int mouse_state, int x, int y)
       goal_pub.publish(msg);    
       
       display_state = MOVE;
+      
+      user_control_state = 0;
+      publish_user_state(user_control_state);   
     }      
   }  
   else if(display_state == SETPOSE)
@@ -1846,6 +1853,9 @@ void mouse(int button, int mouse_state, int x, int y)
       new_pose_pub.publish(msg);    
       
       display_state = MOVE;
+      
+      user_control_state = 0;
+      publish_user_state(user_control_state);   
     }      
   }
   

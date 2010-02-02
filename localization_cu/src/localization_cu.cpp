@@ -30,6 +30,7 @@
 #include <sstream>
 
 #include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
 
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/Pose2D.h"
@@ -73,6 +74,8 @@ float local_offset[] = {0, 0, 0}; // x,y,theta
 float global_offset[] = {0, 0, 0}; // x,y,theta
 float accum_movement = -1;
 bool received_gps = false;
+
+bool using_tf = false; // when set to true, use the tf package
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -315,6 +318,20 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
   return true;
 }
 
+/*---------------------------- ROS tf functions -------------------------*/
+void broadcast_robot_tf()
+{
+ 
+  static tf::TransformBroadcaster br;  
+    
+  tf::Transform transform;   
+  transform.setOrigin(tf::Vector3(posterior_pose->x, posterior_pose->y, posterior_pose->z));
+  transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "robot"));  
+}
+
+
+
 int main(int argc, char** argv) 
 {
     ros::init(argc, argv, "localization_cu");
@@ -342,6 +359,9 @@ int main(int argc, char** argv)
         
       publish_pose();
         
+      if(using_tf)
+        broadcast_robot_tf();
+      
       ros::spinOnce();
       loop_rate.sleep();
     }
