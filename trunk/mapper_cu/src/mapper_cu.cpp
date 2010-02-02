@@ -1051,15 +1051,21 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   
   int max_changes = (end_r - start_r)*(end_c - start_c);
   float** cost = laser_map->cost;
+  float** b_cost = bumper_map->cost;
   
   #if defined(SIMPLEMAP) || defined(PROBMAP)
   int** in_list = laser_map->in_list;
+  int** b_in_list = laser_map->in_list;
   #endif
   
   int next_change = laser_map_changes.size();
+  int b_next_change = bumper_map_changes.size();
+  
   laser_map_changes.resize(next_change+max_changes);
+  bumper_map_changes.resize(b_next_change+max_changes);
   
   float dist;
+  bool there_was_a_change = false;
   for(int r = start_r; r <= end_r; r++)
   {
     for(int c = start_c; c <= end_c; c++)   
@@ -1072,30 +1078,71 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
       if(dist < rob_rad)
       {
         #if defined(SIMPLEMAP) || defined(PROBMAP)
+        
+          there_was_a_change = true;
           if(in_list[r][c] == -1) // not already in list (these get accumulated forever)
           {  
-            if(cost[r][c] == 0) // don't need to report this change
-              continue;
-
-            laser_map_changes[next_change].x = (float)c;
-            laser_map_changes[next_change].y = (float)r;
-            in_list[r][c] = next_change;
-            next_change++;
+            if(cost[r][c] == 0) // don't need to report this change (this grid is already free of obstacles)
+              there_was_a_change = false;
+            else
+            {
+              laser_map_changes[next_change].x = (float)c;
+              laser_map_changes[next_change].y = (float)r;
+              in_list[r][c] = next_change;
+              next_change++;
+            }
           }
         
-          // change laser_map
-          cost[r][c] = 0;
-          laser_map_changes[in_list[r][c]].z = 0; 
-        #elif defined(HITMAP)    
-          if(cost[r][c] == 0) // don't need to report this change
-            continue;
-
-          laser_map_changes[next_change].x = (float)c;
-          laser_map_changes[next_change].y = (float)r;
-          next_change++;   
+          if(there_was_a_change)
+          {
+            // change laser_map
+            cost[r][c] = 0;
+            laser_map_changes[in_list[r][c]].z = 0; 
+          }
           
-          // change laser_map
-          cost[r][c] = 0;
+          there_was_a_change = true;
+          if(b_in_list[r][c] == -1) // not already in list (these get accumulated forever)
+          {  
+            if(b_cost[r][c] == 0) // don't need to report this change (this grid is already free of obstacles)
+              there_was_a_change = false;
+            else
+            {
+              bumper_map_changes[b_next_change].x = (float)c;
+              bumper_map_changes[b_next_change].y = (float)r;
+              b_in_list[r][c] = b_next_change;
+              b_next_change++;
+            }
+          }
+        
+          if(there_was_a_change)
+          {
+            // change bumper_map
+            b_cost[r][c] = 0;
+            bumper_map_changes[b_in_list[r][c]].z = 0; 
+          }
+          
+        #elif defined(HITMAP) 
+        
+          if(cost[r][c] != 0) // only report this change if  grid is not already free of obstacles
+            laser_map_changes[next_change].x = (float)c;
+            laser_map_changes[next_change].y = (float)r;
+            next_change++;   
+          
+            // change laser_map
+            cost[r][c] = 0;
+          }
+          
+          
+          if(b_cost[r][c] != 0) // only report this change if  grid is not already free of obstacles
+          {
+            bumper_map_changes[b_next_change].x = (float)c;
+            bumper_map_changes[b_next_change].y = (float)r;
+            b_next_change++;   
+          
+            // change bumper_map
+            b_cost[r][c] = 0;
+          }     
+          
         #endif
       }
     }

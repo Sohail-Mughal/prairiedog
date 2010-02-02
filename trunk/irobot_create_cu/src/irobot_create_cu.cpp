@@ -699,19 +699,23 @@ int main(int argc, char * argv[])
       // user is doing manual movement  
       system_state = 5;    
     }
-    else if(safe_path_exists == 0)
+    else if(safe_path_exists == 1)
     {
-      // there is not a safe path to the goal
-      system_state = 3;
+      // we have a path to the goal and are in autonomous mode  
+      system_state = 1;
     }
     else if(system_state == 0)
     {
       // still in initial state
     }
+    else if(safe_path_exists == 0)
+    {
+      // there is not a safe path to the goal
+      system_state = 3;
+    }
     else
     {
-      // we have a path to the goal and are in autonomous mode  
-      system_state = 1;  
+     printf("didn't count on this case \n");
     }
     
     
