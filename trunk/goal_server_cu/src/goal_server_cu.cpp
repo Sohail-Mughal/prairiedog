@@ -46,14 +46,16 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
-  
-#define MOVEMULT 2 // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data)
-   
-bool USING_GPS = true; // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
-        
+           
 struct POSE;
 typedef struct POSE POSE;
-        
+ 
+// globals that can be reset using parameter server, see main();
+float goal_pose_x_init = 0; 
+float goal_pose_y_init = 0;
+float goal_pose_z_init = 0; // note z coord is basically unused 
+float goal_pose_theta_init = 0;
+
 // publisher handles
 ros::Publisher goal_pub;
 
@@ -86,13 +88,13 @@ struct POSE
 
 
 // this creates and returns a pointer to a POSE struct
-POSE* make_pose(float x, float y, float z)
+POSE* make_pose(float x, float y, float z, float alpha)
 {
   POSE* pose = (POSE*)calloc(1, sizeof(POSE));
-  pose->x = 0;
-  pose->y = 0;
-  pose->z = 0;
-  pose->alpha = 0;
+  pose->x = x;
+  pose->y = y;
+  pose->z = z;
+  pose->alpha = alpha;
 
   float r = sqrt(2-(2*cos(pose->alpha)));
 
@@ -139,7 +141,7 @@ void reset_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     ROS_INFO("received a message that is not for the 2Dmap frame");
    
   if(goal == NULL)
-    goal = make_pose(0, 0, 0);
+    goal = make_pose(0, 0, 0, 0);
   
   goal->x = msg->pose.position.x;
   goal->y = msg->pose.position.y;
@@ -200,6 +202,37 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "goal_server_cu");
     ros::NodeHandle nh;
     ros::Rate loop_rate(100);
+    
+     // load globals from parameter server
+    double param_input;
+    bool given_goal = false;
+    if(ros::param::get("goal_server_cu/goal_pose_x_init", param_input)) 
+    {
+      goal_pose_x_init = (float)param_input;
+      given_goal = true;
+    }
+    if(ros::param::get("goal_server_cu/goal_pose_y_init", param_input)) 
+    {
+      goal_pose_y_init = (float)param_input;
+      given_goal = true;
+    }
+    if(ros::param::get("goal_server_cu/goal_pose_z_init", param_input)) 
+    {
+      goal_pose_z_init = (float)param_input;                                 // z is basically unused
+      given_goal = true;
+    }
+    if(ros::param::get("goal_server_cu/goal_pose_theta_init", param_input)) 
+    {
+      goal_pose_theta_init = (float)param_input;
+      given_goal = true;
+    }
+    
+    // if the goal was sent in, then init goal pose
+    if(given_goal)
+    {
+      printf("goal recieved at startup: [%f %f %f] \n", goal_pose_x_init, goal_pose_y_init, goal_pose_theta_init);
+      goal = make_pose(goal_pose_x_init, goal_pose_y_init, goal_pose_z_init, goal_pose_theta_init);
+    }
     
     // set up publisher
     goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);

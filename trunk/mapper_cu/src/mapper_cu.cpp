@@ -44,21 +44,10 @@
 
 #include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
-#define HEIGHT 250
-#define WIDTH 250
-#define RESOLUTION .08
-#define OBS_PRIOR 0.2
 
 #define PROBMAP // HITMAP: map remembers all laser scanner obstacle data
                   // SIMPLEMAP: map updates to reflect current info from scanner (obstacles and free space)
                   // PROBMAP: map calculates prob of obstacle based on last MAP_MEMORY readings about a grid
-
-#define MAP_MEMORY 100 // only used if PROBMAP is defined above
-
-#define SCANNER_RANGE 5.5 // the range of the scanner in meters;
-#define BUMPER_COST 1 // the cost associated with a bumper hit
-
-float MAP_INC = 1/(float)MAP_MEMORY; // each reading is worth this much probability
 
 using namespace std;
         
@@ -67,6 +56,16 @@ typedef struct POINT POINT;
 
 struct MAP;
 typedef struct MAP MAP;
+
+// globals that can be reset using parameter server, see main();
+float map_y_max = 20;      // (m), map goes from 0 to this in the y direction
+float map_x_max = 20;      // (m), map goes from 0 to this in the x direction
+float RESOLUTION = .08;    // (m), each map grid spans this much real-world distance
+float OBS_PRIOR = 0.2;     // the prior_probability of an obstacle in the laser map
+int MAP_MEMORY = 100;      // (last MAP_MEMORY readings of a particular grid used to calculate probability of obstacle there) only used if PROBMAP is defined above
+float SCANNER_RANGE = 5.5; // the range of the scanner in meters;
+float BUMPER_COST = 1;     // the probability of obstacle associated with a bumper hit
+float robot_radius = .2;   // (m)
 
 // global ROS subscriber handles
 ros::Subscriber laser_scan_sub;
@@ -79,13 +78,15 @@ ros::Publisher map_changes_pub;
 // global ROS provide service server handles
 ros::ServiceServer get_map_srv;
 
-
 // globals
 MAP* laser_map = NULL;
 MAP* bumper_map = NULL;
 vector<POINT> laser_map_changes;
 vector<POINT> bumper_map_changes;
-float robot_radius = .2;
+
+int HEIGHT = map_y_max/RESOLUTION + 1; //the height of the map in grids
+int WIDTH = map_x_max/RESOLUTION + 1;  // the width of the map in grids
+float MAP_INC = 1/(float)MAP_MEMORY; // each laser reading is worth this much probability
 
 /* ------------------ stuff for loading images ------------------------- */ 
 struct float_array;
@@ -927,14 +928,13 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     // third pass, remember hits
     for(int i = 0; i < length; i++)
     {
-      #ifdef SCANNER_RANGE  
+
       // only mark hits within range
       float no_scale_dx = msg->cloud.points[i].x-msg->origin.x;
       float no_scale_dy = msg->cloud.points[i].y-msg->origin.y;
       
       if(SCANNER_RANGE <= sqrt(no_scale_dx*no_scale_dx + no_scale_dy*no_scale_dy))
         continue;
-      #endif
               
       #ifdef SIMPLEMAP  
         tcost[(int)(scl_cloud_points[i].y) - map_y_offset][
@@ -1268,42 +1268,70 @@ void publish_map_changes()
 
 int main(int argc, char** argv) 
 {
-    ros::init(argc, argv, "mapper_cu");
-    ros::NodeHandle nh;
-    ros::Rate loop_rate(100);
+  ros::init(argc, argv, "mapper_cu");
+  ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
     
-    destroy_map(laser_map);
-    destroy_map(bumper_map);
-    laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
-    bumper_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, 0);
+  // load globals from parameter server
+  double param_input;
+  int int_input;
+  if(ros::param::get("mapper_cu/map_y_size", param_input)) 
+    map_y_max = (float)param_input;                                        // (m), map goes from 0 to this in the y direction
+  if(ros::param::get("mapper_cu/map_x_size", param_input)) 
+    map_x_max = (float)param_input;                                        // (m), map goes from 0 to this in the x direction
+  if(ros::param::get("mapper_cu/map_resolution", param_input)) 
+    RESOLUTION = (float)param_input;                                       // (m), each map grid spans this much real-world distance
+  if(ros::param::get("mapper_cu/obstacle_prior", param_input)) 
+    OBS_PRIOR = (float)param_input;                                        // the prior_probability of an obstacle in the laser map
+  if(ros::param::get("mapper_cu/map_attention_span", int_input)) 
+    MAP_MEMORY = int_input;                                                // (last MAP_MEMORY readings of a particular grid used to calculate probability of obstacle there) only used if PROBMAP is defined above
+  if(ros::param::get("mapper_cu/scanner_range", param_input)) 
+    SCANNER_RANGE = (float)param_input;                                    // the range of the scanner in meters;
+  if(ros::param::get("mapper_cu/bumper_obstacle_posterior", param_input)) 
+    BUMPER_COST = (float)param_input;                                      // the probability of obstacle associated with a bumper hit
+  if(ros::param::get("mapper_cu/robot_radius", param_input)) 
+    robot_radius = (float)param_input;                                     // (m)
+  HEIGHT = map_y_max/RESOLUTION + 1; //the height of the map in grids
+  WIDTH = map_x_max/RESOLUTION + 1;  // the width of the map in grids
+  MAP_INC = 1/(float)MAP_MEMORY;     // each laser reading is worth this much probability
+  
+  // print data about parameters
+  printf("map size: [%f %f], resolution:%f, obs_prior:%f, memory_time:%d \n", map_y_max, map_x_max, RESOLUTION, OBS_PRIOR, MAP_MEMORY); 
+  printf("bumper cost:%f, scanner range:%f, robot radius:%f \n", BUMPER_COST, SCANNER_RANGE, robot_radius);
     
-    populateMapFromBitmap(bumper_map, "../map.bmp", OBS_PRIOR);
     
-    // set up subscribers
-    laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
-  	pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
-    bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
+  destroy_map(laser_map);
+  destroy_map(bumper_map);
+  laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
+  bumper_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, 0);
     
-    // set up publishers
-    map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+  populateMapFromBitmap(bumper_map, "../map.bmp", OBS_PRIOR);
     
-    // set up service servers
-    get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
+  // set up subscribers
+  laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
+  pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+  bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
+    
+  // set up publishers
+  map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+    
+  // set up service servers
+  get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
  
-    while (ros::ok()) 
-    {
-      publish_map_changes();
+  while (ros::ok()) 
+  {
+    publish_map_changes();
        
-      ros::spinOnce();
-      loop_rate.sleep();
-    }
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
     
-    laser_scan_sub.shutdown();
-    pose_sub.shutdown();
-    bumper_pose_sub.shutdown();
-    map_changes_pub.shutdown();
-    get_map_srv.shutdown();
+  laser_scan_sub.shutdown();
+  pose_sub.shutdown();
+  bumper_pose_sub.shutdown();
+  map_changes_pub.shutdown();
+  get_map_srv.shutdown();
      
-    destroy_map(bumper_map);
-    destroy_map(laser_map);
+  destroy_map(bumper_map);
+  destroy_map(laser_map);
 }

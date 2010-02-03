@@ -56,8 +56,6 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
-     
- #define OBSTACLE_COST 10000
         
 struct MAP;
 typedef struct MAP MAP;
@@ -67,6 +65,15 @@ typedef struct POSE POSE;
 
 struct UPDATE;
 typedef struct UPDATE UPDATE;
+
+// globals for transform, these can be reset via the parameter server, see main()
+float OBSTACLE_COST = 10000;         // the cost of an obstacle
+float robot_radius = .2;             // (m), distance that must be maintained between robot and obstacles
+float safety_distance = .1;          // (m)
+float old_path_discount = .95;       // if (current path length)*old_path_discount < (old path length) < (current path length)/old_path_discount, then stick with the old path
+float MAX_POSE_JUMP = 15;            // (map grids) after which it is easer to replan from scratch
+bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
+float extra_dilation = .2;           // (m)
 
 // global ROS subscriber handles
 ros::Subscriber pose_sub;
@@ -84,21 +91,13 @@ MAP* raw_map = NULL;
 POSE* robot_pose = NULL;
 POSE* goal_pose = NULL;
 
-float robot_radius = .2; //(m)
-float safety_distance = .1; //(m)
 
 bool new_goal = false;       
 bool change_token_used = false;
 bool reload_map = false; 
 
-bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
-float extra_dilation = .2; //(m)
-float extra_dilation_mult = OBSTACLE_COST;
+float extra_dilation_mult = OBSTACLE_COST/2;
 bool extra_dilation_mult_from_dist = true; // when true (and also using high cost safety region), this causes extra_dilation_mult to be calculated as a function of distance (i.e. so that the path is pushed to the center of narrow hallways)
-
-float old_path_discount = .95; // if (current path length)*old_path_discount < (old path length) < (current path length)/old_path_discount, then stick with the old path
-
-float MAX_POSE_JUMP = 15;//(map grids)
 
 
 /*---------------------- MAP --------------------------------------------*/
@@ -322,7 +321,6 @@ void populate_map_from_raw_map()
             {
                 
               if(extra_dilation_mult_from_dist)
-                //extra_dilation_mult = (this_dist-dilation_rad)/(dilation_rad_extra-dilation_rad);
                 extra_dilation_mult = (this_dist)/(dilation_rad_extra);
                  
               if(raw_map_cost[dr][dc]*extra_dilation_mult > max_val)
@@ -935,6 +933,31 @@ int main(int argc, char** argv)
   ros::NodeHandle nh;
   ros::Rate loop_rate(100);
     
+  // load globals from parameter server
+  double param_input;
+  bool bool_input;
+  if(ros::param::get("base_planner_cu/obstacle_cost", param_input))
+    OBSTACLE_COST = param_input;                                                   // the cost of an obstacle
+  if(ros::param::get("base_planner_cu/robot_radius", param_input)) 
+    robot_radius = param_input;                                                    //(m)
+  if(ros::param::get("base_planner_cu/safety_distance", param_input)) 
+    safety_distance = param_input;                                                 //(m), distance that must be maintained between robot and obstacles
+  if(ros::param::get("base_planner_cu/better_path_ratio", param_input)) 
+    old_path_discount = param_input;                                               // if (current path length)*old_path_discount < (old path length) < (current path length)/old_path_discount, then stick with the old path
+  if(ros::param::get("base_planner_cu/replan_jump", param_input)) 
+    MAX_POSE_JUMP = param_input;                                                   //(map grids) after which it is easer to replan from scratch
+  if(ros::param::get("base_planner_cu/using_extra_safety_distance", bool_input)) 
+    high_cost_safety_region = bool_input;                                          // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
+  if(ros::param::get("base_planner_cu/extra_safety_distance", param_input)) 
+    extra_dilation = param_input;                                                  //(m)
+
+  // print data about parameters
+  printf("obstacle cost: %f, robot radius: %f, safety_distance: %f, extra_safety_distance: %f, \nbetter_path_ratio: %f, replan_jump: %f \n", OBSTACLE_COST, robot_radius, safety_distance, extra_dilation, old_path_discount, MAX_POSE_JUMP);
+  if(high_cost_safety_region)
+    printf("using extra safety distance \n");
+  else
+    printf("not using extra safety distance \n");
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);

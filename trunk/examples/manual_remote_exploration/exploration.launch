@@ -7,13 +7,11 @@
     <param name="max_ang_degrees" type="double" value="120" />
   </group>
   <node name="hokuyo" pkg="hokuyo_node" type="hokuyo_node" respawn="false" output="screen" />
-  <node name="rviz" pkg="rviz" type="rviz" respawn="false" output="screen" args="-d $(find hokuyo_node)/hokuyo_test.vcg" />
-  <node name="tf_FRAMEID_LASER" pkg="tf" type="transform_sender" args="0 0 0 0 0 0 FRAMEID_LASER FRAMEID_LASER 100" respawn="false" output="screen" />
   
   <node name="driver_brown" pkg="irobot_create" type="driver" respawn="true" output="screen" />
 
   <node name="irobot_create_cu" pkg="irobot_create_cu" type="irobot_create_cu" respawn="true" output="screen" />
-  <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../pseudolites.xml" respawn="true" output="screen" />
+  <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-f ../pseudolites.xml" respawn="true" output="screen" />
 
   <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" respawn="true" output="screen" />
   <node name="hokuyo_listener_cu" pkg="hokuyo_listener_cu" type="hokuyo_listener_cu" respawn="true" output="screen" />

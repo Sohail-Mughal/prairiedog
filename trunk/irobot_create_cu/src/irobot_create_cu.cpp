@@ -60,16 +60,17 @@
   #define PI 3.1415926535897
 #endif
       
-#define BUMPER_BACKUP_DIST .015 //(m) after a bumper hit, the robot backs up this much before going again
-#define BACKUP_SPEED -.2
-#define BUMPER_THETA_OFFSET PI/6  // rad in robot coordinate system
-#define BUMPER_OFFSET .35  // (m) distance in robot coordinate system
-        
 using namespace std;
 
 struct POSE;
 typedef struct POSE POSE;
         
+// globals that can be reset using parameter server, see main();
+float BUMPER_BACKUP_DIST = .015;   //(m) after a bumper hit, the robot backs up this much before going again
+float BACKUP_SPEED = -.2;
+float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
+float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
+
 // set up Brown's Controller
 IRobotCreateController * controller = (IRobotCreateController*) NULL;
 
@@ -640,7 +641,21 @@ int main(int argc, char * argv[])
   controller = new IRobotCreateController();
   ros::NodeHandle nh;
   ros::Rate loop_rate(100);
-    
+   
+  // load globals from parameter server
+  double param_input;
+  if(ros::param::get("irobot_create_cu/bumper_backup_distance", param_input)) 
+    BUMPER_BACKUP_DIST = (float)param_input;                                   //(m) after a bumper hit, the robot backs up this much before going again
+  if(ros::param::get("irobot_create_cu/backup_speed", param_input)) 
+    BACKUP_SPEED = (float)param_input;
+  if(ros::param::get("irobot_create_cu/bumper_theta_offset", param_input)) 
+    BUMPER_THETA_OFFSET = (float)param_input;                                  // rad in robot coordinate system
+  if(ros::param::get("irobot_create_cu/bumper_distance", param_input)) 
+    BUMPER_OFFSET = (float)param_input;                                        // (m) distance in robot coordinate system
+  
+  // print data about parameters
+  printf("backup distance: %f, backup_speed: %f, bumper location (distance, theta): [%f %f]\n", BUMPER_BACKUP_DIST, BACKUP_SPEED, BUMPER_OFFSET, BUMPER_THETA_OFFSET);
+  
   // set up publishers
   odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
   bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
