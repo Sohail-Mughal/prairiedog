@@ -47,10 +47,6 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
-
-#define LASER_SCANNER_X_OFFSET 0.15 // m in robot coordinate system 
-#define LASER_SCANNER_Y_OFFSET 0.0  // m in robot coordinate system 
-#define LASER_SCANNER_THETA_OFFSET PI/6  // rad in laser coordinate system
     
 #define FORCED_MAX_RANGE // if defiend, this causes readings > max range to be reset to max range
         
@@ -61,6 +57,11 @@ typedef struct POSE POSE;
 
 struct POINT;
 typedef struct POINT POINT;
+
+// globals for transform, these can be reset via the parameter server, see main()
+float LASER_SCANNER_X_OFFSET = 0.15;     // m in robot coordinate system 
+float LASER_SCANNER_Y_OFFSET = 0.0;      // m in robot coordinate system 
+float LASER_SCANNER_THETA_OFFSET = PI/6; // rad in laser coordinate system
 
 // global ROS subscriber handles
 ros::Subscriber scan_sub;
@@ -316,31 +317,43 @@ void publish_point_cloud()
 
 int main(int argc, char** argv)
 {
-	ros::init(argc, argv, "hokuyo_listener_cu");
-	ros::NodeHandle nh;
-	ros::Rate loop_rate(100);
+  ros::init(argc, argv, "hokuyo_listener_cu");
+  ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
         
-    // set up subscribers
-    scan_sub = nh.subscribe("scan", 100, scan_callback);
-    pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+  // load globals from parameter server
+  double param_input;
+  if(ros::param::get("hokuyo_listener_cu/laser_scanner_x", param_input)) 
+    LASER_SCANNER_X_OFFSET = (float)param_input;                             // m in robot coordinate system 
+  if(ros::param::get("hokuyo_listener_cu/laser_scanner_y", param_input)) 
+    LASER_SCANNER_Y_OFFSET = (float)param_input;                             // m in robot coordinate system 
+  if(ros::param::get("hokuyo_listener_cu/laser_scanner_theta", param_input)) 
+    LASER_SCANNER_THETA_OFFSET = (float)param_input;                         // rad in laser coordinate syst
+  
+  // print data about parameters
+  printf("Laser Scanner Local Offset (x, y, theta): [%f, %f, %f] \n", LASER_SCANNER_X_OFFSET, LASER_SCANNER_Y_OFFSET, LASER_SCANNER_THETA_OFFSET);
+  
+  // set up subscribers
+  scan_sub = nh.subscribe("scan", 100, scan_callback);
+  pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
         
-    // set up publishers
-    laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
+  // set up publishers
+  laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
     
-	while (nh.ok()) 
-    {   
-        publish_point_cloud();
+  while (nh.ok()) 
+  {   
+    publish_point_cloud();
         
-        ros::spinOnce();
-        loop_rate.sleep();
-    }
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
     
-    // clean up subscribers and publishers
-    scan_sub.shutdown();
-    pose_sub.shutdown();
-    laser_scan_pub.shutdown();
+  // clean up subscribers and publishers
+  scan_sub.shutdown();
+  pose_sub.shutdown();
+  laser_scan_pub.shutdown();
     
-    destroy_pose(robot_pose);
-    destroy_pose(origin);
+  destroy_pose(robot_pose);
+  destroy_pose(origin);
 }
 

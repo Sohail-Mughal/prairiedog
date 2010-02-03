@@ -43,19 +43,20 @@ public:
 	
 	void init() 
 	{
-		//strcpy(serial_port_,"/dev/ttyUSB0");  // pull out serial string
-		//strcpy(serial_port_,"/dev/tty.usbserial-FTE2VF80");  // pull out serial string
-
-                // NOTE: ROS now gets mad at using '~' here, this is a hack job to fix this
+        // NOTE: ROS now gets mad at using '~', I've modified the next 30 or so lines of code to fix this (M.O.)
 
 		//safe_ = 1;
 		//n_.param("~safe", safe_, false);
-                safe_ = true;
+        safe_ = true;
 		ROS_DEBUG("Safe mode: %s",(safe_)?"true":"false");
-		
-		// Retrieve internal serial port parameter
+        
 		//n_.param("~serial_port", serial_port_, std::string("/dev/create"));
-                serial_port_ = std::string("/dev/create");
+        serial_port_ = std::string("/dev/create"); // default value
+        // Retrieve internal serial port parameter from parameter server if it exists
+        std::string input_string;
+        if(ros::param::get("irobot_create/serial_port", input_string))
+           serial_port_ = input_string;   
+
 		ROS_DEBUG_STREAM("Serial Port: " << serial_port_);
 
 		// Attempt to connect to the create
@@ -67,11 +68,11 @@ public:
 			create_dev_ = NULL;
 			//PLAYER_ERROR("failed to connect to create");
 			//fprintf(stdout,"failed to connect to create\n");
-			ROS_FATAL("Failed to connect to create");
+			ROS_FATAL("Failed to connect to create (on port %s)",serial_port_.c_str());
 			ROS_BREAK();
 		}
-                else
-                   ROS_INFO("connect to: %s successfull", serial_port_.c_str());
+        else
+          ROS_INFO("connect to: %s successfull", serial_port_.c_str());
 		
 		
 		// Subscribe to the speeds bus

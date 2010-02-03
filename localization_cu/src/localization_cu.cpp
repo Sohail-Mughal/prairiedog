@@ -47,13 +47,22 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
-  
-#define MOVEMULT 2 // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data)
-   
-bool USING_GPS = true; //true; // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
-        
+
 struct POSE;
-typedef struct POSE POSE;
+typedef struct POSE POSE;        
+        
+// globals that can be reset using parameter server, see main();
+float MOVEMULT = 2;                  // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
+bool USING_GPS = true;               // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
+bool using_tf = false;               // when set to true, use the tf package
+float odometer_pose_x_init = 0;      // odometer_pose is the pose returned by the robot
+float odometer_pose_y_init = 0;
+float odometer_pose_z_init = 0;      // note z coord is basically unused 
+float odometer_pose_theta_init = 0;
+float posterior_pose_x_init = 0;     // posterior_pose is the best estimate of where the robot is now in the global coordinate frame
+float posterior_pose_y_init = 0;
+float posterior_pose_z_init = 0;
+float posterior_pose_theta_init = 0; // note z coord is basically unused 
         
 // publisher handles
 ros::Publisher pose_pub;
@@ -70,12 +79,10 @@ ros::ServiceServer get_pose_srv;
 POSE* posterior_pose = NULL; // our best idea of where we are in the global coordinate system
 POSE* odometer_pose = NULL;  // pose as determined by on-board odometry
 
-float local_offset[] = {0, 0, 0}; // x,y,theta
-float global_offset[] = {0, 0, 0}; // x,y,theta
+float local_offset[] = {0, 0, 0}; // x,y,theta  
+float global_offset[] = {0, 0, 0}; // x,y,theta 
 float accum_movement = -1;
 bool received_gps = false;
-
-bool using_tf = false; // when set to true, use the tf package
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -97,13 +104,13 @@ struct POSE
 
 
 // this creates and returns a pointer to a POSE struct
-POSE* make_pose(float x, float y, float z)
+POSE* make_pose(float x, float y, float z, float alpha)
 {
   POSE* pose = (POSE*)calloc(1, sizeof(POSE));
-  pose->x = 0;
-  pose->y = 0;
-  pose->z = 0;
-  pose->alpha = 0;
+  pose->x = x;
+  pose->y = y;
+  pose->z = z;
+  pose->alpha = alpha;
 
   float r = sqrt(2-(2*cos(pose->alpha)));
 
@@ -338,8 +345,48 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ros::Rate loop_rate(100);
     
-    odometer_pose = make_pose(0,0,0);
-    posterior_pose = make_pose(0,0,0);
+    // load globals from parameter server
+    double param_input;
+    bool bool_input;
+    if(ros::param::get("localization_cu/max_pose_jump_ratio", param_input)) 
+      MOVEMULT = (float)param_input;                                          // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
+    if(ros::param::get("localization_cu/using_gps", bool_input)) 
+      USING_GPS = bool_input;                                                // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
+    if(ros::param::get("localization_cu/using_tf", bool_input)) 
+      using_tf = bool_input;                                                 // when set to true, use the tf package
+    if(ros::param::get("localization_cu/odometer_pose_x_init", param_input)) 
+      odometer_pose_x_init = (float)param_input;                              // odometer_pose is the pose returned by the robot
+    if(ros::param::get("localization_cu/odometer_pose_y_init", param_input)) 
+      odometer_pose_y_init = (float)param_input;
+    if(ros::param::get("localization_cu/odometer_pose_z_init", param_input)) 
+      odometer_pose_z_init = (float)param_input;
+    if(ros::param::get("localization_cu/odometer_pose_theta_init", param_input)) 
+      odometer_pose_theta_init = (float)param_input;
+    if(ros::param::get("localization_cu/posterior_pose_x_init", param_input)) 
+      posterior_pose_x_init = (float)param_input;                             // posterior_pose is the best estimate of where the robot is now in the global coordinate frame
+    if(ros::param::get("localization_cu/posterior_pose_y_init", param_input)) 
+      posterior_pose_y_init = (float)param_input;
+    if(ros::param::get("localization_cu/posterior_pose_z_init", param_input)) 
+      posterior_pose_z_init = (float)param_input;
+    if(ros::param::get("localization_cu/posterior_pose_theta_init", param_input)) 
+      posterior_pose_theta_init = (float)param_input;
+
+    // print basic info about parameters
+    printf("movemult: %f \n", MOVEMULT);
+    if(USING_GPS)
+      printf("using gps\n");
+    else
+      printf("not using gps\n");
+    if(using_tf)
+      printf("using tf\n");
+    else
+      printf("not using tf\n");
+    printf("odometer_pose_init: [%f, %f, %f] \n", odometer_pose_x_init, odometer_pose_y_init, odometer_pose_theta_init);
+    printf("posterior_pose_init: [%f, %f, %f] \n", posterior_pose_x_init, posterior_pose_y_init, posterior_pose_theta_init);
+    
+    // initialize pose structs
+    odometer_pose = make_pose(odometer_pose_x_init, odometer_pose_y_init, odometer_pose_z_init, odometer_pose_theta_init);
+    posterior_pose = make_pose(posterior_pose_x_init, posterior_pose_y_init, posterior_pose_z_init, posterior_pose_theta_init);
     
     // set up publisher
     pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
