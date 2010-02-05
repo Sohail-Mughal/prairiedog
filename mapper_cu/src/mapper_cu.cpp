@@ -31,6 +31,7 @@
 #include <vector>
 
 #include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
 
 #include "geometry_msgs/Point32.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -44,10 +45,9 @@
 
 #include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
-
 #define PROBMAP // HITMAP: map remembers all laser scanner obstacle data
-                  // SIMPLEMAP: map updates to reflect current info from scanner (obstacles and free space)
-                  // PROBMAP: map calculates prob of obstacle based on last MAP_MEMORY readings about a grid
+                // SIMPLEMAP: map updates to reflect current info from scanner (obstacles and free space)
+                // PROBMAP: map calculates prob of obstacle based on last MAP_MEMORY readings about a grid
 
 using namespace std;
         
@@ -58,14 +58,18 @@ struct MAP;
 typedef struct MAP MAP;
 
 // globals that can be reset using parameter server, see main();
-float map_y_max = 20;      // (m), map goes from 0 to this in the y direction
-float map_x_max = 20;      // (m), map goes from 0 to this in the x direction
-float RESOLUTION = .08;    // (m), each map grid spans this much real-world distance
-float OBS_PRIOR = 0.2;     // the prior_probability of an obstacle in the laser map
-int MAP_MEMORY = 100;      // (last MAP_MEMORY readings of a particular grid used to calculate probability of obstacle there) only used if PROBMAP is defined above
-float SCANNER_RANGE = 5.5; // the range of the scanner in meters;
-float BUMPER_COST = 1;     // the probability of obstacle associated with a bumper hit
-float robot_radius = .2;   // (m)
+float map_y_max = 20;              // (m), map goes from 0 to this in the y direction
+float map_x_max = 20;              // (m), map goes from 0 to this in the x direction
+float RESOLUTION = .08;            // (m), each map grid spans this much real-world distance
+float OBS_PRIOR = 0.2;             // the prior_probability of an obstacle in the laser map
+int MAP_MEMORY = 100;              // (last MAP_MEMORY readings of a particular grid used to calculate probability of obstacle there) only used if PROBMAP is defined above
+float SCANNER_RANGE = 5.5;         // the range of the scanner in meters;
+float BUMPER_COST = 1;             // the probability of obstacle associated with a bumper hit
+float robot_radius = .2;           // (m)
+bool using_tf = false;             // when set to true, use the tf package
+float global_map_x_offset = 0;     // the map is this far off of the world coordinate system in the x direction
+float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
+float global_map_theta_offset = 0; // the map is this far off of the world coordinate system in the rotationally
 
 // global ROS subscriber handles
 ros::Subscriber laser_scan_sub;
@@ -723,6 +727,18 @@ void populateMapFromBitmap(MAP* Map, char* filename, float thresh)
   destroy_Bitmap(B);
 }
 
+/*---------------------------- ROS tf functions -------------------------*/
+void broadcast_robot_tf()
+{
+ 
+  static tf::TransformBroadcaster br;  
+    
+  tf::Transform transform;   
+  transform.setOrigin(tf::Vector3(global_map_x_offset, global_map_y_offset, 0));
+  transform.setRotation(tf::Quaternion(global_map_theta_offset, 0, 0));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/world_cu", "/map_cu"));  
+}
+
 /*---------------------------- ROS Callbacks ----------------------------*/
 void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
 { 
@@ -1187,7 +1203,7 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   int width = laser_map->width;
   int height = laser_map->height;
   
-  resp.map.header.frame_id = "/2Dmap";
+  resp.map.header.frame_id = "/map_cu";
   resp.map.info.width = width;
   resp.map.info.height = height;
   resp.map.info.resolution = laser_map->resolution;
@@ -1275,6 +1291,7 @@ int main(int argc, char** argv)
   // load globals from parameter server
   double param_input;
   int int_input;
+  bool bool_input;
   if(ros::param::get("mapper_cu/map_y_size", param_input)) 
     map_y_max = (float)param_input;                                        // (m), map goes from 0 to this in the y direction
   if(ros::param::get("mapper_cu/map_x_size", param_input)) 
@@ -1291,14 +1308,28 @@ int main(int argc, char** argv)
     BUMPER_COST = (float)param_input;                                      // the probability of obstacle associated with a bumper hit
   if(ros::param::get("mapper_cu/robot_radius", param_input)) 
     robot_radius = (float)param_input;                                     // (m)
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                 // when set to true, use the tf package
+  if(ros::param::get("mapper_cu/global_map_x_offset", param_input))
+    global_map_x_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the x direction
+  if(ros::param::get("mapper_cu/global_map_y_offset", param_input))
+    global_map_y_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the y direction
+  if(ros::param::get("mapper_cu/global_map_theta_offset", param_input))
+    global_map_theta_offset = (float)param_input;                          // the map is this far off of the world coordinate system in the rotationally
+  
   HEIGHT = map_y_max/RESOLUTION + 1; //the height of the map in grids
   WIDTH = map_x_max/RESOLUTION + 1;  // the width of the map in grids
   MAP_INC = 1/(float)MAP_MEMORY;     // each laser reading is worth this much probability
   
   // print data about parameters
+  if(using_tf)
+    printf("using tf\n");
+  else
+    printf("not using tf\n");
+  printf("map offset (x, y, theta): [%f %f %f]\n", global_map_x_offset, global_map_y_offset, global_map_theta_offset);
   printf("map size: [%f %f], resolution:%f, obs_prior:%f, memory_time:%d \n", map_y_max, map_x_max, RESOLUTION, OBS_PRIOR, MAP_MEMORY); 
   printf("bumper cost:%f, scanner range:%f, robot radius:%f \n", BUMPER_COST, SCANNER_RANGE, robot_radius);
-    
+  
     
   destroy_map(laser_map);
   destroy_map(bumper_map);
@@ -1317,11 +1348,14 @@ int main(int argc, char** argv)
     
   // set up service servers
   get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
- 
+
   while (ros::ok()) 
   {
     publish_map_changes();
        
+    if(using_tf)
+      broadcast_robot_tf();
+    
     ros::spinOnce();
     loop_rate.sleep();
   }

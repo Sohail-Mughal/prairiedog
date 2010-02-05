@@ -31,6 +31,7 @@
 
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/Pose2D.h"
@@ -149,6 +150,33 @@ void print_pose(POSE* pose)
   } 
 }
 
+/*---------------------------- ROS tf functions -------------------------*/
+void broadcast_robot_tf()
+{
+ 
+  static tf::TransformBroadcaster br;  
+    
+  tf::Transform transform;   
+  transform.setOrigin(tf::Vector3(posterior_pose->x, posterior_pose->y, posterior_pose->z));
+  transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/world_cu", "/robot_cu"));  
+}
+
+bool get_robot_map_tf(tf::StampedTransform &transform)
+{
+  static tf::TransformListener listener;
+    
+  try
+  {
+    listener.lookupTransform("/world_cu", "/map_cu", ros::Time(0), transform);
+  }
+  catch (tf::TransformException ex)
+  {
+    ROS_ERROR("%s",ex.what());
+    return false;
+  }
+  return true;
+}
 
 /*------------------------ ROS Callbacks --------------------------------*/
 
@@ -197,6 +225,16 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   posterior_pose->qx = 0;
   posterior_pose->qy = 0;
   posterior_pose->qz = r/2; 
+     
+  // normalize
+  //float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qx*posterior_pose->qx + posterior_pose->qy*posterior_pose->qy + posterior_pose->qz*posterior_pose->qz);
+  float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qz*posterior_pose->qz);
+  if(posterior_pose->qw < 0)
+    magnitude *= -1;    
+  posterior_pose->qw /= magnitude;
+  //posterior_pose->qx /= magnitude;
+  //posterior_pose->qy /= magnitude;
+  posterior_pose->qz /= magnitude;
   
   // remember accumulated movement
   if(accum_movement == -1)
@@ -206,8 +244,8 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 
 void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
-  if(msg->header.frame_id != "/2Dmap")
-    ROS_INFO("received a message that is not for the 2Dmap frame");
+  if(msg->header.frame_id != "/map_cu")
+    ROS_INFO("received a message that is not for the map_cu frame");
       
   posterior_pose->x = msg->pose.position.x;
   posterior_pose->y = msg->pose.position.y;
@@ -216,6 +254,15 @@ void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   posterior_pose->qx = msg->pose.orientation.x;
   posterior_pose->qy = msg->pose.orientation.y;
   posterior_pose->qz = msg->pose.orientation.z; 
+         
+  // normalize
+  float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qx*posterior_pose->qx + posterior_pose->qy*posterior_pose->qy + posterior_pose->qz*posterior_pose->qz);
+  if(posterior_pose->qw < 0)
+    magnitude *= -1; 
+  posterior_pose->qw /= magnitude;
+  posterior_pose->qx /= magnitude;
+  posterior_pose->qy /= magnitude;
+  posterior_pose->qz /= magnitude;
   
   float qw = posterior_pose->qw;
   float qx = posterior_pose->qx;
@@ -262,7 +309,17 @@ void stargazer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   
   posterior_pose->qx = 0;
   posterior_pose->qy = 0;
-  posterior_pose->qz = r/2; 
+  posterior_pose->qz = r/2;
+  
+  // normalize
+  //float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qx*posterior_pose->qx + posterior_pose->qy*posterior_pose->qy + posterior_pose->qz*posterior_pose->qz);
+  float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qz*posterior_pose->qz);
+  if(posterior_pose->qw < 0)
+    magnitude *= -1; 
+  posterior_pose->qw /= magnitude;
+  //posterior_pose->qx /= magnitude;
+  //posterior_pose->qy /= magnitude;
+  posterior_pose->qz /= magnitude;
   
   posterior_pose->cos_alpha = cos(posterior_pose->alpha);
   posterior_pose->sin_alpha = sin(posterior_pose->alpha);
@@ -289,14 +346,44 @@ void publish_pose()
     return;
   
   geometry_msgs::PoseStamped msg;
-  msg.header.frame_id = "/2Dmap";
-  msg.pose.position.x = posterior_pose->x;
-  msg.pose.position.y = posterior_pose->y;
-  msg.pose.position.z = posterior_pose->z;  
-  msg.pose.orientation.w = posterior_pose->qw; 
-  msg.pose.orientation.x = posterior_pose->qx;
-  msg.pose.orientation.y = posterior_pose->qy;
-  msg.pose.orientation.z = posterior_pose->qz; 
+  msg.header.frame_id = "/map_cu";
+  
+  // if we are using tf, then we need to transform from the global coordinate system to the map coordiante system
+  if(using_tf)
+  { 
+    geometry_msgs::PoseStamped world_msg;
+    world_msg.header.frame_id = "/world_cu";
+    world_msg.pose.position.x = posterior_pose->x;
+    world_msg.pose.position.y = posterior_pose->y;
+    world_msg.pose.position.z = posterior_pose->z;
+    world_msg.pose.orientation.w = posterior_pose->qw; 
+    world_msg.pose.orientation.x = posterior_pose->qx;
+    world_msg.pose.orientation.y = posterior_pose->qy;
+    world_msg.pose.orientation.z = posterior_pose->qz;
+    
+    static tf::TransformListener listener;
+
+    try
+    {
+      listener.transformPose(std::string("/map_cu"), world_msg, msg);   
+    }
+    catch (tf::TransformException ex)
+    {
+      ROS_ERROR("%s",ex.what());
+      return;
+    }
+  }
+  else // just send the raw data
+  {
+    msg.pose.position.x = posterior_pose->x;
+    msg.pose.position.y = posterior_pose->y;
+    msg.pose.position.z = posterior_pose->z;  
+    msg.pose.orientation.w = posterior_pose->qw; 
+    msg.pose.orientation.x = posterior_pose->qx;
+    msg.pose.orientation.y = posterior_pose->qy;
+    msg.pose.orientation.z = posterior_pose->qz;
+  }
+  
   pose_pub.publish(msg);
   
   //printf(" published pose %d\n",num_its++);
@@ -306,18 +393,52 @@ void publish_pose()
 // service that provides pose
 bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::GetPose::Response &resp)
 {  
- if(USING_GPS && !received_gps)
+  if(USING_GPS && !received_gps)
     return false;
   
   geometry_msgs::PoseStamped msg;
-  resp.pose.header.frame_id = "/2Dmap";
-  resp.pose.pose.position.x = posterior_pose->x;
-  resp.pose.pose.position.y = posterior_pose->y;
-  resp.pose.pose.position.z = posterior_pose->z;  
-  resp.pose.pose.orientation.w = posterior_pose->qw; 
-  resp.pose.pose.orientation.x = posterior_pose->qx;
-  resp.pose.pose.orientation.y = posterior_pose->qy;
-  resp.pose.pose.orientation.z = posterior_pose->qz; 
+  resp.pose.header.frame_id = "/map_cu";
+  
+  if(using_tf)
+  {
+    tf::StampedTransform transform;
+    
+    if(!get_robot_map_tf(transform))
+      return false; // don't send if there is an error getting the transform
+    
+    geometry_msgs::PoseStamped world_msg;
+    world_msg.header.frame_id = "/world_cu";
+    world_msg.pose.position.x = posterior_pose->x;
+    world_msg.pose.position.y = posterior_pose->y;
+    world_msg.pose.position.z = posterior_pose->z;
+    world_msg.pose.orientation.w = posterior_pose->qw; 
+    world_msg.pose.orientation.x = posterior_pose->qx;
+    world_msg.pose.orientation.y = posterior_pose->qy;
+    world_msg.pose.orientation.z = posterior_pose->qz;
+    
+    static tf::TransformListener listener;
+
+    try
+    {
+      listener.transformPose(std::string("/map_cu"), world_msg, resp.pose);
+    }
+    catch (tf::TransformException ex)
+    {
+      ROS_ERROR("%s",ex.what());
+      return false;
+    }
+    
+  }
+  else // just send the raw data
+  { 
+    resp.pose.pose.position.x = posterior_pose->x;
+    resp.pose.pose.position.y = posterior_pose->y;
+    resp.pose.pose.position.z = posterior_pose->z;  
+    resp.pose.pose.orientation.w = posterior_pose->qw; 
+    resp.pose.pose.orientation.x = posterior_pose->qx;
+    resp.pose.pose.orientation.y = posterior_pose->qy;
+    resp.pose.pose.orientation.z = posterior_pose->qz; 
+  }
   
   //printf(" published pose via service %d\n",num_its++);
   //print_pose(posterior_pose);
@@ -325,102 +446,88 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
   return true;
 }
 
-/*---------------------------- ROS tf functions -------------------------*/
-void broadcast_robot_tf()
-{
- 
-  static tf::TransformBroadcaster br;  
-    
-  tf::Transform transform;   
-  transform.setOrigin(tf::Vector3(posterior_pose->x, posterior_pose->y, posterior_pose->z));
-  transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0));
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "robot"));  
-}
-
-
-
 int main(int argc, char** argv) 
 {
-    ros::init(argc, argv, "localization_cu");
-    ros::NodeHandle nh;
-    ros::Rate loop_rate(100);
+  ros::init(argc, argv, "localization_cu");
+  ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
     
-    // load globals from parameter server
-    double param_input;
-    bool bool_input;
-    if(ros::param::get("localization_cu/max_pose_jump_ratio", param_input)) 
-      MOVEMULT = (float)param_input;                                          // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
-    if(ros::param::get("localization_cu/using_gps", bool_input)) 
-      USING_GPS = bool_input;                                                // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
-    if(ros::param::get("localization_cu/using_tf", bool_input)) 
-      using_tf = bool_input;                                                 // when set to true, use the tf package
-    if(ros::param::get("localization_cu/odometer_pose_x_init", param_input)) 
-      odometer_pose_x_init = (float)param_input;                              // odometer_pose is the pose returned by the robot
-    if(ros::param::get("localization_cu/odometer_pose_y_init", param_input)) 
-      odometer_pose_y_init = (float)param_input;
-    if(ros::param::get("localization_cu/odometer_pose_z_init", param_input)) 
-      odometer_pose_z_init = (float)param_input;
-    if(ros::param::get("localization_cu/odometer_pose_theta_init", param_input)) 
-      odometer_pose_theta_init = (float)param_input;
-    if(ros::param::get("localization_cu/posterior_pose_x_init", param_input)) 
-      posterior_pose_x_init = (float)param_input;                             // posterior_pose is the best estimate of where the robot is now in the global coordinate frame
-    if(ros::param::get("localization_cu/posterior_pose_y_init", param_input)) 
-      posterior_pose_y_init = (float)param_input;
-    if(ros::param::get("localization_cu/posterior_pose_z_init", param_input)) 
-      posterior_pose_z_init = (float)param_input;
-    if(ros::param::get("localization_cu/posterior_pose_theta_init", param_input)) 
-      posterior_pose_theta_init = (float)param_input;
+  // load globals from parameter server
+  double param_input;
+  bool bool_input;
+  if(ros::param::get("localization_cu/max_pose_jump_ratio", param_input)) 
+    MOVEMULT = (float)param_input;                                          // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
+  if(ros::param::get("localization_cu/using_gps", bool_input)) 
+    USING_GPS = bool_input;                                                // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                 // when set to true, use the tf package
+  if(ros::param::get("localization_cu/odometer_pose_x_init", param_input)) 
+    odometer_pose_x_init = (float)param_input;                              // odometer_pose is the pose returned by the robot
+  if(ros::param::get("localization_cu/odometer_pose_y_init", param_input)) 
+    odometer_pose_y_init = (float)param_input;
+  if(ros::param::get("localization_cu/odometer_pose_z_init", param_input)) 
+    odometer_pose_z_init = (float)param_input;
+  if(ros::param::get("localization_cu/odometer_pose_theta_init", param_input)) 
+    odometer_pose_theta_init = (float)param_input;
+  if(ros::param::get("localization_cu/posterior_pose_x_init", param_input)) 
+    posterior_pose_x_init = (float)param_input;                             // posterior_pose is the best estimate of where the robot is now in the global coordinate frame
+  if(ros::param::get("localization_cu/posterior_pose_y_init", param_input)) 
+    posterior_pose_y_init = (float)param_input;
+  if(ros::param::get("localization_cu/posterior_pose_z_init", param_input)) 
+    posterior_pose_z_init = (float)param_input;
+  if(ros::param::get("localization_cu/posterior_pose_theta_init", param_input)) 
+    posterior_pose_theta_init = (float)param_input;
 
-    // print basic info about parameters
-    printf("movemult: %f \n", MOVEMULT);
-    if(USING_GPS)
-      printf("using gps\n");
-    else
-      printf("not using gps\n");
+  // print basic info about parameters
+  printf("movemult: %f \n", MOVEMULT);
+  if(USING_GPS)
+    printf("using gps\n");
+  else
+    printf("not using gps\n");
+  if(using_tf)
+    printf("using tf\n");
+  else
+    printf("not using tf\n");
+  printf("odometer_pose_init: [%f, %f, %f] \n", odometer_pose_x_init, odometer_pose_y_init, odometer_pose_theta_init);
+  printf("posterior_pose_init: [%f, %f, %f] \n", posterior_pose_x_init, posterior_pose_y_init, posterior_pose_theta_init);
+  
+  // initialize pose structs
+  odometer_pose = make_pose(odometer_pose_x_init, odometer_pose_y_init, odometer_pose_z_init, odometer_pose_theta_init);
+  posterior_pose = make_pose(posterior_pose_x_init, posterior_pose_y_init, posterior_pose_z_init, posterior_pose_theta_init);
+    
+  // set up publisher
+  pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
+    
+  // set up subscribers
+  odometer_pose_sub = nh.subscribe("/cu/odometer_pose_cu", 1, odometer_pose_callback);
+  user_pose_sub = nh.subscribe("/cu/user_pose_cu", 1, user_pose_callback);
+  stargazer_pose_sub = nh.subscribe("/cu/stargazer_pose_cu", 1, stargazer_pose_callback);
+
+  // set up service servers
+  get_pose_srv = nh.advertiseService("/cu/get_pose_cu", get_pose_callback);
+    
+  while (ros::ok()) 
+  {
+    //printf(" This is the localization system \n");
+    //print_pose(posterior_pose);
+        
+    publish_pose();
+        
     if(using_tf)
-      printf("using tf\n");
-    else
-      printf("not using tf\n");
-    printf("odometer_pose_init: [%f, %f, %f] \n", odometer_pose_x_init, odometer_pose_y_init, odometer_pose_theta_init);
-    printf("posterior_pose_init: [%f, %f, %f] \n", posterior_pose_x_init, posterior_pose_y_init, posterior_pose_theta_init);
-    
-    // initialize pose structs
-    odometer_pose = make_pose(odometer_pose_x_init, odometer_pose_y_init, odometer_pose_z_init, odometer_pose_theta_init);
-    posterior_pose = make_pose(posterior_pose_x_init, posterior_pose_y_init, posterior_pose_z_init, posterior_pose_theta_init);
-    
-    // set up publisher
-    pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
-    
-    // set up subscribers
-    odometer_pose_sub = nh.subscribe("/cu/odometer_pose_cu", 1, odometer_pose_callback);
-    user_pose_sub = nh.subscribe("/cu/user_pose_cu", 1, user_pose_callback);
-    stargazer_pose_sub = nh.subscribe("/cu/stargazer_pose_cu", 1, stargazer_pose_callback);
-
-    // set up service servers
-    get_pose_srv = nh.advertiseService("/cu/get_pose_cu", get_pose_callback);
-    
-    while (ros::ok()) 
-    {
-      //printf(" This is the localization system \n");
-      //print_pose(posterior_pose);
-        
-      publish_pose();
-        
-      if(using_tf)
-        broadcast_robot_tf();
+      broadcast_robot_tf();
       
-      ros::spinOnce();
-      loop_rate.sleep();
-    }
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
     
     
-    // destroy publisher
-    pose_pub.shutdown();
+  // destroy publisher
+  pose_pub.shutdown();
     
-    odometer_pose_sub.shutdown();
-    user_pose_sub.shutdown();
-    get_pose_srv.shutdown();
+  odometer_pose_sub.shutdown();
+  user_pose_sub.shutdown();
+  get_pose_srv.shutdown();
         
-    destroy_pose(odometer_pose);
-    destroy_pose(posterior_pose);
+  destroy_pose(odometer_pose);
+  destroy_pose(posterior_pose);
 }
