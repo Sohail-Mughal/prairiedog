@@ -9,4 +9,5 @@
   <depend package="sensor_msgs"/>
   <depend package="nav_msgs"/>
   <depend package="hokuyo_listener_cu"/>
+  <depend package="tf"/>
 </package>

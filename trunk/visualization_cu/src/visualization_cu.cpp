@@ -75,6 +75,14 @@ typedef struct GRID_LIST GRID_LIST;
 struct ROBOT;
 typedef struct ROBOT ROBOT;
 
+// globals that can be reset using parameter server, see main();
+bool using_tf = false;             // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
+float global_map_x_offset = 0;     // the map is this far off of the world coordinate system in the x direction
+float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
+float global_map_theta_offset = 0; // the map is this far off of the world coordinate system in the rotationally
+float robot_display_radius = .2;
+
+
 // colors
 float WHITE[] = {1,1,1,1};
 float BLACK[] = {0,0,0,1};
@@ -98,7 +106,6 @@ float win_pan_y = 0;
 float win_aspect_ratio = 1;
 float scale_factor = 1; // radius of the size of the word
 float max_grids_on_side = 500;
-float robot_display_radius = .2;
 float laser_hit_display_rad = .02;
 int display_flag = 1; // set to 0 to avoid drawing, set to 1 to draw
 int menu_flag  = 1; // same as above, but only for menu
@@ -1021,7 +1028,7 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   if(costmap == NULL)
     return;
    
-  if(msg->header.frame_id != "/2Dmap")
+  if(msg->header.frame_id != "/map_cu")
       ROS_INFO("Received unknown pose message");
     
   // currently, just use the first particle in the cloud as the robot position
@@ -1780,7 +1787,7 @@ void mouse(int button, int mouse_state, int x, int y)
       
       geometry_msgs::PoseStamped msg;
       
-      msg.header.frame_id = "/2Dmap";
+      msg.header.frame_id = "/map_cu";
       
       float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
@@ -1829,7 +1836,7 @@ void mouse(int button, int mouse_state, int x, int y)
       
       geometry_msgs::PoseStamped msg;
       
-      msg.header.frame_id = "/2Dmap";
+      msg.header.frame_id = "/map_cu";
       
       float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
@@ -2089,6 +2096,28 @@ int main(int argc, char *argv[])
   ros::init(argc, argv, "visualization_cu");  
   ros::NodeHandle nh;
   ROS_INFO("Welcome to CU visualization");
+  
+  // load globals from parameter server
+  double param_input;
+  int int_input;
+  bool bool_input;
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                 // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
+  if(ros::param::get("mapper_cu/global_map_x_offset", param_input))
+    global_map_x_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the x direction
+  if(ros::param::get("mapper_cu/global_map_y_offset", param_input))
+    global_map_y_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the y direction
+  if(ros::param::get("mapper_cu/global_map_theta_offset", param_input))
+    global_map_theta_offset = (float)param_input;                          // the map is this far off of the world coordinate system in the rotationally
+  if(ros::param::get("base_planner_cu/robot_radius", param_input)) 
+    robot_display_radius = param_input;                                    //(m)
+  
+  if(using_tf)
+    printf("using tf\n");
+  else
+    printf("not using tf\n");
+  printf("map offset (x, y, theta): [%f %f %f]\n", global_map_x_offset, global_map_y_offset, global_map_theta_offset);
+  printf("robot radius (used by planning node): %d \n", robot_display_radius);
   
   // global variable init stuff
   robot =  make_robot(0, 0, 0, RED);

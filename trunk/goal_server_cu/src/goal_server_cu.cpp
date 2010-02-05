@@ -137,8 +137,8 @@ void print_pose(POSE* pose)
 /*------------------------ ROS Callbacks --------------------------------*/
 void reset_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
-  if(msg->header.frame_id != "/2Dmap")
-    ROS_INFO("received a message that is not for the 2Dmap frame");
+  if(msg->header.frame_id != "/map_cu")
+    ROS_INFO("received a message that is not for the map_cu frame");
    
   if(goal == NULL)
     goal = make_pose(0, 0, 0, 0);
@@ -161,7 +161,7 @@ void publish_goal()
     return;
   
   geometry_msgs::PoseStamped msg;
-  msg.header.frame_id = "/2Dmap";
+  msg.header.frame_id = "/map_cu";
   msg.pose.position.x = goal->x;
   msg.pose.position.y = goal->y;
   msg.pose.position.z = goal->z;  
@@ -182,7 +182,7 @@ bool get_goal_callback(localization_cu::GetPose::Request &req, localization_cu::
     return false;
   
   geometry_msgs::PoseStamped msg;
-  resp.pose.header.frame_id = "/2Dmap";
+  resp.pose.header.frame_id = "/map_cu";
   resp.pose.pose.position.x = goal->x;
   resp.pose.pose.position.y = goal->y;
   resp.pose.pose.position.z = goal->z;  

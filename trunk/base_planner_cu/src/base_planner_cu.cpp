@@ -737,7 +737,7 @@ void publish_global_path(MapPath* path)
     
   nav_msgs::Path msg;  
   
-  msg.header.frame_id = "/2Dmap";
+  msg.header.frame_id = "/map_cu";
   msg.poses.resize(length);
 
   float resolution = raw_map->resolution;
