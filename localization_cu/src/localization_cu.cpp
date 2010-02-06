@@ -84,6 +84,9 @@ float local_offset[] = {0, 0, 0}; // x,y,theta
 float global_offset[] = {0, 0, 0}; // x,y,theta 
 float accum_movement = -1;
 bool received_gps = false;
+bool setup_tf_1 = true; // flag used to indicate that required transforms are available
+bool setup_tf_2 = true; // flag used to indicate that required transforms are available
+bool setup_tf_3 = true; // flag used to indicate that required transforms are available
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -124,6 +127,12 @@ POSE* make_pose(float x, float y, float z, float alpha)
   pose->qy = 0;
   pose->qz = r/2; 
 
+  if(pose->qw < 1)
+  {
+    pose->qw *= -1;   
+    pose->qz *= -1; 
+  }
+  
   pose->cos_alpha = cos(pose->alpha);
   pose->sin_alpha = sin(pose->alpha);
   
@@ -152,13 +161,20 @@ void print_pose(POSE* pose)
 
 /*---------------------------- ROS tf functions -------------------------*/
 void broadcast_robot_tf()
-{
- 
+{ 
   static tf::TransformBroadcaster br;  
-    
+   
+  if(USING_GPS && !received_gps)
+    return;
+  
   tf::Transform transform;   
   transform.setOrigin(tf::Vector3(posterior_pose->x, posterior_pose->y, posterior_pose->z));
-  transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0));
+  
+  //transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0)); // this is currently pyr, but being depreciated and then changed to rpy
+  tf::Quaternion Q;
+  Q.setRPY(0, 0, posterior_pose->alpha);
+  transform.setRotation(Q);
+  
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/world_cu", "/robot_cu"));  
 }
 
@@ -166,13 +182,29 @@ bool get_robot_map_tf(tf::StampedTransform &transform)
 {
   static tf::TransformListener listener;
     
+  
+  while(setup_tf_1)  // there is usually a problem looking up the first transform, so do this to avoid that
+  {
+    setup_tf_1 = false;  
+    try
+    {    
+      listener.waitForTransform("/world_cu", "/map_cu", ros::Time(0), ros::Duration(3.0));
+      listener.lookupTransform("/world_cu", "/map_cu", ros::Time(0), transform);
+    }
+    catch(tf::TransformException ex)
+    { 
+      //printf("attempt failed \n");
+      setup_tf_1 = true;  
+    }   
+  } 
+  
   try
   {
     listener.lookupTransform("/world_cu", "/map_cu", ros::Time(0), transform);
   }
   catch (tf::TransformException ex)
   {
-    ROS_ERROR("%s",ex.what());
+    ROS_ERROR("mapper 1: %s",ex.what());
     return false;
   }
   return true;
@@ -236,6 +268,9 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   //posterior_pose->qy /= magnitude;
   posterior_pose->qz /= magnitude;
   
+  if(posterior_pose->qw > 1)
+    posterior_pose->qw = 1;
+  
   // remember accumulated movement
   if(accum_movement == -1)
       accum_movement = 0;
@@ -246,7 +281,7 @@ void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
   if(msg->header.frame_id != "/world_cu")
     ROS_INFO("received a message that is not for the map_cu frame");
-      
+ 
   posterior_pose->x = msg->pose.position.x;
   posterior_pose->y = msg->pose.position.y;
   posterior_pose->z = msg->pose.position.z;
@@ -263,6 +298,9 @@ void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   posterior_pose->qx /= magnitude;
   posterior_pose->qy /= magnitude;
   posterior_pose->qz /= magnitude;
+  
+  if(posterior_pose->qw > 1)
+    posterior_pose->qw = 1;
   
   float qw = posterior_pose->qw;
   float qx = posterior_pose->qx;
@@ -293,7 +331,7 @@ void stargazer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   float pose_diff = sqrt((msg->x - posterior_pose->x)*(msg->x - posterior_pose->x) + (msg->y - posterior_pose->y)*(msg->y - posterior_pose->y));
   if(accum_movement*MOVEMULT < pose_diff && accum_movement != -1) // ignore because the global pose jump is too far 
     return;
-     
+  
   // currently, we use the raw psudolite data as ground truth
   posterior_pose->x = msg->x;
   posterior_pose->y = msg->y;
@@ -320,6 +358,9 @@ void stargazer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   //posterior_pose->qx /= magnitude;
   //posterior_pose->qy /= magnitude;
   posterior_pose->qz /= magnitude;
+  
+  if(posterior_pose->qw > 1)
+    posterior_pose->qw = 1;
   
   posterior_pose->cos_alpha = cos(posterior_pose->alpha);
   posterior_pose->sin_alpha = sin(posterior_pose->alpha);
@@ -363,13 +404,28 @@ void publish_pose()
     
     static tf::TransformListener listener;
 
-    try
+    while(setup_tf_2)  // there is usually a problem looking up the first transform, so do this to avoid that
     {
+      setup_tf_2 = false;  
+      try
+      {    
+        listener.waitForTransform("/world_cu", "/map_cu", ros::Time(0), ros::Duration(3.0));
+        listener.transformPose(std::string("/map_cu"), world_msg, msg);  
+      }
+      catch(tf::TransformException ex)
+      { 
+        //printf("attempt failed \n");
+        setup_tf_2 = true;  
+      }   
+    }    
+    
+    try
+    {  
       listener.transformPose(std::string("/map_cu"), world_msg, msg);   
     }
     catch (tf::TransformException ex)
     {
-      ROS_ERROR("%s",ex.what());
+      ROS_ERROR("mapper 2: %s",ex.what());
       return;
     }
   }
@@ -418,13 +474,28 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
     
     static tf::TransformListener listener;
 
+    while(setup_tf_3)  // there is usually a problem looking up the first transform, so do this to avoid that
+    {
+      setup_tf_3 = false;  
+      try
+      {    
+        listener.waitForTransform("/world_cu", "/map_cu", ros::Time(0), ros::Duration(3.0));
+        listener.transformPose(std::string("/map_cu"), world_msg, resp.pose);
+      }
+      catch(tf::TransformException ex)
+      { 
+        //printf("attempt failed \n");
+        setup_tf_3 = true;  
+      }   
+    } 
+    
     try
     {
       listener.transformPose(std::string("/map_cu"), world_msg, resp.pose);
     }
     catch (tf::TransformException ex)
     {
-      ROS_ERROR("%s",ex.what());
+      ROS_ERROR("mapper 3: %s",ex.what());
       return false;
     }
     

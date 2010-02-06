@@ -736,7 +736,12 @@ void broadcast_robot_tf()
     
   tf::Transform transform;   
   transform.setOrigin(tf::Vector3(global_map_x_offset, global_map_y_offset, 0));
-  transform.setRotation(tf::Quaternion(global_map_theta_offset, 0, 0));
+  
+  //transform.setRotation(tf::Quaternion(global_map_theta_offset, 0, 0)); // this is currently pyr, but being depreciated and then changed to rpy
+  tf::Quaternion Q;
+  Q.setRPY(0, 0, global_map_theta_offset);
+  transform.setRotation(Q);
+  
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/world_cu", "/map_cu"));  
 }
 
@@ -1383,6 +1388,9 @@ int main(int argc, char** argv)
   printf("bumper cost:%f, scanner range:%f, robot radius:%f \n", BUMPER_COST, SCANNER_RANGE, robot_radius);
   printf("loading map from: %s \n", map_file.c_str());
     
+  // wait until localization service is provided (we need its tf /world_cu -> /robot_cu to be broadcast)
+  ros::service::waitForService("/cu/get_pose_cu", -1);
+  
   destroy_map(laser_map);
   destroy_map(bumper_map);
   laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
