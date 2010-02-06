@@ -118,6 +118,7 @@ int  user_state = 0;  // as advertised by the visualization node
 
 bool backing_up = false; // set to true if robot gets a bumper hit
 int state_prior_to_bumper_hit;
+bool setup_tf = true; // flag used to indicate that required transforms are available
 
 // globals for robot and goal
 POSE* robot_pose = NULL;
@@ -183,6 +184,12 @@ POSE* make_pose(float x, float y, float z)
   pose->qx = 0;
   pose->qy = 0;
   pose->qz = r/2; 
+  
+  if(pose->qw < 1)
+  {
+    pose->qw *= -1;   
+    pose->qz *= -1; 
+  }
 
   pose->cos_alpha = cos(pose->alpha);
   pose->sin_alpha = sin(pose->alpha);
@@ -346,10 +353,14 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
 
 void publish_odometer_pose(float x, float y, float theta)
 {
+  if(theta < -10 || theta > 10) // i.e. 10 is a stand-in for 2*pi
+    return;
+    
   geometry_msgs::Pose2D msg;
   msg.x = x;
   msg.y = y;
   msg.theta = theta;
+  
   odometer_pose_pub.publish(msg);       
 }
 
@@ -384,6 +395,21 @@ void publish_bumper(bool left, bool right)
     
     static tf::TransformListener listener;
 
+    while(setup_tf)  // there is usually a problem looking up the first transform, so do this to avoid that
+    {
+      setup_tf = false;  
+      try
+      {    
+        listener.waitForTransform("/robot_cu", "/map_cu" , ros::Time(0), ros::Duration(3.0));
+        listener.transformPose(std::string("/map_cu"), msg_temp, msg);   
+      }
+      catch(tf::TransformException ex)
+      { 
+        //printf("attempt failed \n");
+        setup_tf = true;  
+      }   
+    } 
+    
     try
     {
       listener.transformPose(std::string("/map_cu"), msg_temp, msg);   
@@ -695,6 +721,9 @@ int main(int argc, char * argv[])
   
   // print data about parameters
   printf("backup distance: %f, backup_speed: %f, bumper location (distance, theta): [%f %f]\n", BUMPER_BACKUP_DIST, BACKUP_SPEED, BUMPER_OFFSET, BUMPER_THETA_OFFSET);
+  
+  // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
+  ros::service::waitForService("/cu/get_map_cu", -1);
   
   // set up publishers
   odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);

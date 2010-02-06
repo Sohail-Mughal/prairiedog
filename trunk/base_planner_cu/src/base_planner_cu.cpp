@@ -958,6 +958,9 @@ int main(int argc, char** argv)
   else
     printf("not using extra safety distance \n");
   
+  // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
+  ros::service::waitForService("/cu/get_map_cu", -1);
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);

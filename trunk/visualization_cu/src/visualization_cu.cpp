@@ -180,7 +180,8 @@ int user_control_state = 0; // as broadcast by this node
                             // 2 = manual control
 
 int safe_path_exists = 0;
-        
+bool setup_tf = true; // flag used to indicate that required transforms are available
+
 /*-------------------- basic drawing functions --------------------------*/
 
 int max(int a, int b)
@@ -1849,7 +1850,7 @@ void mouse(int button, int mouse_state, int x, int y)
       
       float theta = atan2(new_heading_y,new_heading_x);
       float r = sqrt(2-(2*cos(theta)));
-      if( r == 0)          
+      if(r == 0)          
         msg.pose.orientation.w = 1;
       else
         msg.pose.orientation.w = sin(theta)/r; 
@@ -1868,6 +1869,9 @@ void mouse(int button, int mouse_state, int x, int y)
       //msg.pose.orientation.y /= magnitude;
       msg.pose.orientation.z /= magnitude;
       
+      if(msg.pose.orientation.w > 1)
+        msg.pose.orientation.w = 1;
+      
       if(using_tf)
       {
         // if using tf then we want to send in the world_cu frame
@@ -1875,15 +1879,30 @@ void mouse(int button, int mouse_state, int x, int y)
         msg_world.header.frame_id = "/world_cu";  
         
         static tf::TransformListener listener;
-
+        
+        while(setup_tf)  // there is usually a problem looking up the first transform, so do this to avoid that
+        {
+          setup_tf = false;  
+          try
+          {    
+            listener.waitForTransform("/map_cu", "/world_cu", ros::Time(0), ros::Duration(3.0));
+            listener.transformPose(std::string("/world_cu"), msg, msg_world);  
+          }
+          catch(tf::TransformException ex)
+          { 
+            //printf("attempt failed \n");
+            setup_tf = true;  
+          }   
+        }  
+        
         bool no_problems_with_transform = true;
         try
-        {
+        {  
           listener.transformPose(std::string("/world_cu"), msg, msg_world);   
         }
         catch (tf::TransformException ex)
         {
-          ROS_ERROR("irobot_create: %s",ex.what());
+          ROS_ERROR("visualization: %s",ex.what());
           no_problems_with_transform = false;
         }
         
@@ -2133,7 +2152,6 @@ int main(int argc, char *argv[])
   
   // load globals from parameter server
   double param_input;
-  int int_input;
   bool bool_input;
   if(ros::param::get("prairiedog/using_tf", bool_input)) 
     using_tf = bool_input;                                                 // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
@@ -2151,7 +2169,10 @@ int main(int argc, char *argv[])
   else
     printf("not using tf\n");
   printf("map offset (x, y, theta): [%f %f %f]\n", global_map_x_offset, global_map_y_offset, global_map_theta_offset);
-  printf("robot radius (used by planning node): %d \n", robot_display_radius);
+  printf("robot radius (used by planning node): %f \n", robot_display_radius);
+  
+  // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
+  ros::service::waitForService("/cu/get_map_cu", -1);
   
   // global variable init stuff
   robot =  make_robot(0, 0, 0, RED);

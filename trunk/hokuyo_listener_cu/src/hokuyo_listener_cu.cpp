@@ -77,6 +77,9 @@ ros::Publisher laser_scan_pub;
 // globlas for robot pose
 POSE* robot_pose = NULL;
 
+// other globals
+bool setup_tf = true; // flag used to indicate that required transforms are available
+
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
 {
@@ -158,7 +161,12 @@ void broadcast_scanner_tf()
     
   tf::Transform transform;   
   transform.setOrigin(tf::Vector3(LASER_SCANNER_X_OFFSET, LASER_SCANNER_Y_OFFSET, 0));
-  transform.setRotation(tf::Quaternion(LASER_SCANNER_THETA_OFFSET, 0, 0));
+  
+  //transform.setRotation(tf::Quaternion(LASER_SCANNER_THETA_OFFSET, 0, 0));    // this is currently pyr, but being depreciated and then changed to rpy
+  tf::Quaternion Q;
+  Q.setRPY(0, 0, LASER_SCANNER_THETA_OFFSET);
+  transform.setRotation(Q);
+  
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/robot_cu", "/scanner_cu"));  
 }
 
@@ -266,12 +274,28 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     // actually do the transfrom int the map frame
     static tf::TransformListener listener;
 
+    while(setup_tf)  // there is usually a problem looking up the first transform, so do this to avoid that
+    {
+      setup_tf = false;  
+      try
+      {    
+        broadcast_scanner_tf();  // make sure that we've broadcast /scanner_cu at least once
+        listener.waitForTransform("/scanner_cu", "/map_cu" , ros::Time(0), ros::Duration(1.0));
+        listener.transformPointCloud(std::string("/map_cu"), temp_message, outgoing_msg.cloud);
+      }
+      catch(tf::TransformException ex)
+      { 
+        //printf("attempt failed \n");
+        setup_tf = true;  
+      }   
+    }    
+    
     try
     {
       listener.transformPointCloud(std::string("/map_cu"), temp_message, outgoing_msg.cloud);
     }
-    catch (tf::TransformException ex)
-    {
+    catch(tf::TransformException ex)
+    { 
       ROS_ERROR("%s",ex.what());
       return;
     }
@@ -395,6 +419,11 @@ int main(int argc, char** argv)
   
   // print data about parameters
   printf("Laser Scanner Local Offset (x, y, theta): [%f, %f, %f] \n", LASER_SCANNER_X_OFFSET, LASER_SCANNER_Y_OFFSET, LASER_SCANNER_THETA_OFFSET);
+  
+  // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
+  ros::service::waitForService("/cu/get_map_cu", -1);
+  // wait until localization service is provided (we need its tf /world_cu -> /robot_cu to be broadcast)
+  ros::service::waitForService("/cu/get_pose_cu", -1);
   
   // set up subscribers
   scan_sub = nh.subscribe("scan", 100, scan_callback);
