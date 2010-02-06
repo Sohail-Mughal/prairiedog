@@ -12,6 +12,7 @@
   <depend package="geometry_msgs"/>
   <depend package="sensor_msgs"/>
   <depend package="hokuyo_node"/>
+  <depend package="tf"/>
 
   <export>
     <cpp cflags="-I${prefix}/msg/cpp"/>

@@ -244,7 +244,7 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 
 void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
-  if(msg->header.frame_id != "/map_cu")
+  if(msg->header.frame_id != "/world_cu")
     ROS_INFO("received a message that is not for the map_cu frame");
       
   posterior_pose->x = msg->pose.position.x;
@@ -310,7 +310,7 @@ void stargazer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   posterior_pose->qx = 0;
   posterior_pose->qy = 0;
   posterior_pose->qz = r/2;
-  
+ 
   // normalize
   //float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qx*posterior_pose->qx + posterior_pose->qy*posterior_pose->qy + posterior_pose->qz*posterior_pose->qz);
   float magnitude = sqrt(posterior_pose->qw*posterior_pose->qw + posterior_pose->qz*posterior_pose->qz);
@@ -510,11 +510,10 @@ int main(int argc, char** argv)
   {
     //printf(" This is the localization system \n");
     //print_pose(posterior_pose);
-        
-    publish_pose();
-        
     if(using_tf)
       broadcast_robot_tf();
+            
+    publish_pose();
       
     ros::spinOnce();
     loop_rate.sleep();

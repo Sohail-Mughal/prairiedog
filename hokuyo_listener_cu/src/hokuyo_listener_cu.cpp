@@ -35,9 +35,12 @@
 #include <list>
 
 #include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 
 #include "geometry_msgs/Point32.h"
 #include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/PointStamped.h"
 
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
@@ -62,6 +65,7 @@ typedef struct POINT POINT;
 float LASER_SCANNER_X_OFFSET = 0.15;     // m in robot coordinate system 
 float LASER_SCANNER_Y_OFFSET = 0.0;      // m in robot coordinate system 
 float LASER_SCANNER_THETA_OFFSET = PI/6; // rad in laser coordinate system
+bool using_tf = false;                   // when set to true, use the tf package
 
 // global ROS subscriber handles
 ros::Subscriber scan_sub;
@@ -72,9 +76,6 @@ ros::Publisher laser_scan_pub;
 
 // globlas for robot pose
 POSE* robot_pose = NULL;
-
-vector<POINT> point_cloud;
-POSE* origin = NULL;
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -149,57 +150,145 @@ struct POINT
     float z;
 };
 
+/*---------------------------- ROS tf functions -------------------------*/
+void broadcast_scanner_tf()
+{
+ 
+  static tf::TransformBroadcaster br;  
+    
+  tf::Transform transform;   
+  transform.setOrigin(tf::Vector3(LASER_SCANNER_X_OFFSET, LASER_SCANNER_Y_OFFSET, 0));
+  transform.setRotation(tf::Quaternion(LASER_SCANNER_THETA_OFFSET, 0, 0));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/robot_cu", "/scanner_cu"));  
+}
+
+/*---------------------- ROS Publisher Functions ------------------------*/
+// NOTE publish_point_cloud() has been combined with scan_callback()
+
+
 /*--------------------------- ROS callbacks -----------------------------*/
 void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
-	//ROS_INFO_STREAM("Received time: "<<msg->scan_time<<" with header:"<<msg->header.frame_id);
-	//ROS_INFO("%f, %f, %f, %f, %f", msg->angle_min, msg->angle_max, msg->angle_increment, msg->range_min, msg->range_max);
+  //ROS_INFO_STREAM("Received time: "<<msg->scan_time<<" with header:"<<msg->header.frame_id);
+  //ROS_INFO("%f, %f, %f, %f, %f", msg->angle_min, msg->angle_max, msg->angle_increment, msg->range_min, msg->range_max);
 
 
-    //other info in LaserScan msg
-    // 	msg.angle_min
-    // 	msg.angle_max
-    // 	msg.angle_increment
-    // 	msg.time_increment
-    // 	msg.scan_time
-    // 	msg.range_min
-    // 	msg.range_max
-    // 	msg.ranges[]
-    // 	msg.intensities[]
+  //other info in LaserScan msg
+  // 	msg.angle_min
+  // 	msg.angle_max
+  // 	msg.angle_increment
+  // 	msg.time_increment
+  // 	msg.scan_time
+  // 	msg.range_min
+  // 	msg.range_max
+  // 	msg.ranges[]
+  // 	msg.intensities[]
     
     
-    if(robot_pose == NULL)
-        return;
+  if(robot_pose == NULL)
+    return;
     
-    int length = msg->ranges.size();
-    //printf(" here \n\n\n\n %d \n\n\n\n", length);
+  int length = msg->ranges.size();
+  //printf(" here \n\n\n\n %d \n\n\n\n", length);
     
-    float inc = msg->angle_increment;
+  float inc = msg->angle_increment;
     
-    // first pass, see how many values are actually in range
-    float range_min = msg->range_min;
-    float range_max = msg->range_max;
-    int num_valid = 0;
+  // first pass, see how many values are actually in range
+  float range_min = msg->range_min;
+  float range_max = msg->range_max;
+  int num_valid = 0;
+  for(int i = 0; i < length; i++)
+  {
+    #ifdef FORCED_MAX_RANGE
+      if(msg->ranges[i] >= range_min || msg->ranges[i] == 0) // zero means no reading, which could happen in a large open area
+        num_valid++;      
+    #else
+      if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
+        num_valid++;
+    #endif
+  }
+    
+  if(num_valid <= 0)
+    return;
+   
+  // second pass, populate outgoing message with scan data transformed into the map coordinate system
+  hokuyo_listener_cu::PointCloudWithOrigin outgoing_msg;
+  
+  float alpha = -120/180*PI;
+  if(using_tf)
+  {
+    outgoing_msg.cloud.points.resize(num_valid+1);    // +1 is for a hack to get an easy origin transform (reset to num_valid afterward)
+    outgoing_msg.cloud.header.frame_id = "/map_cu";    
+      
+    sensor_msgs::PointCloud temp_message;
+    temp_message.points.resize(num_valid+1);
+    temp_message.header.frame_id = "/scanner_cu";  
+            
+    int j = 0;
     for(int i = 0; i < length; i++)
     {
-      #ifdef FORCED_MAX_RANGE
-        if(msg->ranges[i] >= range_min || msg->ranges[i] == 0) // zero means no reading, which could happen in a large open area
-          num_valid++;      
+      #ifdef FORCED_MAX_RANGE  
+        if(msg->ranges[i] >= range_min || msg->ranges[i] == 0)
+        {
+          // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame  
+          if(msg->ranges[i] <= range_max && msg->ranges[i] != 0)
+          {
+            temp_message.points[j].x = msg->ranges[i]*sin(alpha);
+            temp_message.points[j].y = msg->ranges[i]*cos(alpha);
+            temp_message.points[j].z = 0;
+          }
+          else
+          {
+            temp_message.points[j].x = range_max*sin(alpha);
+            temp_message.points[j].y = range_max*cos(alpha);
+            temp_message.points[j].z = 0;    
+          }
+          j++;
+        }
       #else
         if(msg->ranges[i] >= range_min && msg->ranges[i] <= range_max)
-          num_valid++;
+        {
+          // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame
+          temp_message.points[j].x = msg->ranges[i]*sin(alpha);
+          temp_message.points[j].y = msg->ranges[i]*cos(alpha);
+          temp_message.points[j].z = 0;
+          j++;
+        }            
       #endif
+      alpha += inc;
+    }
+  
+    // save origin
+    temp_message.points[j].x = 0;
+    temp_message.points[j].y = 0;
+    temp_message.points[j].z = 0;
+        
+    // actually do the transfrom int the map frame
+    static tf::TransformListener listener;
+
+    try
+    {
+      listener.transformPointCloud(std::string("/map_cu"), temp_message, outgoing_msg.cloud);
+    }
+    catch (tf::TransformException ex)
+    {
+      ROS_ERROR("%s",ex.what());
+      return;
     }
     
-    // second pass, populate point cloud with valid values
-    point_cloud.resize(num_valid);
-    
-    if(num_valid <= 0)
-      return;
-    
-    float alpha = -120/180*PI;
+    // extract origin
+    outgoing_msg.origin.x = outgoing_msg.cloud.points[num_valid].x;
+    outgoing_msg.origin.y = outgoing_msg.cloud.points[num_valid].y;
+    outgoing_msg.origin.z = outgoing_msg.cloud.points[num_valid].z;
+    outgoing_msg.cloud.points.resize(num_valid);
+  }
+  else // not using tf
+  {
+    outgoing_msg.cloud.points.resize(num_valid);  
+    outgoing_msg.cloud.header.frame_id = "/map_cu";    
+      
     float x,y,z;
-    int j = 0;
+    int j = 0; 
     for(int i = 0; i < length; i++)
     {
       #ifdef FORCED_MAX_RANGE  
@@ -220,9 +309,9 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
           }
         
           // transform 2 from local x, y to global x, y      
-          point_cloud[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
-          point_cloud[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-          point_cloud[j].z = z;
+          outgoing_msg.cloud.points[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+          outgoing_msg.cloud.points[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+          outgoing_msg.cloud.points[j].z = z;
           j++;
         }
       #else
@@ -234,9 +323,9 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
           z = 0;
         
           // transform 2 from local x, y to global x, y      
-          point_cloud[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
-          point_cloud[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-          point_cloud[j].z = z;
+          outgoing_msg.cloud.points[j].x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+          outgoing_msg.cloud.points[j].y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+          outgoing_msg.cloud.points[j].z = z;
           j++;
         }            
       #endif
@@ -245,20 +334,19 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     
     // save origin
     
-    // init pose
-    if(origin == NULL)
-      origin = make_pose(0,0,0);
-    
     // transform 1, from range and degree in laser scanner to x and y in robot local coordinate frame
     x = LASER_SCANNER_X_OFFSET;
     y = LASER_SCANNER_Y_OFFSET;
     z = 0;
         
     // transform 2 from local x, y to global x, y      
-    origin->x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
-    origin->y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-    origin->z = z;
-    
+    outgoing_msg.origin.x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+    outgoing_msg.origin.y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+    outgoing_msg.origin.z = z;    
+  }
+  
+  laser_scan_pub.publish(outgoing_msg);
+  
 }
 
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
@@ -286,34 +374,6 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   robot_pose->alpha = atan2(robot_pose->sin_alpha, robot_pose->cos_alpha);
 }
 
-/*---------------------- ROS Publisher Functions ------------------------*/
-void publish_point_cloud()
-{   
-  int length = point_cloud.size();
-    
-  if(length <= 0)
-      return;
-  
-  hokuyo_listener_cu::PointCloudWithOrigin msg;  
- 
-  msg.cloud.points.resize(length);
-
-  for(int i = 0; i < length; i++)
-  {
-  
-    msg.cloud.points[i].x = point_cloud[i].x;
-    msg.cloud.points[i].y = point_cloud[i].y;
-    msg.cloud.points[i].z = point_cloud[i].z;
-  
-  } 
-  
-  msg.origin.x = origin->x;
-  msg.origin.y = origin->y;
-  msg.origin.z = origin->z;
-  
-  laser_scan_pub.publish(msg);
-}
-
 
 int main(int argc, char** argv)
 {
@@ -323,12 +383,15 @@ int main(int argc, char** argv)
         
   // load globals from parameter server
   double param_input;
+  bool bool_input;
   if(ros::param::get("hokuyo_listener_cu/laser_scanner_x", param_input)) 
     LASER_SCANNER_X_OFFSET = (float)param_input;                             // m in robot coordinate system 
   if(ros::param::get("hokuyo_listener_cu/laser_scanner_y", param_input)) 
     LASER_SCANNER_Y_OFFSET = (float)param_input;                             // m in robot coordinate system 
   if(ros::param::get("hokuyo_listener_cu/laser_scanner_theta", param_input)) 
     LASER_SCANNER_THETA_OFFSET = (float)param_input;                         // rad in laser coordinate syst
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                   // when set to true, use the tf package
   
   // print data about parameters
   printf("Laser Scanner Local Offset (x, y, theta): [%f, %f, %f] \n", LASER_SCANNER_X_OFFSET, LASER_SCANNER_Y_OFFSET, LASER_SCANNER_THETA_OFFSET);
@@ -342,7 +405,8 @@ int main(int argc, char** argv)
     
   while (nh.ok()) 
   {   
-    publish_point_cloud();
+    if(using_tf)
+      broadcast_scanner_tf();  
         
     ros::spinOnce();
     loop_rate.sleep();
@@ -354,6 +418,5 @@ int main(int argc, char** argv)
   laser_scan_pub.shutdown();
     
   destroy_pose(robot_pose);
-  destroy_pose(origin);
 }
 

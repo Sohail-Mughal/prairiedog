@@ -11,6 +11,7 @@
   <depend package="irobot_create"/>
   <depend package="geometry_msgs"/>
   <depend package="nav_msgs"/>
+  <depend package="tf"/>
 
 </package>
 

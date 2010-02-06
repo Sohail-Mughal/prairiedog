@@ -137,8 +137,11 @@ void print_pose(POSE* pose)
 /*------------------------ ROS Callbacks --------------------------------*/
 void reset_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
-  if(msg->header.frame_id != "/map_cu")
-    ROS_INFO("received a message that is not for the map_cu frame");
+  if(strcmp(msg->header.frame_id.c_str(),"/map_cu") != 0)
+  {
+    printf("goal_server recieved a new goal pose with the wrong frame: %s\n", msg->header.frame_id.c_str()); 
+    return;
+  }
    
   if(goal == NULL)
     goal = make_pose(0, 0, 0, 0);

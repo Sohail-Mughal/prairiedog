@@ -64,6 +64,7 @@
     <param name="scanner_range" type="double" value="5.5" />
     <param name="bumper_obstacle_posterior" type="double" value="1.0" />
     <param name="robot_radius" type="double" value="0.2" />
+    <param name="map_file" type="string" value="../lab.bmp" />
   </group>
   <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
 
