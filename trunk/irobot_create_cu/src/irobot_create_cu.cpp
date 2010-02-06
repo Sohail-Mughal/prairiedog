@@ -48,6 +48,7 @@
 
 #include <irobot_create/irobot_create_controller.h>
 #include <ros/ros.h>
+#include <tf/transform_listener.h>
 
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/Pose2D.h"
@@ -70,6 +71,7 @@ float BUMPER_BACKUP_DIST = .015;   //(m) after a bumper hit, the robot backs up 
 float BACKUP_SPEED = -.2;
 float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
 float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
+bool using_tf = false;             // when set to true, use the tf package
 
 // set up Brown's Controller
 IRobotCreateController * controller = (IRobotCreateController*) NULL;
@@ -361,16 +363,51 @@ void publish_bumper(bool left, bool right)
   else
     theta = -BUMPER_THETA_OFFSET;
   
-  // transform 1, from range and degree in robot local to x and y in robot local coordinate frame
-  float y = BUMPER_OFFSET*sin(theta);
-  float x = BUMPER_OFFSET*cos(theta);
   
-  // transform 2 from local x, y to global x, y     
-  geometry_msgs::Pose2D msg;
-  msg.x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
-  msg.y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
-  
-  bumper_pose_pub.publish(msg); 
+  if(using_tf)
+  {   
+    geometry_msgs::PoseStamped msg_temp;  
+    msg_temp.header.frame_id = "/robot_cu";
+    
+    // transform 1, from range and degree in robot local to x and y in robot local coordinate frame
+    msg_temp.pose.position.x = BUMPER_OFFSET*cos(theta);
+    msg_temp.pose.position.y = BUMPER_OFFSET*sin(theta);
+    msg_temp.pose.position.z = 0;
+    msg_temp.pose.orientation.w = 1; 
+    msg_temp.pose.orientation.x = 0;
+    msg_temp.pose.orientation.y = 0;
+    msg_temp.pose.orientation.z = 1;
+    
+    // transform 2, from local robot frame to /map_cu
+    geometry_msgs::PoseStamped msg;  
+    msg.header.frame_id = "/map_cu";
+    
+    static tf::TransformListener listener;
+
+    try
+    {
+      listener.transformPose(std::string("/map_cu"), msg_temp, msg);   
+    }
+    catch (tf::TransformException ex)
+    {
+      ROS_ERROR("irobot_create: %s",ex.what());
+      return;
+    }
+    
+    bumper_pose_pub.publish(msg); 
+  }   
+  else
+  {
+    // transform 1, from range and degree in robot local to x and y in robot local coordinate frame
+    float y = BUMPER_OFFSET*sin(theta);
+    float x = BUMPER_OFFSET*cos(theta);
+      
+    // transform 2 from local x, y to global x, y
+    geometry_msgs::Pose2D msg;
+    msg.x = x*robot_pose->cos_alpha - y*robot_pose->sin_alpha + robot_pose->x;
+    msg.y = x*robot_pose->sin_alpha + y*robot_pose->cos_alpha + robot_pose->y;
+    bumper_pose_pub.publish(msg); 
+  } 
 }
 
 void publish_system_state(int state)
@@ -644,6 +681,7 @@ int main(int argc, char * argv[])
    
   // load globals from parameter server
   double param_input;
+  bool bool_input;
   if(ros::param::get("irobot_create_cu/bumper_backup_distance", param_input)) 
     BUMPER_BACKUP_DIST = (float)param_input;                                   //(m) after a bumper hit, the robot backs up this much before going again
   if(ros::param::get("irobot_create_cu/backup_speed", param_input)) 
@@ -652,13 +690,18 @@ int main(int argc, char * argv[])
     BUMPER_THETA_OFFSET = (float)param_input;                                  // rad in robot coordinate system
   if(ros::param::get("irobot_create_cu/bumper_distance", param_input)) 
     BUMPER_OFFSET = (float)param_input;                                        // (m) distance in robot coordinate system
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                     // when set to true, use the tf package
   
   // print data about parameters
   printf("backup distance: %f, backup_speed: %f, bumper location (distance, theta): [%f %f]\n", BUMPER_BACKUP_DIST, BACKUP_SPEED, BUMPER_OFFSET, BUMPER_THETA_OFFSET);
   
   // set up publishers
   odometer_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/odometer_pose_cu", 1);
-  bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
+  if(using_tf)
+    bumper_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/bumper_pose_cu", 10);
+  else
+    bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
   system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 10);
      
   // set up subscribers

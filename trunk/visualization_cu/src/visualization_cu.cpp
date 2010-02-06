@@ -32,6 +32,7 @@
 #include </usr/include/GL/gl.h>	        // OpenGL
 
 #include <ros/ros.h>
+#include <tf/transform_listener.h>
 
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -1383,7 +1384,7 @@ void display()
      if(laser_scan_data != NULL)
      {
        #ifdef SCANNER_RANGE
-         draw_point_list_grids_binary(laser_scan_data, GREEN, RED, laser_hit_display_rad, -.95);
+         draw_point_list_grids_binary(laser_scan_data, LIGHTBLUE, RED, laser_hit_display_rad, -.95);
        #else
          draw_point_list_grids(laser_scan_data, RED, laser_hit_display_rad, -.95);
        #endif
@@ -1857,7 +1858,40 @@ void mouse(int button, int mouse_state, int x, int y)
       msg.pose.orientation.y = 0;
       msg.pose.orientation.z = r/2; 
       
-      new_pose_pub.publish(msg);    
+      // normalize
+      //float magnitude = sqrt(msg.pose.orientation.w*msg.pose.orientation.w + msg.pose.orientation.x*msg.pose.orientation.x + msg.pose.orientation.y*msg.pose.orientation.y + msg.pose.orientation.z*msg.pose.orientation.z);
+      float magnitude = sqrt(msg.pose.orientation.w*msg.pose.orientation.w + msg.pose.orientation.z*msg.pose.orientation.z);
+      if(msg.pose.orientation.w < 0)
+        magnitude *= -1; 
+      msg.pose.orientation.w /= magnitude;
+      //msg.pose.orientation.x /= magnitude;
+      //msg.pose.orientation.y /= magnitude;
+      msg.pose.orientation.z /= magnitude;
+      
+      if(using_tf)
+      {
+        // if using tf then we want to send in the world_cu frame
+        geometry_msgs::PoseStamped msg_world;
+        msg_world.header.frame_id = "/world_cu";  
+        
+        static tf::TransformListener listener;
+
+        bool no_problems_with_transform = true;
+        try
+        {
+          listener.transformPose(std::string("/world_cu"), msg, msg_world);   
+        }
+        catch (tf::TransformException ex)
+        {
+          ROS_ERROR("irobot_create: %s",ex.what());
+          no_problems_with_transform = false;
+        }
+        
+        if(no_problems_with_transform) 
+          new_pose_pub.publish(msg_world);  
+      }
+      else // publish the raw data
+        new_pose_pub.publish(msg);    
       
       display_state = MOVE;
       

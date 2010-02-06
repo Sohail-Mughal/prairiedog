@@ -70,6 +70,7 @@ bool using_tf = false;             // when set to true, use the tf package
 float global_map_x_offset = 0;     // the map is this far off of the world coordinate system in the x direction
 float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
 float global_map_theta_offset = 0; // the map is this far off of the world coordinate system in the rotationally
+std::string map_file = std::string("../blank.bmp"); // the map file
 
 // global ROS subscriber handles
 ros::Subscriber laser_scan_sub;
@@ -710,7 +711,7 @@ MAP* load_blank_map(int map_height, int map_width, float map_resolution, float c
 }
 
 // populates the map with costs determined by the bitmap in filename that are larger than thresh
-void populateMapFromBitmap(MAP* Map, char* filename, float thresh)
+void populateMapFromBitmap(MAP* Map, const char* filename, float thresh)
 {
   Bitmap* B = load_Bitmap_from_file(filename);
   Image* I = convert_Bitmap_to_double_array(B);
@@ -750,6 +751,11 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
   if(length <= 0)
     return;
  
+  if(strcmp(msg->cloud.header.frame_id.c_str(),"/map_cu") != 0)
+  {
+    printf("mapper recieved a point cloud with the wrong frame: %s\n", msg->cloud.header.frame_id.c_str());
+    return;
+  }
   
   float x_scl = 1/laser_map->resolution;
   float y_scl = 1/laser_map->resolution;
@@ -1039,7 +1045,13 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
   if(laser_map == NULL)
     return;
-      
+   
+  if(strcmp(msg->header.frame_id.c_str(),"/map_cu") != 0)
+  {
+    printf("mapper recieved a robot pose with the wrong frame: %s\n", msg->header.frame_id.c_str()); 
+    return;
+  }
+  
   // mark grids within the radius of the robot as safe 
   float resolution = laser_map->resolution;
   float pose_x = msg->pose.position.x/resolution;
@@ -1166,7 +1178,7 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   laser_map_changes.resize(next_change);
 }
 
-void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
+void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg) // this is for when tf is NOT being used
 { 
   if(bumper_map == NULL)
     return;
@@ -1178,6 +1190,43 @@ void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   float x = (int)(x_scl*msg->x + 1); // same + 1 annoying bug as in laser scan callback
   float y = (int)(y_scl*msg->y + 1); // same + 1 annoying bug as in laser scan callback
           
+  int list_ind = bumper_map_changes.size(); 
+  bumper_map_changes.resize(list_ind+1);
+  
+  if(x >= 0 && x < laser_map->width && y >= 0 && y < laser_map->height)
+  {
+    bumper_map->cost[(int)y][(int)x] = BUMPER_COST;
+    
+    bumper_map_changes[list_ind].x = (float)x;
+    bumper_map_changes[list_ind].y = (float)y;
+    bumper_map_changes[list_ind].z = BUMPER_COST;
+    
+    #if defined(SIMPLEMAP) || defined(PROBMAP)
+      bumper_map->in_list[(int)y][(int)x] = list_ind;
+    #endif
+  }
+}
+
+void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& msg) // this is for when tf IS being used
+{ 
+  if(bumper_map == NULL)
+    return;
+  
+  if(strcmp(msg->header.frame_id.c_str(),"/map_cu") != 0)
+  {
+    printf("mapper recieved a bumper pose with the wrong frame: %s\n", msg->header.frame_id.c_str()); 
+    return;
+  }
+ 
+  float x_scl = 1/laser_map->resolution;
+  float y_scl = 1/laser_map->resolution;
+  
+  // transform bumper points to map coords and remember them
+  float x = (int)(x_scl*msg->pose.position.x + 1); // same + 1 annoying bug as in laser scan callback
+  float y = (int)(y_scl*msg->pose.position.y + 1); // same + 1 annoying bug as in laser scan callback
+     
+  //printf("recieved a bumper, puting it at position %f %f\n", x, y);
+  
   int list_ind = bumper_map_changes.size(); 
   bumper_map_changes.resize(list_ind+1);
   
@@ -1292,6 +1341,7 @@ int main(int argc, char** argv)
   double param_input;
   int int_input;
   bool bool_input;
+  std::string string_input;
   if(ros::param::get("mapper_cu/map_y_size", param_input)) 
     map_y_max = (float)param_input;                                        // (m), map goes from 0 to this in the y direction
   if(ros::param::get("mapper_cu/map_x_size", param_input)) 
@@ -1316,6 +1366,8 @@ int main(int argc, char** argv)
     global_map_y_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the y direction
   if(ros::param::get("mapper_cu/global_map_theta_offset", param_input))
     global_map_theta_offset = (float)param_input;                          // the map is this far off of the world coordinate system in the rotationally
+  if(ros::param::get("mapper_cu/map_file", string_input))                       
+    map_file = string_input;                                               // the map file
   
   HEIGHT = map_y_max/RESOLUTION + 1; //the height of the map in grids
   WIDTH = map_x_max/RESOLUTION + 1;  // the width of the map in grids
@@ -1329,19 +1381,22 @@ int main(int argc, char** argv)
   printf("map offset (x, y, theta): [%f %f %f]\n", global_map_x_offset, global_map_y_offset, global_map_theta_offset);
   printf("map size: [%f %f], resolution:%f, obs_prior:%f, memory_time:%d \n", map_y_max, map_x_max, RESOLUTION, OBS_PRIOR, MAP_MEMORY); 
   printf("bumper cost:%f, scanner range:%f, robot radius:%f \n", BUMPER_COST, SCANNER_RANGE, robot_radius);
-  
+  printf("loading map from: %s \n", map_file.c_str());
     
   destroy_map(laser_map);
   destroy_map(bumper_map);
   laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
   bumper_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, 0);
     
-  populateMapFromBitmap(bumper_map, "../map.bmp", OBS_PRIOR);
+  populateMapFromBitmap(bumper_map, map_file.c_str(), OBS_PRIOR);
     
   // set up subscribers
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
-  bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
+  if(using_tf)
+    bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback_using_tf);  
+  else
+    bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
     
   // set up publishers
   map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
@@ -1351,10 +1406,10 @@ int main(int argc, char** argv)
 
   while (ros::ok()) 
   {
-    publish_map_changes();
-       
     if(using_tf)
-      broadcast_robot_tf();
+      broadcast_robot_tf();  
+      
+    publish_map_changes();
     
     ros::spinOnce();
     loop_rate.sleep();
