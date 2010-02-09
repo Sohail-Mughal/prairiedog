@@ -71,7 +71,7 @@ float BUMPER_BACKUP_DIST = .015;   //(m) after a bumper hit, the robot backs up 
 float BACKUP_SPEED = -.2;
 float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
 float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
-bool using_tf = false;             // when set to true, use the tf package
+bool using_tf = true;              // when set to true, use the tf package
 
 // set up Brown's Controller
 IRobotCreateController * controller = (IRobotCreateController*) NULL;
