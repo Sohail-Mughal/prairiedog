@@ -55,7 +55,7 @@ typedef struct POSE POSE;
 // globals that can be reset using parameter server, see main();
 float MOVEMULT = 2;                  // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
 bool USING_GPS = true;               // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
-bool using_tf = false;               // when set to true, use the tf package
+bool using_tf = true;                // when set to true, use the tf package
 float odometer_pose_x_init = 0;      // odometer_pose is the pose returned by the robot
 float odometer_pose_y_init = 0;
 float odometer_pose_z_init = 0;      // note z coord is basically unused 

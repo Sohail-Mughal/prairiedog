@@ -65,7 +65,7 @@ typedef struct POINT POINT;
 float LASER_SCANNER_X_OFFSET = 0.15;     // m in robot coordinate system 
 float LASER_SCANNER_Y_OFFSET = 0.0;      // m in robot coordinate system 
 float LASER_SCANNER_THETA_OFFSET = PI/6; // rad in laser coordinate system
-bool using_tf = false;                   // when set to true, use the tf package
+bool using_tf = true;                    // when set to true, use the tf package
 
 // global ROS subscriber handles
 ros::Subscriber scan_sub;

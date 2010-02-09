@@ -77,7 +77,7 @@ struct ROBOT;
 typedef struct ROBOT ROBOT;
 
 // globals that can be reset using parameter server, see main();
-bool using_tf = false;             // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
+bool using_tf = true;              // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
 float global_map_x_offset = 0;     // the map is this far off of the world coordinate system in the x direction
 float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
 float global_map_theta_offset = 0; // the map is this far off of the world coordinate system in the rotationally
