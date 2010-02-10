@@ -69,7 +69,7 @@ float robot_radius = .2;           // (m) grids within this distance of the robo
 bool using_tf = true;              // when set to true, use the tf package
 float global_map_x_offset = 0;     // the map is this far off of the world coordinate system in the x direction
 float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
-float global_map_theta_offset = 0; // the map is this far off of the world coordinate system in the rotationally
+float global_map_theta_offset = 0; // the map is this far off of the world coordinate system rotationally
 std::string map_file = std::string("../blank.bmp"); // the map file
 
 // global ROS subscriber handles

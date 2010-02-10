@@ -35,12 +35,12 @@ $ mapper_cu
 - \b "mapper_cu/map_resolution": [double] (m), each map grid spans this much real-world distance [default: 0.08].
 - \b "mapper_cu/obstacle_prior": [double] the prior_probability of an obstacle in the laser map [default: ].
 - \b "mapper_cu/map_attention_span": [int] the last (this) readings of a particular grid are used to calculate probability of obstacle there [default: 100].
-- \b "mapper_cu/scanner_range": [double] (m) the range of the laser scanner (used to identify safe grids within range and also prune bad data) [default: ].
+- \b "mapper_cu/scanner_range": [double] (m) the range of the laser scanner (used to identify safe grids within range and also prune bad data) [default: 5.5].
 - \b "mapper_cu/bumper_obstacle_posterior": [double] the probability of obstacle associated with a bumper hit [default: 1.0].
 - \b "mapper_cu/robot_radius": [double] (m) grids within this distance of the robot origin are lables as safe [default: .2].
-- \b "mapper_cu/global_map_x_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the x direction [default: ].
-- \b "mapper_cu/global_map_y_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the y direction [default: ].
-- \b "mapper_cu/global_map_theta_offset": [double] (rad) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) rotationally [default: ].
+- \b "mapper_cu/global_map_x_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the x direction [default: 0].
+- \b "mapper_cu/global_map_y_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the y direction [default: 0].
+- \b "mapper_cu/global_map_theta_offset": [double] (rad) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) rotationally [default: 0].
 - \b "mapper_cu/map_file": [string] a bitmap in this file is loaded into the bumper map [default: "../blank.bmp"].
 - \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
 
