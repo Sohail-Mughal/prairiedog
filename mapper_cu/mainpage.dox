@@ -1,4 +1,5 @@
 /**
+*/
 \mainpage
 \htmlinclude manifest.html
 
@@ -13,7 +14,9 @@ List of nodes:
 
 \subsection mapper_cu
 
-mapper_cu subscribe to sensor data, and accumulates this in a map. It provides a map service and publishes map updates.
+mapper_cu subscribes to sensor data from the hokuyo_listener_cu and irobot_create_cu nodes, and accumulates it in a map. It provides a map service and publishes map updates. The former sends the entire map to a requesting node, while the latter publishes recent updates to a topic. The map service and map update messages are sent in the map coordinate system scaled by the map resolution. Therefore, they are technically NOT in the /map_cu frame. This is done to facilitate speedy map updates between mapper_cu and base_planner_cu, who use similar internal map representations.
+
+Two probabilistic occupancy grid maps are used (one each for laser and bumper data) and then merged before being sent to the rest of the system. The maximum probability of obstacle from either map is used during the merge. The laser map uses a predefined number of reading about a particular grid to calculated its obstacle probability. The bumper map associates a predefined obstacle probability with a bumper hit, and also resets a grid's obstacle probability to 0 whenever the robot occupies it.
 
 \subsubsection Usage
 \verbatim
@@ -27,19 +30,43 @@ $ mapper_cu
 \endverbatim
 
 
-\subsubsection topics ROS topics
+\subsubsection ROS parameters (modified via ROS parameter server): 
+- \b "mapper_cu/map_x_size": [double] (m), map goes from 0 to this distance in the x direction [default: 20].
+- \b "mapper_cu/map_y_size": [double] (m), map goes from 0 to this distance in the y direction [default: 20].
+- \b "mapper_cu/map_resolution": [double] (m), each map grid spans this much real-world distance [default: 0.08].
+- \b "mapper_cu/obstacle_prior": [double] the prior_probability of an obstacle in the laser map [default: ].
+- \b "mapper_cu/map_attention_span": [int] the last (this) readings of a particular grid are used to calculate probability of obstacle there [default: 100].
+- \b "mapper_cu/scanner_range": [double] (m) the range of the laser scanner (used to identify safe grids within range and also prune bad data) [default: ].
+- \b "mapper_cu/bumper_obstacle_posterior": [double] the probability of obstacle associated with a bumper hit [default: 1.0].
+- \b "mapper_cu/robot_radius": [double] (m) grids within this distance of the robot origin are lables as safe [default: .2].
+- \b "mapper_cu/global_map_x_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the x direction [default: ].
+- \b "mapper_cu/global_map_y_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the y direction [default: ].
+- \b "mapper_cu/global_map_theta_offset": [double] (rad) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) rotationally [default: ].
+- \b "mapper_cu/map_file": [string] a bitmap in this file is loaded into the bumper map [default: "../blank.bmp"].
+- \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
 
-Subscribes to:
-- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the global coordinate system.
-- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's current pose in global coordinates.
-- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] The position of a bumper hit.
+
+\subsubsection ROS topics
 
 Publishes to:
-- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates scaled to resolution) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
 
+Subscribes to:
+- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the map coordiante system (/map_cu in tf).
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] or [geometry_msgs::PoseStamped] (not using tf or using tf, respectively) The position of a bumper hit in map coordinates (/map_cu in tf).
 
-\subsubsection services ROS services
-- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map 
+\subsubsection ROS services
 
+Provides:
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map in map coordinates scaled by resolution.
+
+Requires (i.e. waits for on boot):
+- \b "/cu/get_pose_cu" so that listener knows localization_cu is up and running before using data provided by it.
+
+\subsubsection tf
+
+Broadcasts:
+- \b transform between "/world_cu" and "/map_cu".
 
 */

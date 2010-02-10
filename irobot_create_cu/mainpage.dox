@@ -2,18 +2,70 @@
 \mainpage
 \htmlinclude manifest.html
 
-\b irobot_create_cu two nodes that interact with Brown's irobot create package, extracting pose and publishing it and providing drive commands
+\b irobot_create_cu two nodes that interact with a modified version of Brown's irobot create package, extracting pose and publishing it and providing drive commands
 
 \section rosapi ROS API
 
-
 List of nodes:
-- \b demo
 - \b robot_create_cu
+- \b demo
+
+<hr>
+
+\subsection irobot_create_cu
+
+irobot_create_cu provides a high level interface between all other nodes and the irobot create robot. It also keeps track of the system state (i.e. user is in control, vs. autonomous mode, etc.) and published data about the state to the rest of the system. In autonomous mode, irobot_create_cu controls the robot to follow paths sent to it in the /map_cu coordinate frame. If the user is controlling the robot via the visualization_cu node (or the /cu/user_control_cu topic), then it sends appropriate drive commands to the robot. If there is a bumper hit, then irobot_create_cu is in-charge of reacting and sending bumper data to the rest of the system.
+
+In order to send and receive low-level commands to/from the robot, irobot create_cu interacts with the irobot_create node. irobot_create is a modified version of Brown's iRobot Create package. We initially had users obtain irobot_create by installing version 104 of the Brown ROS package, but depreciated functionality has made it incompatible with ROS V1.0, and Brown has depreciated their old irobot_create in-favor of a newer and significantly different node. Therefore, we have modified version 104 of Brown's irobot_create to make it compatible with ROS V1.0, and explicitly included the modified version of irobot_create as a node in prairiedog. Brown's code (original un-modified version and also the new version) is at http://code.google.com/p/brown-ros-pkg/
+
+\subsubsection Usage
+\verbatim
+$ robot_create_cu
+\end verbatim
+
+\par Example
+
+\verbatim
+$ robot_create_cu
+\end verbatim
+
+\subsubsection ROS parameters (modified via ROS parameter server):
+- \b "irobot_create_cu/bumper_backup_distance": [double] (m) after a bumper hit, the robot backs-up this distance before moving again [default: .015].
+- \b "irobot_create_cu/backup_speed": [double] (m/s) after a bumper hit the robot backs-up at this speed [default: -.2].
+- \b "irobot_create_cu/bumper_theta_offset": [double] (rad) left or right  bumper hits are represented as being this many radians away from local x axis [default: PI/6].
+- \b "irobot_create_cu/bumper_distance": [double] (m) bumper hits are represented as being this far away from the center of the robot [default: .35].
+- \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true]. 
+
+\subsubsection ROS topics
+
+Publishes to:
+- \b "/cu/odometer_pose_cu": [geometry_msgs::Pose2D] 2D pose created using only the wheel odometers in the local coordinate system used by the irobot create itself.
+- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] or [geometry_msgs::PoseStamped] (not using tf or using tf, respectively) The position of a bumper hit in map coordinates (/map_cu in tf).
+- \b "/cu/system_state_cu": [std_msgs::Int32] a flag indicating what state irobot_create_cu is in: 0 = initial state (havn't recieved enough info to start moving), 1 = planning and moving normally, 2 = bumper hit, backing up, 3 = no path to goal exists, 4 = manual stop, 5 = manual control.
+
+Subscribes to:
+- \b "/cu/user_control_cu": [geometry_msgs::Pose2D] this is a simple control message for the robot base, x is forward speed and theta is turn in robot coordinates (/robot_cu in tf).
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in map coordinates (/map_cu in tf).
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
+- \b "/cu/system_update_cu": [std_msgs::Int32] a flag containing information from the base_planner_cu node: 1 = no path to goal exists.
+- \b "/cu/user_state_cu": [std_msgs::Int32] a flag indicating what the user is doing via the visualization_cu node: 0 = passive, doing nothing, 1 = manual stop, 2 = manual control.
+
+\subsubsection ROS services
+
+Requires (i.e. waits for on boot):
+- \b "/cu/get_map_cu" so that irobot_create_cu knows mapper_cu is up and running before attempting interaction with it
+
+\subsubsection tf
+
+Requires:
+- \b transform between "/robot_cu" and "/map_cu"
 
 <hr>
 
 \subsection demo
+
+Note: demo is no longer actively maintained.
 
 demo interacts with Brown's robot create package, extracting pose and display into output and providing drive commands from the keyboard: 
 a: speed up, 
@@ -33,34 +85,6 @@ $ demo
 $ demo
 \end verbatim
 
-<hr>
 
-\subsection robot_create_cu
-
-robot_create_cu interacts with Brown's robot create package, extracting pose and publishing it and providing drive commands based on a path that it receives from an incoming topic.
-
-\subsubsection Usage
-\verbatim
-$ robot_create_cu
-\end verbatim
-
-\par Example
-
-\verbatim
-$ robot_create_cu
-\end verbatim
-
-
-\subsubsection topics ROS topics
-
-Subscribes to:
-- \b "/cu/user_control_cu": geometry_msgs::Pose2D this is simple control message for the robot base, y is forward speed and theta is turn (x is currently unused)
-- \b"/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is given all pose data.
-- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in world coordinates.
-- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in world coordinates
-
-Publishes to:
-- \b "/cu/odometer_pose_cu": [geometry_msgs::Pose2D] 2D pose created using only the wheel odometers.
-- \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] The position of a bumper hit.
 
 */

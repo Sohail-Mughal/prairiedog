@@ -1315,10 +1315,10 @@ void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
 }
 
 /*----------------------- ROS Publisher Functions -----------------------*/
-void publish_user_control(int y, int theta)
+void publish_user_control(int x, int theta)
 {
   geometry_msgs::Pose2D msg;
-  msg.y = y;
+  msg.x = x;
   msg.theta = change_turn;
   user_control_pub.publish(msg); 
 }

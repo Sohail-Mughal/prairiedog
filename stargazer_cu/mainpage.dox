@@ -32,10 +32,10 @@ $ stargazer_cu -f ../pseudolites.xml
 \endverbatim
 
 
-\subsubsection topics ROS topics
+\subsubsection ROS topics
 
 Publishes to:
-- \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system.
+- \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system in world coordinates (/world_cu in tf).
 
 
 */
