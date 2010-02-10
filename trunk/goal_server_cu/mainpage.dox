@@ -2,7 +2,7 @@
 \mainpage
 \htmlinclude manifest.html
 
-\b localization_cu Keeps track of the current goal and makes this available to the system.
+\b goal_server_cu Keeps track of the current goal and makes this available to the system.
 
 \section rosapi ROS API
 
@@ -28,16 +28,22 @@ $ goal_server_cu
 \endverbatim
 
 
-\subsubsection topics ROS topics
+\subsubsection ROS parameters (modified via ROS parameter server): 
+- \b "goal_server_cu/goal_pose_x_init": [double] (m) initial x value for the goal pose (in /map_cu frame) [default: 0]. 
+- \b "goal_server_cu/goal_pose_y_init": [double] (m) initial y value for the goal pose (in /map_cu frame) [default: 0]. 
+- \b "goal_server_cu/goal_pose_theta_init": [double] (rad) initial theta value for the odometer pose (in /map_cu frame) [default: 0]. 
 
-Subscribes to:
-- \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] a new robot goal in world coordinates.
+\subsubsection ROS topics
 
 Publishes to:
-- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] the robot's goal in world coordinates.
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
 
-\subsubsection services ROS services
-- \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] provides the current goal in world coordinates.
+Subscribes to:
+- \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] a new robot goal in map coordinates (/map_cu in tf).
 
+\subsubsection ROS services
+
+Provides:
+- \b "/cu/get_goal_cu": [localization_cu::GetPose::Response] pose of the goal in map coordinates (/map_cu in tf).
 
 */

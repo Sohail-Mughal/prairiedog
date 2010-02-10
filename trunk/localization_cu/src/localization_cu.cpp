@@ -529,9 +529,9 @@ int main(int argc, char** argv)
   if(ros::param::get("localization_cu/max_pose_jump_ratio", param_input)) 
     MOVEMULT = (float)param_input;                                          // if pose jumps globally more than this mult by the local movement, global pose is dropped (used to prune error gps data), this can be reset with the paramiter server see main()
   if(ros::param::get("localization_cu/using_gps", bool_input)) 
-    USING_GPS = bool_input;                                                // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
+    USING_GPS = bool_input;                                                 // true if there is gps data available (causes node to wait until GPS is received to broadcast position, gps data includes user defined pose i.e. from visualization node)
   if(ros::param::get("prairiedog/using_tf", bool_input)) 
-    using_tf = bool_input;                                                 // when set to true, use the tf package
+    using_tf = bool_input;                                                  // when set to true, use the tf package
   if(ros::param::get("localization_cu/odometer_pose_x_init", param_input)) 
     odometer_pose_x_init = (float)param_input;                              // odometer_pose is the pose returned by the robot
   if(ros::param::get("localization_cu/odometer_pose_y_init", param_input)) 

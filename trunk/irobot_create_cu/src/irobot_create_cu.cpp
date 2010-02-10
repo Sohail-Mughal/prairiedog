@@ -220,7 +220,7 @@ void print_pose(POSE* pose)
 /*------------------------ ROS Callbacks --------------------------------*/
 void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 {
-  if(msg->y == 0 && msg->theta == 0) // two zeros means stop the robot, error on the side of caution
+  if(msg->x == 0 && msg->theta == 0) // two zeros means stop the robot, error on the side of caution
   {
     setSpeed(0);
     setTurn(0);   
@@ -230,13 +230,13 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   }
   else if(system_state == 5) // in the user control state
   {
-  	if(msg->y > 0)
+  	if(msg->x > 0)
     {
         speed += use_input_speed_increment;
         if(speed > max_speed)
             speed = max_speed;
     }
-    else if(msg->y < 0)
+    else if(msg->x < 0)
     {
         speed -= use_input_speed_increment;
         if(speed < -max_speed)
