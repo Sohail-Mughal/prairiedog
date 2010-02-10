@@ -67,11 +67,11 @@ struct UPDATE;
 typedef struct UPDATE UPDATE;
 
 // globals for transform, these can be reset via the parameter server, see main()
-float OBSTACLE_COST = 10000;         // the cost of an obstacle
-float robot_radius = .2;             // (m), distance that must be maintained between robot and obstacles
-float safety_distance = .1;          // (m)
+float OBSTACLE_COST = 10000;         // the cost of an obstacle (of probability 1) note: this should be greater than the max path length
+float robot_radius = .2;             // (m), radius of the robot
+float safety_distance = .1;          // (m),  distance that must be maintained between robot and obstacles
 float old_path_discount = .95;       // if (current path length)*old_path_discount < (old path length) < (current path length)/old_path_discount, then stick with the old path
-float MAX_POSE_JUMP = 15;            // (map grids) after which it is easer to replan from scratch
+float MAX_POSE_JUMP = 25;            // (map grids) after which it is easer to replan from scratch
 bool high_cost_safety_region = true; // true: dilate obstacles by an extra extra_dilation but instad of lethal, multiply existing cost by extra_dilation_mult
 float extra_dilation = .2;           // (m)
 
