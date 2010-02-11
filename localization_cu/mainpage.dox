@@ -27,7 +27,10 @@ $ localization_cu
 $ localization_cu
 \endverbatim
 
-\subsubsection ROS parameters (modified via ROS parameter server): 
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
 - \b "localization_cu/using_gps": [bool] when true, causes localization_cu to wait for gps data before publishing pose [default: true]. 
 - \b "localization_cu/max_pose_jump_ratio": [double] (m) if pose jumps more than (this) * (local movement), global pose is dropped (used to prune erroneous gps data) [default: 2]. 
 - \b "localization_cu/odometer_pose_x_init": [double] (m) initial x value for the odometer pose (in the internal frame used by the irobot create robot) [default: 0]. 
@@ -38,7 +41,7 @@ $ localization_cu
 - \b "localization_cu/posterior_pose_theta_init": [double] (rad) initial theta value for the robot pose in the world coordinate frame (/world_cu) [default: 0]. 
 - \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
 
-\subsubsection ROS topics
+\subsubsection topics ROS topics
 
 Publishes to:
 - \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
@@ -48,12 +51,12 @@ Subscribes to:
 - \b "/cu/user_pose_cu": [geometry_msgs::PoseStamped] a user defined pose, used to manually define the robots starting position with a GUI in map coordinates (/map_cu in tf).
 - \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system in world coordinates (/world_cu in tf).
 
-\subsubsection ROS services
+\subsubsection services ROS services
 
 Provides:
 - \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
 
-\subsubsection tf
+\subsubsection tfinteraction tf interaction
 
 Broadcasts:
 - \b transform between "/world_cu" and "/robot_cu".

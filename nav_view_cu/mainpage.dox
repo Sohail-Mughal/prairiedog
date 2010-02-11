@@ -7,23 +7,23 @@
 \section rosapi ROS API
 
 List of nodes:
-- \b van_view_cu
+- \b nav_view_cu
 
 <hr>
 
-\subsection van_view_cu
+\subsection nav_view_cu
 
-van_view_cu subscribes and publishes to the same topics as van_view, these are associated with 2d rover navigation
+nav_view_cu subscribes and publishes to the same topics as van_view, these are associated with 2d rover navigation
 
 \subsubsection Usage
 \verbatim
-$ van_view_cu
+$ nav_view_cu
 \endverbatim
 
 \par Example
 
 \verbatim
-$ van_view_cu
+$ nav_view_cu
 \endverbatim
 
 

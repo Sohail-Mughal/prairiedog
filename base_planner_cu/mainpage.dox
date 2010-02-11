@@ -27,7 +27,10 @@ $ base_planner_cu
 $ base_planner_cu
 \endverbatim
 
-\subsubsection ROS parameters (modified via ROS parameter server): 
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
 - \b "base_planner_cu/obstacle_cost": [double] the cost of an obstacle (of probability 1) note: this should be greater than the max path length [default: 10000]. 
 - \b "base_planner_cu/robot_radius": [double] (m) the radius of the robot [default: 0.2]. 
 - \b "base_planner_cu/safety_distance": [double] (m) extra clearance required between robot and obstacles, (this) + robot_radius = dilation radius [default: 0.1]. 
@@ -36,7 +39,7 @@ $ base_planner_cu
 - \b "base_planner_cu/using_extra_safety_distance": [bool] when true, use a linear filter to increase cost within extra_safety_distance of obstacles [default: true]. 
 - \b "base_planner_cu/extra_safety_distance": [double] (m) if using_extra_safety_distance = true, then if cost at grid G_1 is C_1 (after map dilation), and another grid G_2 exists within extra_safety_distance of G_1, then cost C_2 at G_2 is increased to C_1*|G_1 - G_2|/extra_safety_distance. [default: 0.2]. 
 
-\subsubsection ROS topics
+\subsubsection topics ROS topics
 
 Publishes to:
 - \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in map coordinates (/map_cu in tf).
@@ -46,7 +49,7 @@ Subscribes to:
 - \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
 - \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates scaled to resolution) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
 
-\subsubsection ROS services
+\subsubsection services ROS services
 
 Requires (i.e. waits for on boot):
 - \b "/cu/get_map_cu" so that hokuyo_listener_cu knows mapper_cu is up and running before attempting interaction with it.
