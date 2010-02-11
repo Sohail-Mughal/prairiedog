@@ -28,12 +28,15 @@ $ goal_server_cu
 \endverbatim
 
 
-\subsubsection ROS parameters (modified via ROS parameter server): 
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
 - \b "goal_server_cu/goal_pose_x_init": [double] (m) initial x value for the goal pose (in /map_cu frame) [default: 0]. 
 - \b "goal_server_cu/goal_pose_y_init": [double] (m) initial y value for the goal pose (in /map_cu frame) [default: 0]. 
 - \b "goal_server_cu/goal_pose_theta_init": [double] (rad) initial theta value for the odometer pose (in /map_cu frame) [default: 0]. 
 
-\subsubsection ROS topics
+\subsubsection topics ROS topics
 
 Publishes to:
 - \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
@@ -41,7 +44,7 @@ Publishes to:
 Subscribes to:
 - \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] a new robot goal in map coordinates (/map_cu in tf).
 
-\subsubsection ROS services
+\subsubsection services ROS services
 
 Provides:
 - \b "/cu/get_goal_cu": [localization_cu::GetPose::Response] pose of the goal in map coordinates (/map_cu in tf).

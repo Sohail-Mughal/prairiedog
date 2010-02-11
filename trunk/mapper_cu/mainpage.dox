@@ -29,7 +29,10 @@ $ mapper_cu
 \endverbatim
 
 
-\subsubsection ROS parameters (modified via ROS parameter server): 
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
 - \b "mapper_cu/map_x_size": [double] (m), map goes from 0 to this distance in the x direction [default: 20].
 - \b "mapper_cu/map_y_size": [double] (m), map goes from 0 to this distance in the y direction [default: 20].
 - \b "mapper_cu/map_resolution": [double] (m), each map grid spans this much real-world distance [default: 0.08].
@@ -45,7 +48,7 @@ $ mapper_cu
 - \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
 
 
-\subsubsection ROS topics
+\subsubsection topics ROS topics
 
 Publishes to:
 - \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates scaled to resolution) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
@@ -55,7 +58,7 @@ Subscribes to:
 - \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
 - \b "/cu/bumper_pose_cu": [geometry_msgs::Pose2D] or [geometry_msgs::PoseStamped] (not using tf or using tf, respectively) The position of a bumper hit in map coordinates (/map_cu in tf).
 
-\subsubsection ROS services
+\subsubsection services ROS services
 
 Provides:
 - \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map in map coordinates scaled by resolution.
@@ -63,7 +66,7 @@ Provides:
 Requires (i.e. waits for on boot):
 - \b "/cu/get_pose_cu" so that listener knows localization_cu is up and running before using data provided by it.
 
-\subsubsection tf
+\subsubsection tfinteraction tf interaction
 
 Broadcasts:
 - \b transform between "/world_cu" and "/map_cu".

@@ -16,7 +16,7 @@ see http://correll.cs.colorado.edu/pmwiki/index.php/Main/PositioningSystemBase f
 
 <hr>
 
-\subsection  stargazer_cu
+\subsection stargazer_cu
 
 stargazer_cu reads in an xml file containing psudolite positions and orientations, then interacts with the stargazer sensor to obtain global pose data. It publishes the pose data for other nodes to use.
 
@@ -32,7 +32,7 @@ $ stargazer_cu -f ../pseudolites.xml
 \endverbatim
 
 
-\subsubsection ROS topics
+\subsubsection topics ROS topics
 
 Publishes to:
 - \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system in world coordinates (/world_cu in tf).

@@ -27,7 +27,10 @@ $ visualization_cu
 $ visualization_cu
 \endverbatim
 
-\subsubsection ROS parameters (modified via ROS parameter server): 
+\subsubsection parameters ROS parameters 
+
+Reads the following parameters from the parameter server
+
 - \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
 - \b "mapper_cu/global_map_x_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the x direction [default: 0].
 - \b "mapper_cu/global_map_y_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the y direction [default: 0].
@@ -51,7 +54,7 @@ Subscribes to:
 - \b "/cu/system_state_cu": [std_msgs::Int32] a flag indicating what state irobot_create_cu is in: 0 = initial state (havn't recieved enough info to start moving), 1 = planning and moving normally, 2 = bumper hit, backing up, 3 = no path to goal exists, 4 = manual stop, 5 = manual control.
 - \b "/cu/system_update_cu": [std_msgs::Int32] a flag containing information from the base_planner_cu node: 1 = no path to goal exists.
 
-\subsubsection ROS services
+\subsubsection services ROS services
 
 Requires (i.e. waits for on boot):
 - \b "/cu/get_map_cu" so that hokuyo_listener_cu knows mapper_cu is up and running before attempting interaction with it.
@@ -59,7 +62,7 @@ Requires (i.e. waits for on boot):
 Requests:
 - \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map in map coordinates scaled by resolution.
 
-\subsubsection tf
+\subsubsection tfinteraction tf interaction
 
 Requires:
 - \b transform between "/map_cu" and "/world_cu".
