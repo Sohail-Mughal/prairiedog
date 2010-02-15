@@ -1,0 +1,23 @@
+<package>
+  <description brief="irobot_create_rustic">
+     Brown University V 104 of irobot create, 2009.
+     By Gheric Speiginer and Keenan Black
+    
+     Modified by Michael Otte at University of Colorado 2010 to work with ROS V 1.0
+     
+  </description>
+  <author>Gheric Speiginer and Keenan Black, modified by Michael Otte</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://pr.willowgarage.com/wiki/irobot_create</url>
+  <depend package="roscpp"/>
+  <depend package="rospy"/>
+  <depend package="std_msgs"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/include -I${prefix}/msg/cpp" lflags="-L${prefix}/lib -lirobot_create_controller -lcreate_comms -lirobot_create_gui"/>
+  </export>
+
+</package>
+
+
