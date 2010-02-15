@@ -30,8 +30,8 @@ $ hokuyo_listener_cu
 Reads the following parameters from the parameter server
 
 - \b "hokuyo_listener_cu/laser_scanner_x": [double] (m) x displacement between the scanner coordiante system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: 0.15].
-- \b "hokuyo_listener_cu/laser_scanner_y": [double] (m) y displacement between the scanner coordiante system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: 0.0].
-- \b "hokuyo_listener_cu/laser_scanner_theta": [double] (rad) raidal displacement between the scanner coordiante system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: PI/6].
+- \b "hokuyo_listener_cu/laser_scanner_y": [double] (m) y displacement between the scanner coordinate system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: 0.0].
+- \b "hokuyo_listener_cu/laser_scanner_theta": [double] (rad) radial displacement between the scanner coordinate system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: PI/6].
 - \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true]. 
 
 \subsubsection topics ROS topics
