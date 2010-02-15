@@ -1,3 +1,0 @@
-Header header
-uint8 left
-uint8 right
