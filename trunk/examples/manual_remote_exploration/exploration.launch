@@ -8,7 +8,7 @@
   </group>
   <node name="hokuyo" pkg="hokuyo_node" type="hokuyo_node" respawn="false" output="screen" />
   
-  <node name="driver_brown" pkg="irobot_create" type="driver" respawn="true" output="screen" />
+  <node name="driver_brown" pkg="irobot_create_rustic" type="driver" respawn="true" output="screen" />
 
   <node name="irobot_create_cu" pkg="irobot_create_cu" type="irobot_create_cu" respawn="true" output="screen" />
   <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../pseudolites.xml" respawn="true" output="screen" />
