@@ -45,7 +45,7 @@
 #include <unistd.h>
 
 #include "disp.h"
-#include <irobot_create/irobot_create_controller.h>
+#include <irobot_create_rustic/irobot_create_controller.h>
 #include <ros/ros.h>
 
 int old_cursor;

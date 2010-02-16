@@ -46,7 +46,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include <irobot_create/irobot_create_controller.h>
+#include <irobot_create_rustic/irobot_create_controller.h>
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
 
