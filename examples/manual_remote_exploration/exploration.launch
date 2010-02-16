@@ -1,24 +1,84 @@
 <launch>
+  <group ns="prairiedog">
+    <param name="using_tf" type="bool" value="true" />
+  </group>
 
   <group ns="hokuyo">
     <param name="calibrate_time" type="bool" value="false" />
     <param name="hokuyoLaserModel04LX" type="bool" value="true" />
-    <param name="min_ang_degrees" type="double" value="-120" />
-    <param name="max_ang_degrees" type="double" value="120" />
+    <param name="min_ang" type="double" value="-2.086214" />
+    <param name="max_ang" type="double" value="2.092350" />
   </group>
   <node name="hokuyo" pkg="hokuyo_node" type="hokuyo_node" respawn="false" output="screen" />
-  
+ 
+  <group ns="irobot_create_rustic">
+    <param name="serial_port" type="string" value="/dev/create" />
+  </group>
   <node name="driver_brown" pkg="irobot_create_rustic" type="driver" respawn="true" output="screen" />
 
+  <group ns="irobot_create_cu">
+    <param name="bumper_backup_distance" type="double" value="0.015" />
+    <param name="backup_speed" type="double" value="-0.2" />
+    <param name="bumper_theta_offset" type="double" value="0.523599" />
+    <param name="bumper_distance" type="double" value="0.35" />
+  </group>
   <node name="irobot_create_cu" pkg="irobot_create_cu" type="irobot_create_cu" respawn="true" output="screen" />
+
   <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../pseudolites.xml" respawn="true" output="screen" />
 
-  <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" respawn="true" output="screen" />
+  <group ns="hokuyo_listener_cu">
+    <param name="laser_scanner_x" type="double" value="0.15" />
+    <param name="laser_scanner_y" type="double" value="0.0" />
+    <param name="laser_scanner_theta" type="double" value="0.523599" />
+  </group>
   <node name="hokuyo_listener_cu" pkg="hokuyo_listener_cu" type="hokuyo_listener_cu" respawn="true" output="screen" />
+
+  <group ns="localization_cu">
+    <param name="max_pose_jump_ratio" type="double" value="2.0" />
+    <param name="using_gps" type="bool" value="true" />
+    <param name="odometer_pose_x_init" type="double" value="0" />
+    <param name="odometer_pose_y_init" type="double" value="0" />
+    <param name="odometer_pose_theta_init" type="double" value="0" />
+    <param name="posterior_pose_x_init" type="double" value="0" />
+    <param name="posterior_pose_y_init" type="double" value="0" />
+    <param name="posterior_pose_theta_init" type="double" value="0" />
+  </group>
   <node name="localization_cu" pkg="localization_cu" type="localization_cu" respawn="true" output="screen" />
+
+  <group ns="goal_server_cu">
+    <param name="goal_pose_x_init" type="double" value="0" />
+    <param name="goal_pose_y_init" type="double" value="0" />
+    <param name="goal_pose_theta_init" type="double" value="0" />
+  </group>
   <node name="goal_server_cu" pkg="goal_server_cu" type="goal_server_cu" output="screen" />
+
+  <group ns="mapper_cu">
+    <param name="global_map_x_offset" type="double" value="0" />
+    <param name="global_map_y_offset" type="double" value="0" />
+    <param name="global_map_theta_offset" type="double" value="0" />
+    <param name="map_x_size" type="double" value="20" />
+    <param name="map_y_size" type="double" value="20" />
+    <param name="map_resolution" type="double" value="0.08" />
+    <param name="obstacle_prior" type="double" value="0.2" />
+    <param name="map_attention_span" type="int" value="100" />
+    <param name="scanner_range" type="double" value="5.5" />
+    <param name="bumper_obstacle_posterior" type="double" value="1.0" />
+    <param name="robot_radius" type="double" value="0.2" />
+    <param name="map_file" type="string" value="../lab.bmp" />
+  </group>
   <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
+
+  <group ns="base_planner_cu">
+    <param name="obstacle_cost" type="double" value="1000" />
+    <param name="robot_radius" type="double" value="0.2" />
+    <param name="safety_distance" type="double" value="0.1" />
+    <param name="better_path_ratio" type="double" value="0.95" />
+    <param name="replan_jump" type="double" value="15" />
+    <param name="using_extra_safety_distance" type="bool" value="true" />
+    <param name="extra_safety_distance" type="double" value="0.2" />
+  </group>
   <node name="base_planner_cu" pkg="base_planner_cu" type="base_planner_cu" respawn="true" output="screen" />
-  <inode name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+  <node name="gencam_cu" pkg="gencam_cu" type="gencam_cu" respawn="true" output="screen" />
 
 </launch>
