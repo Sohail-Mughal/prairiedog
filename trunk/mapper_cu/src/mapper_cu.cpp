@@ -762,6 +762,8 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
     return;
   }
   
+  //printf("in laser scan callback \n");
+
   float x_scl = 1/laser_map->resolution;
   float y_scl = 1/laser_map->resolution;
   
@@ -1044,6 +1046,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
   
   #endif
   scl_cloud_points.resize(0);       
+  //printf("out laser scan callback \n");
 }
 
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
@@ -1057,14 +1060,16 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     return;
   }
   
+  //printf("in pose callback \n");
+
   // mark grids within the radius of the robot as safe 
   float resolution = laser_map->resolution;
   float pose_x = msg->pose.position.x/resolution;
   float pose_y = msg->pose.position.y/resolution;
   float rob_rad = robot_radius/resolution;
   
-  int width = laser_map->width;
-  int height = laser_map->height;
+  int width = min(laser_map->width, bumper_map->width);
+  int height = min(laser_map->height, bumper_map->height);
   
   int start_r = (int)(pose_y - rob_rad);
   if(start_r < 0)
@@ -1181,6 +1186,8 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     }
   }
   laser_map_changes.resize(next_change);
+
+  //printf("out pose callback \n");
 }
 
 void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg) // this is for when tf is NOT being used
@@ -1188,6 +1195,8 @@ void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg) // this is
   if(bumper_map == NULL)
     return;
   
+  // printf("in bumper pose callback \n");
+
   float x_scl = 1/laser_map->resolution;
   float y_scl = 1/laser_map->resolution;
   
@@ -1210,6 +1219,8 @@ void bumper_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg) // this is
       bumper_map->in_list[(int)y][(int)x] = list_ind;
     #endif
   }
+
+  // printf("out bumper pose callback \n");
 }
 
 void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& msg) // this is for when tf IS being used
@@ -1223,8 +1234,10 @@ void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& m
     return;
   }
  
-  float x_scl = 1/laser_map->resolution;
-  float y_scl = 1/laser_map->resolution;
+  // printf("in tf bumper pose callback \n");
+
+  float x_scl = 1/bumper_map->resolution;
+  float y_scl = 1/bumper_map->resolution;
   
   // transform bumper points to map coords and remember them
   float x = (int)(x_scl*msg->pose.position.x + 1); // same + 1 annoying bug as in laser scan callback
@@ -1235,7 +1248,7 @@ void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& m
   int list_ind = bumper_map_changes.size(); 
   bumper_map_changes.resize(list_ind+1);
   
-  if(x >= 0 && x < laser_map->width && y >= 0 && y < laser_map->height)
+  if(x >= 0 && x < bumper_map->width && y >= 0 && y < bumper_map->height)
   {
     bumper_map->cost[(int)y][(int)x] = BUMPER_COST;
     
@@ -1247,13 +1260,17 @@ void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& m
       bumper_map->in_list[(int)y][(int)x] = list_ind;
     #endif
   }
+
+  // printf("out tf bumper pose callback \n");
 }
 
 bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &resp)
 {
- if(laser_map == NULL || bumper_map == NULL)
-   return false;
+  if(laser_map == NULL || bumper_map == NULL)
+    return false;
   
+  //printf("in get map callback \n");
+
   int width = laser_map->width;
   int height = laser_map->height;
   
@@ -1279,6 +1296,8 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
       i++;
     }
   }
+  // printf("out get map callback \n");
+
   return true;
 }
 
@@ -1289,9 +1308,11 @@ void publish_map_changes()
   int length = laser_map_changes.size();
   int bumper_length = bumper_map_changes.size();
     
-  if(length <= 0)
+  if(length <= 0 && bumper_length <= 0)
       return;
   
+  // printf("in publish map callback \n");
+
   sensor_msgs::PointCloud msg;  
   
   msg.points.resize(length+bumper_length);
@@ -1302,38 +1323,46 @@ void publish_map_changes()
   #endif
   
   // add laser data to message
-  int i;
-  for(i = 0; i < length; i++)
-  {  
-    msg.points[i].x = laser_map_changes[i].x;
-    msg.points[i].y = laser_map_changes[i].y;
-    msg.points[i].z = laser_map_changes[i].z;
-    
-    #if defined(SIMPLEMAP) || defined(PROBMAP)
-      // mark as not in change list
-      in_laser_list[(int)laser_map_changes[i].y][(int)laser_map_changes[i].x] = -1;
-    #endif
-  } 
-  
-  // add bumper data to message (bumper overrides laser, hence it is last)
-  for(int j = 0; j < bumper_length; j++)
+  int i = 0;
+  if(length > 0)
   {
-    msg.points[i].x = bumper_map_changes[j].x;
-    msg.points[i].y = bumper_map_changes[j].y;
-    msg.points[i].z = bumper_map_changes[j].z;
+    for(i = 0; i < length; i++)
+    {  
+      msg.points[i].x = laser_map_changes[i].x;
+      msg.points[i].y = laser_map_changes[i].y;
+      msg.points[i].z = laser_map_changes[i].z;
     
-    #if defined(SIMPLEMAP) || defined(PROBMAP)
-      // mark as not in change list
-      in_bumper_list[(int)bumper_map_changes[i].y][(int)bumper_map_changes[i].x] = -1;
-    #endif
+      #if defined(SIMPLEMAP) || defined(PROBMAP)
+        // mark as not in change list
+        in_laser_list[(int)laser_map_changes[i].y][(int)laser_map_changes[i].x] = -1;
+      #endif
+    }
+  } 
+
+  // add bumper data to message (bumper overrides laser, hence it is last)
+  if(bumper_length > 0)
+  {
+    for(int j = 0; j < bumper_length; j++)
+    {
+      msg.points[i].x = bumper_map_changes[j].x;
+      msg.points[i].y = bumper_map_changes[j].y;
+      msg.points[i].z = bumper_map_changes[j].z;
     
-    i++;
+      #if defined(SIMPLEMAP) || defined(PROBMAP)
+        // mark as not in change list
+        in_bumper_list[(int)bumper_map_changes[j].y][(int)bumper_map_changes[j].x] = -1;
+      #endif
+
+      i++;
+    }
   }
-  
+
   map_changes_pub.publish(msg);
  
   laser_map_changes.resize(0);
   bumper_map_changes.resize(0);
+
+  // printf("out publish map callback \n");
 }
 
 int main(int argc, char** argv) 
@@ -1390,14 +1419,14 @@ int main(int argc, char** argv)
     
   // wait until localization service is provided (we need its tf /world_cu -> /robot_cu to be broadcast)
   ros::service::waitForService("/cu/get_pose_cu", -1);
-  
+
   destroy_map(laser_map);
   destroy_map(bumper_map);
   laser_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, OBS_PRIOR);
   bumper_map = load_blank_map(HEIGHT, WIDTH, RESOLUTION, 0);
-    
+
   populateMapFromBitmap(bumper_map, map_file.c_str(), OBS_PRIOR);
-    
+
   // set up subscribers
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -1405,7 +1434,7 @@ int main(int argc, char** argv)
     bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback_using_tf);  
   else
     bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
-    
+
   // set up publishers
   map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
     
@@ -1418,7 +1447,7 @@ int main(int argc, char** argv)
       broadcast_map_tf();  
       
     publish_map_changes();
-    
+
     ros::spinOnce();
     loop_rate.sleep();
   }
