@@ -170,7 +170,7 @@ void broadcast_robot_tf()
   tf::Transform transform;   
   transform.setOrigin(tf::Vector3(posterior_pose->x, posterior_pose->y, posterior_pose->z));
   
-  //transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0)); // this is currently pyr, but being depreciated and then changed to rpy
+  //transform.setRotation(tf::Quaternion(posterior_pose->alpha, 0, 0)); // this is currently ypr, but being depreciated and then changed to rpy
   tf::Quaternion Q;
   Q.setRPY(0, 0, posterior_pose->alpha);
   transform.setRotation(Q);
@@ -194,6 +194,7 @@ bool get_robot_map_tf(tf::StampedTransform &transform)
     catch(tf::TransformException ex)
     { 
       //printf("attempt failed \n");
+      ROS_ERROR("localization 1: %s",ex.what());
       setup_tf_1 = true;  
     }   
   } 
@@ -204,7 +205,7 @@ bool get_robot_map_tf(tf::StampedTransform &transform)
   }
   catch (tf::TransformException ex)
   {
-    ROS_ERROR("mapper 1: %s",ex.what());
+    ROS_ERROR("localization 1: %s",ex.what());
     return false;
   }
   return true;
@@ -271,6 +272,11 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   if(posterior_pose->qw > 1)
     posterior_pose->qw = 1;
   
+  //while(posterior_pose->alpha > PI)
+  //  posterior_pose->alpha -= 2*PI;   
+  //while(posterior_pose->alpha < -PI)
+  //  posterior_pose->alpha += 2*PI;
+   
   // remember accumulated movement
   if(accum_movement == -1)
       accum_movement = 0;
@@ -311,6 +317,11 @@ void user_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   posterior_pose->sin_alpha = 2*qw*qz + 2*qx*qy; 
   posterior_pose->alpha = atan2(posterior_pose->sin_alpha, posterior_pose->cos_alpha);
   
+  //while(posterior_pose->alpha > PI)
+  //  posterior_pose->alpha -= 2*PI;   
+  //while(posterior_pose->alpha < -PI)
+  //  posterior_pose->alpha += 2*PI;
+      
   // save most recent data from both local and global pose to use in transformation matrices
   
   local_offset[0] = odometer_pose->x;
@@ -365,6 +376,11 @@ void stargazer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   posterior_pose->cos_alpha = cos(posterior_pose->alpha);
   posterior_pose->sin_alpha = sin(posterior_pose->alpha);
   
+  //while(posterior_pose->alpha > PI)
+  //  posterior_pose->alpha -= 2*PI;   
+  //while(posterior_pose->alpha < -PI)
+  //  posterior_pose->alpha += 2*PI;
+    
   // save most recent data from both local and global pose to use in transformation matrices
   local_offset[0] = odometer_pose->x;
   local_offset[1] = odometer_pose->y;
@@ -415,6 +431,7 @@ void publish_pose()
       catch(tf::TransformException ex)
       { 
         //printf("attempt failed \n");
+        ROS_ERROR("mapper 2: %s",ex.what());
         setup_tf_2 = true;  
       }   
     }    
@@ -485,6 +502,7 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
       catch(tf::TransformException ex)
       { 
         //printf("attempt failed \n");
+        ROS_ERROR("mapper 3: %s",ex.what());
         setup_tf_3 = true;  
       }   
     } 

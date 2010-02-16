@@ -729,7 +729,7 @@ void populateMapFromBitmap(MAP* Map, const char* filename, float thresh)
 }
 
 /*---------------------------- ROS tf functions -------------------------*/
-void broadcast_robot_tf()
+void broadcast_map_tf()
 {
  
   static tf::TransformBroadcaster br;  
@@ -737,7 +737,7 @@ void broadcast_robot_tf()
   tf::Transform transform;   
   transform.setOrigin(tf::Vector3(global_map_x_offset, global_map_y_offset, 0));
   
-  //transform.setRotation(tf::Quaternion(global_map_theta_offset, 0, 0)); // this is currently pyr, but being depreciated and then changed to rpy
+  //transform.setRotation(tf::Quaternion(global_map_theta_offset, 0, 0)); // this is currently ypr, but being depreciated and then changed to rpy
   tf::Quaternion Q;
   Q.setRPY(0, 0, global_map_theta_offset);
   transform.setRotation(Q);
@@ -1415,7 +1415,7 @@ int main(int argc, char** argv)
   while (ros::ok()) 
   {
     if(using_tf)
-      broadcast_robot_tf();  
+      broadcast_map_tf();  
       
     publish_map_changes();
     
