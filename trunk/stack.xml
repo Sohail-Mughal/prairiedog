@@ -12,6 +12,7 @@
   <depend stack="ros"/> 
   <depend stack="common_msgs"/> 
   <depend stack="laser_drivers"/> 
+  <depend stack="image_transport_plugins">
 </stack>
 
 
