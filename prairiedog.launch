@@ -11,10 +11,10 @@
   </group>
   <node name="hokuyo" pkg="hokuyo_node" type="hokuyo_node" respawn="false" output="screen" />
  
-  <group ns="irobot_create">
+  <group ns="irobot_create_rustic">
     <param name="serial_port" type="string" value="/dev/create" />
   </group>
-  <node name="driver_brown" pkg="irobot_create" type="driver" respawn="true" output="screen" />
+  <node name="driver_brown" pkg="irobot_create_rustic" type="driver" respawn="true" output="screen" />
 
   <group ns="irobot_create_cu">
     <param name="bumper_backup_distance" type="double" value="0.015" />
