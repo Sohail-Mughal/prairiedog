@@ -4,10 +4,12 @@
  *
  *  Created by Gheric Speiginer and Keenan Black on 6/16/09.
  *
+ *  Modified by Michael Otte University of Colorado at Boulder 2010 for irobot_create_rustic 
+ *
  */
 
 #include <ros/ros.h>
-#include <irobot_create/irobot_create_controller.h>
+#include <irobot_create_rustic/irobot_create_controller.h>
 #include <signal.h>
 
 

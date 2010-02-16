@@ -4,6 +4,8 @@
  *
  *  Created by Gheric Speiginer and Keenan Black on 6/15/09.
  *
+ *  Modified by Michael Otte University of Colorado at Boulder 2010 for irobot_create_rustic 
+ *
  */
 
 //#include "irobot_create.h"
@@ -11,7 +13,7 @@
 //#include <stdlib.h>
 //#include <std_msgs/String.h>
 
-#include <irobot_create/irobot_create_controller.h>
+#include <irobot_create_rustic/irobot_create_controller.h>
 
 //#include <iostream>
 //#include <strings.h>
@@ -25,8 +27,8 @@ IRobotCreateController::IRobotCreateController() {//ros::NodeHandle n) {
 	bump_left = false;
 	bump_right = false;
 	
-	speeds_pub_ = n_.advertise<irobot_create::Speeds>("speeds_bus",10);
-	sound_pub_ = n_.advertise<irobot_create::Sound>("sound_bus", 10);
+	speeds_pub_ = n_.advertise<irobot_create_rustic::Speeds>("speeds_bus",10);
+	sound_pub_ = n_.advertise<irobot_create_rustic::Sound>("sound_bus", 10);
 	pos2d_sub_ = n_.subscribe("pos2d_bus", 10,  &IRobotCreateController::pos2DCallback, this);
 	power_sub_ = n_.subscribe("power_bus", 10, &IRobotCreateController::powerCallback, this);
 	bumper_sub_ = n_.subscribe("bumper_bus", 10, &IRobotCreateController::bumperCallback, this);
@@ -40,7 +42,7 @@ IRobotCreateController::~IRobotCreateController() {
 }
 
 void
-IRobotCreateController::pos2DCallback(const irobot_create::Position2DConstPtr& in) {
+IRobotCreateController::pos2DCallback(const irobot_create_rustic::Position2DConstPtr& in) {
 	ROS_DEBUG("Recieved Position2D State:");
 	x = in->x;
 	ROS_DEBUG("\tX:%f",x);
@@ -51,7 +53,7 @@ IRobotCreateController::pos2DCallback(const irobot_create::Position2DConstPtr& i
 }
 
 void
-IRobotCreateController::powerCallback(const irobot_create::PowerConstPtr& in) {
+IRobotCreateController::powerCallback(const irobot_create_rustic::PowerConstPtr& in) {
 	ROS_DEBUG("Recieved Power State:");
 	volts = in->volts;
 	ROS_DEBUG("\tVolts:%f",volts);
@@ -66,7 +68,7 @@ IRobotCreateController::powerCallback(const irobot_create::PowerConstPtr& in) {
 }
 
 void
-IRobotCreateController::bumperCallback(const irobot_create::BumperConstPtr& in) {
+IRobotCreateController::bumperCallback(const irobot_create_rustic::BumperConstPtr& in) {
 	ROS_DEBUG("Recieved Bumper State:");
 	bump_left = in->left;
 	ROS_DEBUG("\tLeft:%s",
@@ -78,7 +80,7 @@ IRobotCreateController::bumperCallback(const irobot_create::BumperConstPtr& in) 
 
 void 
 IRobotCreateController::setSpeeds(double forward, double rotate) {
-	irobot_create::Speeds out;
+	irobot_create_rustic::Speeds out;
 	out.forward = forward;
 	out.rotate = rotate;
 	speeds_pub_.publish(out);
@@ -86,7 +88,7 @@ IRobotCreateController::setSpeeds(double forward, double rotate) {
 
 void
 IRobotCreateController::playSong(unsigned char index) {
-	irobot_create::Sound out;
+	irobot_create_rustic::Sound out;
 	out.command = out.PLAY_SONG;
 	out.song_index = index;
 	out.song_length = 0;
@@ -102,7 +104,7 @@ IRobotCreateController::setSong(unsigned char index,
 								unsigned char length, 
 								unsigned char notes[], 
 								unsigned char note_lengths[]) {
-	irobot_create::Sound out;
+	irobot_create_rustic::Sound out;
 	out.command = out.SET_SONG;
 	out.song_index = index;
 	out.song_length = length;

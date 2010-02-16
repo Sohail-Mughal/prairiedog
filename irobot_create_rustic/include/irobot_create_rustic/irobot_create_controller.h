@@ -1,17 +1,19 @@
 /*
- *  irobot_create.h
+ *  irobot_create_controller.h
  *  
  *
  *  Created by Gheric Speiginer and Keenan Black on 6/15/09.
  *
+ *  Modified by Michael Otte University of Colorado at Boulder 2010 for irobot_create_rustic 
+ *
  */
 
 #include <ros/ros.h>
-#include <irobot_create/Speeds.h>
-#include <irobot_create/Sound.h>
-#include <irobot_create/Position2D.h>
-#include <irobot_create/Power.h>
-#include <irobot_create/Bumper.h>
+#include <irobot_create_rustic/Speeds.h>
+#include <irobot_create_rustic/Sound.h>
+#include <irobot_create_rustic/Position2D.h>
+#include <irobot_create_rustic/Power.h>
+#include <irobot_create_rustic/Bumper.h>
 
 class IRobotCreateController
 {
@@ -35,9 +37,9 @@ private:
 	double percent;
 	unsigned short charging;
 	
-	void pos2DCallback(const irobot_create::Position2DConstPtr& in);
-	void powerCallback(const irobot_create::PowerConstPtr& in);
-	void bumperCallback(const irobot_create::BumperConstPtr& in);
+	void pos2DCallback(const irobot_create_rustic::Position2DConstPtr& in);
+	void powerCallback(const irobot_create_rustic::PowerConstPtr& in);
+	void bumperCallback(const irobot_create_rustic::BumperConstPtr& in);
 	
 public:
 	
