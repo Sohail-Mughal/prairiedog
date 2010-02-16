@@ -1,8 +1,10 @@
 /*
- *  irobot_create.cpp
+ *  driver.cpp
  *  
  *
  *  Created by Gheric Speiginer and Keenan Black on 6/15/09.
+ *
+ *  Modified by Michael Otte University of Colorado at Boulder 2010 for irobot_create_rustic 
  *
  */
 
@@ -13,11 +15,11 @@
 
 #include <ros/ros.h>
 #include <create_comms.h>
-#include <irobot_create/Speeds.h>
-#include <irobot_create/Sound.h>
-#include <irobot_create/Position2D.h>
-#include <irobot_create/Power.h>
-#include <irobot_create/Bumper.h>
+#include <irobot_create_rustic/Speeds.h>
+#include <irobot_create_rustic/Sound.h>
+#include <irobot_create_rustic/Position2D.h>
+#include <irobot_create_rustic/Power.h>
+#include <irobot_create_rustic/Bumper.h>
 
 //#include <iostream>
 //#include <strings.h>
@@ -54,7 +56,7 @@ public:
         serial_port_ = std::string("/dev/create"); // default value
         // Retrieve internal serial port parameter from parameter server if it exists
         std::string input_string;
-        if(ros::param::get("irobot_create/serial_port", input_string))
+        if(ros::param::get("irobot_create_rustic/serial_port", input_string))
            serial_port_ = input_string;   
 
 		ROS_DEBUG_STREAM("Serial Port: " << serial_port_);
@@ -80,16 +82,16 @@ public:
 		// Subscribe to the sound bus
 		sound_sub_ = n_.subscribe("sound_bus", 10, &IRobotCreateDriver::soundCallback, this);
 		// Advertise the position2d bus
-		pos2d_pub_ = n_.advertise<irobot_create::Position2D>("pos2d_bus",10);
+		pos2d_pub_ = n_.advertise<irobot_create_rustic::Position2D>("pos2d_bus",10);
 		// Advertise the power bus
-		power_pub_ = n_.advertise<irobot_create::Power>("power_bus",10);
+		power_pub_ = n_.advertise<irobot_create_rustic::Power>("power_bus",10);
 		// Advertise the bumper bus
-		bumper_pub_ = n_.advertise<irobot_create::Bumper>("bumper_bus",10);
+		bumper_pub_ = n_.advertise<irobot_create_rustic::Bumper>("bumper_bus",10);
 		last_bumper_left_ = 0;
 		last_bumper_right_ = 0;
 	}
 	
-	void speedsCallback(const irobot_create::SpeedsConstPtr& in)
+	void speedsCallback(const irobot_create_rustic::SpeedsConstPtr& in)
 	{
 		ROS_DEBUG("Sending motor commands forward: %f, rotate: %f", in->forward, in->rotate);
 		if(create_set_speeds(create_dev_, 
@@ -100,14 +102,14 @@ public:
 		}
 	}
 	
-	void soundCallback(const irobot_create::SoundConstPtr& in)
+	void soundCallback(const irobot_create_rustic::SoundConstPtr& in)
 	{
 		
-		if (in->command == 1) {// irobot_create::Sound.PLAY_SONG) {		// ROS BUG??
+		if (in->command == 1) {// irobot_create_rustic::Sound.PLAY_SONG) {		// ROS BUG??
 			unsigned char index = in->song_index;
 			ROS_DEBUG("Playing song at index: %d", index);
 			create_play_song(create_dev_, index);
-		} else if (in->command == 2) {//irobot_create::Sound.SET_SONG) {
+		} else if (in->command == 2) {//irobot_create_rustic::Sound.SET_SONG) {
 			unsigned char index = in->song_index;
 			unsigned char song_length = in->song_length;
 			unsigned char notes[song_length];
@@ -146,7 +148,7 @@ public:
 			
 			////////////////////////////
 			// Update position2d data
-			irobot_create::Position2D out_p2d;
+			irobot_create_rustic::Position2D out_p2d;
 			out_p2d.x = create_dev_->ox;
 			out_p2d.y = create_dev_->oy;
 			out_p2d.a = create_dev_->oa;
@@ -158,7 +160,7 @@ public:
 			
 			////////////////////////////
 			// Update power data
-			irobot_create::Power out_pow;
+			irobot_create_rustic::Power out_pow;
 			out_pow.volts = create_dev_->voltage;
 			out_pow.watts = create_dev_->voltage * create_dev_->current;
 			out_pow.joules = create_dev_->charge; 
@@ -182,7 +184,7 @@ public:
 			unsigned short new_bumper_right = create_dev_->bumper_right;
 			if (new_bumper_left != last_bumper_left_ || 
 				new_bumper_right != last_bumper_right_) {
-				irobot_create::Bumper out_bump;
+				irobot_create_rustic::Bumper out_bump;
 				out_bump.left = new_bumper_left;
 				out_bump.right = new_bumper_right;
 				bumper_pub_.publish(out_bump);
@@ -224,7 +226,7 @@ int main(int argc, char** argv)
 	// Create a new instance of IRobot_Create
 	IRobotCreateDriver driver;
 	
-	//ros::Publisher speeds_pub = n.advertise<irobot_create::Speed>("speeds", 100);
+	//ros::Publisher speeds_pub = n.advertise<irobot_create_rustic::Speed>("speeds", 100);
 	
 	ROS_INFO("Initializing...");
 	driver.init();
