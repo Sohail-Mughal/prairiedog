@@ -61,6 +61,10 @@
   #define PI 3.1415926535897
 #endif
       
+#ifndef SQRT2
+  #define SQRT2 1.414213562373095
+#endif
+        
 using namespace std;
 
 struct POSE;
@@ -384,10 +388,10 @@ void publish_bumper(bool left, bool right)
     msg_temp.pose.position.x = BUMPER_OFFSET*cos(theta);
     msg_temp.pose.position.y = BUMPER_OFFSET*sin(theta);
     msg_temp.pose.position.z = 0;
-    msg_temp.pose.orientation.w = 1; 
+    msg_temp.pose.orientation.w = 1/SQRT2; 
     msg_temp.pose.orientation.x = 0;
     msg_temp.pose.orientation.y = 0;
-    msg_temp.pose.orientation.z = 1;
+    msg_temp.pose.orientation.z = 1/SQRT2;
     
     // transform 2, from local robot frame to /map_cu
     geometry_msgs::PoseStamped msg;  
@@ -405,11 +409,12 @@ void publish_bumper(bool left, bool right)
       }
       catch(tf::TransformException ex)
       { 
-        //printf("attempt failed \n");
+        printf("attempt failed \n");
+        ROS_ERROR("irobot_create: %s",ex.what());
         setup_tf = true;  
-      }   
+      } 
     } 
-    
+
     try
     {
       listener.transformPose(std::string("/map_cu"), msg_temp, msg);   
@@ -749,12 +754,11 @@ int main(int argc, char * argv[])
   float backup_start_x = 0, backup_start_y = 0; // remembers where a bumper hit occoured
   while (nh.ok()) 
   {   
+    //printf("system state: %d \n", system_state);  
+      
     // check for bumper hits
     if (controller->isBumpedLeft() || controller->isBumpedRight()) 
-    {
-      // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
-      publish_bumper(controller->isBumpedLeft(), controller->isBumpedRight());
-            
+    {        
       setSpeed(BACKUP_SPEED);
       setTurn(0);
           
@@ -762,13 +766,17 @@ int main(int argc, char * argv[])
       backup_start_y = controller->getY();
       backing_up = true;
           
+      // there is a bumper hit, so send estimated position of obstacle and back up a little bit  
+      publish_bumper(controller->isBumpedLeft(), controller->isBumpedRight());
+      
       safe_path_exists = 0; // wait for a new path to come
           
       state_prior_to_bumper_hit = system_state;
-      system_state = 2;    
+      system_state = 2;
     }   
     else if(backing_up)
     { 
+      setSpeed(BACKUP_SPEED);
       // already backing up based on a prior bumper hit
       if(system_state != 2)  // this may happen if something changes the state while the robot is already backing up
       {

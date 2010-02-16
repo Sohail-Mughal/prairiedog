@@ -1891,6 +1891,7 @@ void mouse(int button, int mouse_state, int x, int y)
           catch(tf::TransformException ex)
           { 
             //printf("attempt failed \n");
+            ROS_ERROR("visualization: %s",ex.what());
             setup_tf = true;  
           }   
         }  
