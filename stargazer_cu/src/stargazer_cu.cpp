@@ -50,10 +50,11 @@
 #include <std_msgs/String.h>
 #include <string.h>
 #include "geometry_msgs/Pose2D.h"
+#include "stargazer_cu/Pose2DTagged.h"
 #include "../include/pseudo_obj.h"
 #include "../include/tinyxml/tinyxml.h"
 
-void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseudolite p_data );
+void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data );
 geometry_msgs::Pose2D convert2global ( geometry_msgs::Pose2D meas, Pseudolite p_data );
 void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file);
 
@@ -91,6 +92,7 @@ int main ( int argc, char ** argv ) {
 	ros::init(argc, argv, stargazer_name);
 	ros::NodeHandle n;
 	ros::Publisher data_pub = n.advertise<geometry_msgs::Pose2D>("/cu/stargazer_pose_cu",1);
+	ros::Publisher marker_pub = n.advertise<stargazer_cu::Pose2DTagged>("/cu/stargazer_marker_cu",1);
 	ros::Rate loop_rate(1000);
 
   // Load the xml files
@@ -131,7 +133,7 @@ int main ( int argc, char ** argv ) {
 			case processing:
 				++i;
 				sensor_data[i] = '\0';
-				process_and_send_data ( sensor_data, &data_pub, pseudo_1b50 );
+				process_and_send_data ( sensor_data, &data_pub, &marker_pub, pseudo_1b50 );
 				STATE = waiting_for_STX;
 				break;
 
@@ -145,12 +147,13 @@ int main ( int argc, char ** argv ) {
 }
 
 
-void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseudolite p_data) {
+void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data) {
 
 	char mode;
 	float angle, x, y;
 	int ID;
 	geometry_msgs::Pose2D meas; // The position measurement to be published
+	stargazer_cu::Pose2DTagged marker; // The (relative?) position measurement of a marker
 
 	// Read in the data from the serial port.
 
@@ -166,6 +169,11 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, Pseud
 		meas.x = x/100;
 		meas.y = y/100;
         
+        marker.x = meas.x;
+        marker.y = meas.y;
+        marker.theta = meas.theta;
+        marker.tag = ID;
+        marker_pub->publish(marker);
 		// Find the pseudolite data based on the ID. Implement this with a hash table.
     if (p_data.getPseudoliteById(ID)){
 
