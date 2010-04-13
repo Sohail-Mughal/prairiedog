@@ -73,9 +73,16 @@ typedef struct POSE POSE;
 // globals that can be reset using parameter server, see main();
 float BUMPER_BACKUP_DIST = .015;   //(m) after a bumper hit, the robot backs up this much before going again
 float BACKUP_SPEED = -.2;
+float DEFAULT_SPEED = 0.2;
+float DEFAULT_TURN = 0.2;
 float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
 float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
 bool using_tf = true;              // when set to true, use the tf package
+
+bool path_has_orientation = false; //true;  // if path contains orientation, set this to true
+bool multi_robot_mode = false; //true;      // set to true if doing multi_robot mode
+ros::Time move_start_time;         // holds the time that we started moving, used for multi_robot_mode
+
 
 // set up Brown's Controller
 IRobotCreateController * controller = (IRobotCreateController*) NULL;
@@ -100,8 +107,8 @@ float turn = 0;
 float max_speed = 1;
 float max_turn = 1;
 
-float use_input_speed_increment = .2;
-float use_input_turn_increment = .2;
+float use_input_speed_increment = .1;
+float use_input_turn_increment = .1;
 
 int safe_path_exists = 0;
 
@@ -123,6 +130,8 @@ int  user_state = 0;  // as advertised by the visualization node
 bool backing_up = false; // set to true if robot gets a bumper hit
 int state_prior_to_bumper_hit;
 bool setup_tf = true; // flag used to indicate that required transforms are available
+bool recieved_first_path = false; // flag used to indicate if we recieved the first path
+
 
 // globals for robot and goal
 POSE* robot_pose = NULL;
@@ -130,6 +139,12 @@ POSE* local_goal_pose = NULL;
 POSE* global_goal_pose = NULL;
 
 vector<POSE> global_path;
+
+vector<vector<float> > first_path; // used in multi robot mode
+vector<vector<float> > trajectory; // used in multi robot mode
+
+float TARGET_SPEED = DEFAULT_SPEED;
+float TARGET_TURN = DEFAULT_TURN;
 
 /* Print the current state info to the console
 void print_state() 
@@ -149,6 +164,10 @@ void print_state()
 /* ------------------- a few function headers ---------------------------*/
 float setSpeed(float newspeed);
 float setTurn(float x);
+// given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
+void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, float time_granularity);
+void print_2d_float_vector(vector<vector<float> >& V);
+
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -321,12 +340,77 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
 {      
   int length = msg->poses.size();
   global_path.resize(length);
+  
   for(int i = 0; i < length; i++)
   {
     global_path[i].x = msg->poses[i].pose.position.x;
     global_path[i].y = msg->poses[i].pose.position.y;
-    global_path[i].z = msg->poses[i].pose.position.z;   
+    global_path[i].z = msg->poses[i].pose.position.z;  
+    
+    if(path_has_orientation)
+    {
+      global_path[i].qw = msg->poses[i].pose.orientation.w;
+      global_path[i].qx = msg->poses[i].pose.orientation.x;
+      global_path[i].qy = msg->poses[i].pose.orientation.y;
+      global_path[i].qz = msg->poses[i].pose.orientation.z;
+    
+      float qw = global_path[i].qw;
+      float qx = global_path[i].qx;
+      float qy = global_path[i].qy;
+      float qz = global_path[i].qz;
+  
+      global_path[i].cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
+      global_path[i].sin_alpha = 2*qw*qz + 2*qx*qy;
+      global_path[i].alpha = atan2(global_path[i].sin_alpha, global_path[i].cos_alpha);
+    }
   } 
+  
+  if(multi_robot_mode) 
+  {     
+    if(!recieved_first_path)
+    {
+      move_start_time = ros::Time::now();
+      recieved_first_path = true;
+
+      // save into first_path
+      first_path.resize(length);
+      for(int i = 0; i < length; i++)
+      {
+        first_path[i].resize(4);  // (x, y, alpha, time)
+        first_path[i][0] = global_path[i].x;
+        first_path[i][1] = global_path[i].y;
+        first_path[i][2] = global_path[i].alpha;
+        first_path[i][3] = global_path[i].z;
+      }
+      
+      extract_trajectory(trajectory, first_path, .1);      
+      print_2d_float_vector(first_path);
+      print_2d_float_vector(trajectory);
+      //getchar();
+    }
+    else // check to make sure this is the same as the first path we recieved
+    {
+      bool is_the_same = true;
+      
+      if((int)first_path.size() != length)
+        is_the_same = false;
+      
+      for(int i = 0; i < length; i++)
+      {
+        if(first_path[i][0] != global_path[i].x || first_path[i][1] != global_path[i].y || first_path[i][2] != global_path[i].alpha || first_path[i][3] != global_path[i].z)
+          is_the_same = false;
+      }
+      if(!is_the_same)
+      {
+        printf(" warning: recieved different multi_robot path than first path \n");
+        return;
+      }
+    }
+  }
+  
+  //ros::Duration elapsed_time = ros::Time::now() - move_start_time;
+  //printf("time: %f \n", elapsed_time.toSec());
+  
   new_global_path = 1;
   safe_path_exists = 1;
 }
@@ -357,7 +441,7 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
 
 void publish_odometer_pose(float x, float y, float theta)
 {
-  if(theta < -10 || theta > 10) // i.e. 10 is a stand-in for 2*pi
+  if(theta < -10 || theta > 10) // i.e. 10 is a stand-in for > 2*pi
     return;
     
   geometry_msgs::Pose2D msg;
@@ -459,6 +543,53 @@ void publish_system_state(int state)
 
 /* ---------------------- navigation functions --------------------------*/
 
+// given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
+void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, float time_granularity)
+{
+  t.resize(0);
+  t.push_back(p[0]);
+  for(int i = 1; i < (int)p.size(); i++)
+  {   
+    if(p[i][3] - p[i-1][3] < time_granularity) // just use next point
+    {
+      t.push_back(p[i]);
+    }
+    else // need to break path section up into multiple lengths
+    {
+      float start_time = p[i-1][3];
+      float end_time = p[i][3];
+      
+      float alpha_start = p[i-1][2]; // should already be beprint_2d_float_vector(trajectory);tween -PI and PI
+      float alpha_end = p[i][2];     // should already be between -PI and PI
+      
+      if(alpha_end > alpha_start && alpha_end - alpha_start > PI) // it is easier to go in the other direction
+        alpha_end -= 2*PI;
+      else if(alpha_start > alpha_end && alpha_start - alpha_end > PI) // it is easier to go in the other direction
+        alpha_start -= 2*PI;
+          
+      for(float this_time = start_time + time_granularity; this_time < end_time; this_time += time_granularity)
+      {
+        vector<float> this_path_point(4);
+        float percentage_through =  (this_time - start_time)/(end_time - start_time);
+        
+        this_path_point[0] = p[i-1][0] + (p[i][0] - p[i-1][0])*percentage_through;  // x
+        this_path_point[1] = p[i-1][1] + (p[i][1] - p[i-1][1])*percentage_through;  // y
+        
+        this_path_point[2] = p[i-1][2] + (p[i][2] - p[i-1][2])*percentage_through;  // alpha
+        while(this_path_point[2] < -PI)
+          this_path_point[2] += 2*PI;
+        while(this_path_point[2] > PI)
+          this_path_point[2] -= 2*PI;
+        
+        this_path_point[3] = this_time;  // time
+        
+        t.push_back(this_path_point);
+      }
+      t.push_back(p[i]);  
+    }
+  } 
+}
+
 
 /* Move at a speed [0-1] */
 float setSpeed(float newspeed) 
@@ -492,9 +623,9 @@ int turn_toward_location(POSE* target_pose, float tolerance)
       diff_direction += 2*PI;
   
   if(diff_direction > tolerance)
-     setTurn(.2);
+     setTurn(TARGET_TURN);
   else if(diff_direction < -tolerance)
-     setTurn(-.2);
+     setTurn(-TARGET_TURN);
   else
   {
      setTurn(0);
@@ -503,7 +634,33 @@ int turn_toward_location(POSE* target_pose, float tolerance)
   return 0;     
 }
 
-// same as above, but will also drive forward when robot is within tolerance_fast radians of the correct direction
+// same as above but pose is in a float vector [x y alpha (time)]
+int turn_toward_location(vector<float>& target_pose, float tolerance)
+{
+  float desired_direction = atan2(target_pose[1]-robot_pose->y, target_pose[0]-robot_pose->x);
+  float current_direction = robot_pose->alpha;
+  
+  float diff_direction = desired_direction - current_direction;
+  
+  // find on range of -PI to PI
+  while(diff_direction > PI)
+      diff_direction -= 2*PI;
+  while(diff_direction < -PI)
+      diff_direction += 2*PI;
+  
+  if(diff_direction > tolerance)
+     setTurn(TARGET_TURN);
+  else if(diff_direction < -tolerance)
+     setTurn(-TARGET_TURN);
+  else
+  {
+     setTurn(0);
+     return 1;
+  }
+  return 0;     
+}
+
+// same as (two) above, but will also drive forward when robot is within tolerance_fast radians of the correct direction
 int turn_toward_location_fast(POSE* target_pose, float tolerance, float tolerance_fast)
 {
   float desired_direction = atan2(target_pose->y-robot_pose->y, target_pose->x-robot_pose->x);
@@ -518,16 +675,49 @@ int turn_toward_location_fast(POSE* target_pose, float tolerance, float toleranc
       diff_direction += 2*PI;
   
   if(diff_direction >= 0 && diff_direction <= tolerance_fast)
-     setSpeed(.2);
+     setSpeed(TARGET_SPEED);
   else if(diff_direction <= 0 && diff_direction >= -tolerance_fast)
-     setSpeed(.2);
+     setSpeed(TARGET_SPEED);
   else
      setSpeed(0);
   
   if(diff_direction > tolerance)
-     setTurn(.2);
+     setTurn(TARGET_TURN);
   else if(diff_direction < -tolerance)
-     setTurn(-.2);
+     setTurn(-TARGET_TURN);
+  else
+  {
+     setTurn(0);
+     return 1;
+  }
+  return 0;     
+}
+
+// same as above but pose is in a float vector [x y alpha (time)]
+int turn_toward_location_fast(vector<float>& target_pose, float tolerance, float tolerance_fast)
+{
+  float desired_direction = atan2(target_pose[1]-robot_pose->y, target_pose[0]-robot_pose->x);
+  float current_direction = robot_pose->alpha;
+  
+  float diff_direction = desired_direction - current_direction;
+  
+  // find on range of -PI to PI
+  while(diff_direction > PI)
+      diff_direction -= 2*PI;
+  while(diff_direction < -PI)
+      diff_direction += 2*PI;
+  
+  if(diff_direction >= 0 && diff_direction <= tolerance_fast)
+     setSpeed(TARGET_SPEED);
+  else if(diff_direction <= 0 && diff_direction >= -tolerance_fast)
+     setSpeed(TARGET_SPEED);
+  else
+     setSpeed(0);
+  
+  if(diff_direction > tolerance)
+     setTurn(TARGET_TURN);
+  else if(diff_direction < -tolerance)
+     setTurn(-TARGET_TURN);
   else
   {
      setTurn(0);
@@ -552,9 +742,9 @@ int turn_toward_heading(POSE* target_pose, float tolerance)
       diff_direction += 2*PI;
   
   if(diff_direction > tolerance)
-     setTurn(.2);
+     setTurn(TARGET_TURN);
   else if(diff_direction < -tolerance)
-     setTurn(-.2);
+     setTurn(-TARGET_TURN);
   else
   {
      setTurn(0);
@@ -562,6 +752,33 @@ int turn_toward_heading(POSE* target_pose, float tolerance)
   }
   return 0; 
 }
+
+// same as above but pose is in a float vector [x y alpha (time)]
+int turn_toward_heading(vector<float>& target_pose, float tolerance)
+{
+  float desired_direction = target_pose[2];
+  float current_direction = robot_pose->alpha;
+  
+  float diff_direction = desired_direction - current_direction;
+  
+  // find on range of -PI to PI
+  while(diff_direction > PI)
+      diff_direction -= 2*PI;
+  while(diff_direction < -PI)
+      diff_direction += 2*PI;
+  
+  if(diff_direction > tolerance)
+     setTurn(TARGET_TURN);
+  else if(diff_direction < -tolerance)
+     setTurn(-TARGET_TURN);
+  else
+  {
+     setTurn(0);
+     return 1;
+  }
+  return 0; 
+}
+
 
 // this will cause the robot to move toward the target_pose from its current position,
 // it will not move if it is within tolerance_radians and tolerance_distance of the correct direction and position, in which case it returns 1
@@ -576,7 +793,7 @@ int move_toward_pose(POSE* target_pose, float tolerance_distance, float toleranc
   if(dist_to_goal > tolerance_distance) // the robot is not close enough
   {
     if(turn_toward_location(target_pose, tolerance_radians) == 1)   // the robot is facing in the correct direction to move closer
-      setSpeed(.2);
+      setSpeed(TARGET_SPEED);
     else
       setSpeed(0); // not facing in the correct direction to move closer
   }
@@ -592,11 +809,65 @@ int move_toward_pose(POSE* target_pose, float tolerance_distance, float toleranc
   return 0;
 }
 
-// same as above, except that if the robot is within tolerance_radians_fast of desired heading, then it moves forward
+// same as above but pose is in a float vector [x y alpha (time)]
+int move_toward_pose(vector<float>& target_pose, float tolerance_distance, float tolerance_radians)
+{
+  float x_dist = target_pose[0] - robot_pose->x;
+  float y_dist = target_pose[1] - robot_pose->y;
+  float dist_to_goal = sqrt(x_dist*x_dist + y_dist*y_dist);
+     
+  //printf("dist to goal: %f, tolerance: %f \n", dist_to_goal, tolerance_distance);
+    
+  if(dist_to_goal > tolerance_distance) // the robot is not close enough
+  {
+    if(turn_toward_location(target_pose, tolerance_radians) == 1)   // the robot is facing in the correct direction to move closer
+      setSpeed(TARGET_SPEED);
+    else
+      setSpeed(0); // not facing in the correct direction to move closer
+  }
+  else // the robot is close enough
+  {
+    setSpeed(0);  
+    if(turn_toward_heading(target_pose, tolerance_radians) == 1) // the robot is facing in the correct direction
+    {
+      //printf(" at goal \n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+
+// same as (two) above, except that if the robot is within tolerance_radians_fast of desired heading, then it moves forward
 int move_toward_pose_fast(POSE* target_pose, float tolerance_distance, float tolerance_radians, float tolerance_radians_fast)
 {
   float x_dist = target_pose->x - robot_pose->x;
   float y_dist = target_pose->y - robot_pose->y;
+  float dist_to_goal = sqrt(x_dist*x_dist + y_dist*y_dist);
+     
+  //printf("dist to goal: %f, tolerance: %f \n", dist_to_goal, tolerance_distance);
+    
+  if(dist_to_goal > tolerance_distance) // the robot is not close enough
+  {       
+    turn_toward_location_fast(target_pose, tolerance_radians, tolerance_radians_fast);  // the robot is facing in the correct direction to move closer
+  }
+  else // the robot is close enough
+  {
+    setSpeed(0);  
+    if(turn_toward_heading(target_pose, tolerance_radians) == 1) // the robot is facing in the correct direction
+    {
+      //printf(" at goal \n");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// same as above but pose is in a float vector [x y alpha (time)]
+int move_toward_pose_fast(vector<float>& target_pose, float tolerance_distance, float tolerance_radians, float tolerance_radians_fast)
+{
+  float x_dist = target_pose[0] - robot_pose->x;
+  float y_dist = target_pose[1] - robot_pose->y;
   float dist_to_goal = sqrt(x_dist*x_dist + y_dist*y_dist);
      
   //printf("dist to goal: %f, tolerance: %f \n", dist_to_goal, tolerance_distance);
@@ -669,7 +940,7 @@ int follow_path(vector<POSE>& path, float tolerance_distance, int new_path_flag)
   this_dist = min_dist;   
   while(this_dist <= tolerance_distance)
   {
-    next_p_index ++;
+    next_p_index++;
       
     if(next_p_index >= length)
     {
@@ -688,6 +959,210 @@ int follow_path(vector<POSE>& path, float tolerance_distance, int new_path_flag)
   return move_toward_pose_fast(&(path[next_p_index]), tolerance_distance/2, PI/24, PI/6);
 }
 
+// this causes the robot to follow the trajectory T, where point T[i] has the form [x, y, alpha, time]
+// when behind schedual the robot will still follow the trajectory, as it may go around static obstacles, but
+// it will speed up to try to get where it should currently be. new_path_flag = 1 means that a new path has been sent
+// time_look_ahead is the ammount of time into the future we consider to be now.
+
+int current_place_index = 0;   // index of closest point to robot currently
+int current_time_index = 0;    // index of point where robot should be currently
+int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_path_flag)
+{
+  if(robot_pose == NULL)
+    return 0;
+    
+  int length = T.size();
+  if(length <= current_place_index)
+      return 0;
+    
+  float min_dist;
+  float this_dist;
+  float x, y;
+  
+  int previous_current_place_index = 0;
+  int previous_current_time_index = 0;
+  
+  
+  if(new_path_flag != 1) // if a new path has not been recieved
+  {   
+    previous_current_place_index = current_place_index;
+    previous_current_time_index = current_time_index;
+      
+  }   
+  else
+    printf("whaaaaa???? \n");
+  // calculate which point is the closest to the robot, starting with previous_current_place_index
+      
+  // start with 2D location
+  x = T[previous_current_place_index][0] - robot_pose->x;
+  y = T[previous_current_place_index][1] - robot_pose->y;
+  min_dist = sqrt(x*x + y*y);
+  current_place_index = previous_current_place_index;
+    
+  for(int i = previous_current_place_index+1; i < length; i++)
+  {
+    x = T[i][0] - robot_pose->x;
+    y = T[i][1] - robot_pose->y;
+    this_dist = sqrt(x*x + y*y);
+      
+    if(this_dist < min_dist)
+    {
+      min_dist = this_dist;
+      current_place_index = i;
+    }   
+  }
+    
+  // now take orientation into account if there are multiple trajectory points for this location
+  float min_orientation_diff = T[current_place_index][2] - robot_pose->alpha;
+  float this_orientation_diff;
+  while(min_orientation_diff < -PI)
+    min_orientation_diff += 2*PI;
+    
+  while(min_orientation_diff > PI)
+    min_orientation_diff -= 2*PI;
+    
+  if(min_orientation_diff < 0)
+    min_orientation_diff *= -1;
+    
+  for(int i = current_place_index+1; i < length; i++)
+  {
+    if(T[i][0] != T[i-1][0] || T[i][1] != T[i-1][1]) // x and y are not the same
+      break;
+        
+    this_orientation_diff = T[i][2] - robot_pose->alpha;
+      
+    while(this_orientation_diff < -PI)
+      this_orientation_diff += 2*PI;
+    
+    while(this_orientation_diff > PI)
+      this_orientation_diff -= 2*PI;
+    
+    if(this_orientation_diff < 0)
+      this_orientation_diff *= -1;
+        
+    if(this_orientation_diff < min_orientation_diff)
+    {
+      min_orientation_diff = this_orientation_diff;
+      current_place_index = i;    
+    }
+  }
+       
+  // calculate which point the robot should currently be at
+    
+  // find "now" in terms of the time path coordinate
+  ros::Duration elapsed_time = ros::Time::now() - move_start_time;
+  float time_now = elapsed_time.toSec() + time_look_ahead;
+    
+  current_time_index = 0;
+    
+  for(int i = 0; i < length; i++)
+  {
+    current_time_index = i;
+    if(time_now < T[i][3])
+      break;
+  }    
+  
+  int carrot_index;
+  if(current_time_index == current_place_index) // we are on schedual
+  {   
+    carrot_index = current_time_index;
+    
+    // use default speeds
+    TARGET_SPEED = DEFAULT_SPEED;
+    TARGET_TURN = DEFAULT_TURN;
+    
+    printf("on schedule \n");
+  }
+  else if(current_time_index < current_place_index) // we are ahead of schedual
+  {
+    carrot_index = current_time_index;  
+      
+    // stop and wait, maybe change this to just a slow down if faster speeds are used
+    setSpeed(0); 
+    setTurn(0); 
+    
+    float time_ahead = T[current_place_index][3] - T[current_time_index][3];
+    
+    printf("%f secs ahead of schedule \n", time_ahead-time_look_ahead);
+  }
+  else // we are behind schedule
+  {
+    // while carrot_index is within 0.2, look further down the path
+    carrot_index = current_place_index;  
+    this_dist = min_dist;   
+    while(this_dist <= 0.2)
+    { 
+      if(carrot_index >= current_time_index)
+      {
+        carrot_index = current_time_index;
+        break;
+      }
+
+      carrot_index++;
+
+      x = T[carrot_index][0] - robot_pose->x;
+      y = T[carrot_index][1] - robot_pose->y;
+      this_dist = sqrt(x*x + y*y);  
+    }    
+
+    // speed up based on how far behind we are
+    float time_behind = T[current_time_index][3] - T[current_place_index][3];
+    
+    float second_order_speed_increase_paramiter = .3;
+    float second_order_turn_increase_paramiter = 1.0;
+    float speed_increase = time_behind*time_behind*second_order_speed_increase_paramiter;
+    if(speed_increase > .1)
+      speed_increase = .1;
+            
+    float turn_increase = time_behind*time_behind*second_order_turn_increase_paramiter;
+    if(turn_increase > .1)
+      turn_increase = .1;
+    
+    if(current_time_index < current_place_index) // ahead of schedual
+    {
+      speed_increase *= -1.0;
+      turn_increase *= -1.0;
+      printf("%f secs ahead of schedule \n", -time_behind-time_look_ahead);
+    }
+    else
+      printf("%f secs behind schedule \n", time_behind-time_look_ahead);
+
+    TARGET_SPEED = DEFAULT_SPEED + speed_increase;
+    TARGET_TURN = DEFAULT_TURN + turn_increase;
+    
+    
+  }
+  
+   printf("%d %d %f %f \n", current_time_index, current_place_index, T[current_time_index][3], T[current_place_index][3]);
+  
+  // if there is a location difference between current_place_index and carrot_index we need to turn at the new place we want to go
+  if(carrot_index > current_place_index && (T[carrot_index][0] != T[current_place_index][0] || T[carrot_index][1] != T[current_place_index][1]))
+  {
+    move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
+printf("case 1 \n");
+  }
+  else if(carrot_index > current_place_index)
+  {
+printf("case 2 \n");
+
+    // othersise, we just want to turn to face the heading of carrot_index
+    turn_toward_heading(T[carrot_index],  PI/24);
+  }
+  else // we are at the carrot index already
+  {
+    printf("case 3 \n");
+
+    // keep going at previously set speed
+    turn_toward_heading(T[carrot_index],  PI/24);
+  }
+  
+  if(current_place_index == length)
+    return 1;
+  
+  return 0;
+}
+
+
 // returns 1 if the robot is less than dist to the goal
 int within_dist_of_goal(float dist)
 {
@@ -699,6 +1174,17 @@ int within_dist_of_goal(float dist)
     return 1;
   else
     return 0;
+}
+
+void print_2d_float_vector(vector<vector<float> >& V)
+{
+  for(int i = 0; i < (int)V.size(); i++)
+  {
+    for(int j = 0; j < (int)V[i].size(); j++)
+      printf("%f, ", V[i][j]);
+    printf("\n");
+  }
+  printf("\n");
 }
 
 
@@ -810,7 +1296,7 @@ int main(int argc, char * argv[])
     }
     else
     {
-     printf("didn't count on this case \n");
+      printf("didn't count on this case \n");
     }
     
     
@@ -822,11 +1308,25 @@ int main(int argc, char * argv[])
     }
     else if(system_state == 1) // planning and moving normally, 
     {
-      if(within_dist_of_goal(.2) == 0)
-        follow_path(global_path, .3, new_global_path);
+      if(multi_robot_mode)
+      {
+        if(within_dist_of_goal(.2) == 0)
+          follow_trajectory(trajectory, 0.5, new_global_path); // last argument should be changed to 1 the first time and 0 after that for speed
+        else
+        {
+          move_toward_pose(global_goal_pose, .3, PI/12);
+          ///printf("here ---\n");
+
+        }
+      }
       else
-        move_toward_pose(global_goal_pose, .3, PI/12);
-            
+      { 
+        if(within_dist_of_goal(.2) == 0)
+          follow_path(global_path, .3, new_global_path);
+        else
+          move_toward_pose(global_goal_pose, .3, PI/12);
+      }
+      
       new_global_path = 0;    
     }
     else if(system_state == 2) // bumper hit, backing up
@@ -863,6 +1363,8 @@ int main(int argc, char * argv[])
     else if(system_state == 5) // manual control
     {
        // manual navigation handled by callback functions     
+        
+       printf("speed: %f, turn: %f \n", speed, turn);      
     }
  
     
