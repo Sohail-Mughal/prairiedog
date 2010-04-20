@@ -29,7 +29,8 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
 
-rosbuild_add_executable(demo src/disp.cpp)
-target_link_libraries(demo ncurses) 
+# the following may have problems on some machines and is not really used anymore
+#rosbuild_add_executable(demo src/disp.cpp)
+#target_link_libraries(demo ncurses) 
 
 rosbuild_add_executable(irobot_create_cu src/irobot_create_cu.cpp)
