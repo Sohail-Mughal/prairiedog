@@ -221,7 +221,7 @@ void odometer_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   // remember old posterior x and y
   float old_x = posterior_pose->x;
   float old_y = posterior_pose->y;
-  
+
   // note this assumes robot rotation is only in the 2D plane (and also constant velocity = average velocity between updates)
   odometer_pose->x = msg->x;
   odometer_pose->y = msg->y;
@@ -431,7 +431,7 @@ void publish_pose()
       catch(tf::TransformException ex)
       { 
         //printf("attempt failed \n");
-        ROS_ERROR("mapper 2: %s",ex.what());
+        ROS_ERROR("localization 2: %s",ex.what());
         setup_tf_2 = true;  
       }   
     }    
@@ -442,7 +442,7 @@ void publish_pose()
     }
     catch (tf::TransformException ex)
     {
-      ROS_ERROR("mapper 2: %s",ex.what());
+      ROS_ERROR("localization 2: %s",ex.what());
       return;
     }
   }
@@ -502,7 +502,7 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
       catch(tf::TransformException ex)
       { 
         //printf("attempt failed \n");
-        ROS_ERROR("mapper 3: %s",ex.what());
+        ROS_ERROR("localization 3: %s",ex.what());
         setup_tf_3 = true;  
       }   
     } 
@@ -513,7 +513,7 @@ bool get_pose_callback(localization_cu::GetPose::Request &req, localization_cu::
     }
     catch (tf::TransformException ex)
     {
-      ROS_ERROR("mapper 3: %s",ex.what());
+      ROS_ERROR("localization 3: %s",ex.what());
       return false;
     }
     
@@ -583,7 +583,14 @@ int main(int argc, char** argv)
   // initialize pose structs
   odometer_pose = make_pose(odometer_pose_x_init, odometer_pose_y_init, odometer_pose_z_init, odometer_pose_theta_init);
   posterior_pose = make_pose(posterior_pose_x_init, posterior_pose_y_init, posterior_pose_z_init, posterior_pose_theta_init);
-    
+  local_offset[0] = odometer_pose->x;
+  local_offset[1] = odometer_pose->y;
+  local_offset[2] = odometer_pose->alpha;
+  global_offset[0] = posterior_pose->x;
+  global_offset[1] = posterior_pose->y;
+  global_offset[2] = posterior_pose->alpha;
+  
+  
   // set up publisher
   pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
     
