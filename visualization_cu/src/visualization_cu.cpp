@@ -182,6 +182,8 @@ int user_control_state = 0; // as broadcast by this node
 int safe_path_exists = 0;
 bool setup_tf = true; // flag used to indicate that required transforms are available
 
+bool no_publish = false; // if true, then will not publish to manual control topics
+
 /*-------------------- basic drawing functions --------------------------*/
 
 int max(int a, int b)
@@ -1317,6 +1319,9 @@ void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
 /*----------------------- ROS Publisher Functions -----------------------*/
 void publish_user_control(int x, int theta)
 {
+  if(no_publish)
+    return;
+
   geometry_msgs::Pose2D msg;
   msg.x = x;
   msg.theta = change_turn;
@@ -1325,6 +1330,9 @@ void publish_user_control(int x, int theta)
 
 void publish_user_state(int u_state)
 {
+  if(no_publish)
+    return;
+
   std_msgs::Int32 msg;  
   
   msg.data = u_state;
@@ -2164,7 +2172,9 @@ int main(int argc, char *argv[])
     global_map_theta_offset = (float)param_input;                          // the map is this far off of the world coordinate system in the rotationally
   if(ros::param::get("base_planner_cu/robot_radius", param_input)) 
     robot_display_radius = param_input;                                    //(m)
-  
+  if(ros::param::get("visualization_cu/no_user_control_pub", bool_input)) 
+    no_publish = bool_input;                                               // when true this node does not publish user control data
+
   if(using_tf)
     printf("using tf\n");
   else
