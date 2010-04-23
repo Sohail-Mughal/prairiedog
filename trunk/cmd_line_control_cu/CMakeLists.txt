@@ -30,6 +30,6 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #rosbuild_add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
 
-find_package(NCURSES)
+find_package(Curses)
 rosbuild_add_executable(cmd_line_control_cu src/cmd_line_control_cu.cpp)
-target_link_libraries(cmd_line_control_cu ${NCURSES}) 
+target_link_libraries(cmd_line_control_cu ${CURSES_LIBRARY}) 
