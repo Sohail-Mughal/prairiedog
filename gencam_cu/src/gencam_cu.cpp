@@ -71,7 +71,7 @@ public:
     image_transport::ImageTransport it(node);
 
     image_pub = it.advertise("image_raw", 1);
-    int camera_num = 1;
+    int camera_num = -1;
     ros::NodeHandle nh("~");
     nh.getParam("camera_index", camera_num);
     printf("%d", camera_num);
@@ -115,7 +115,7 @@ public:
     key = cvWaitKey(10);
 #endif
     // fill image message
-    fillImage(img_, "bgr8", src->height,src->height, src->nChannels  * src->width, src->imageData);
+    fillImage(img_, "bgr8", src->height,src->width, src->nChannels  * src->width, src->imageData);
     // publish
     image_pub.publish(img_);
     return true;
