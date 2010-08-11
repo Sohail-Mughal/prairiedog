@@ -1364,7 +1364,7 @@ int main(int argc, char * argv[])
     {
        // manual navigation handled by callback functions     
         
-       printf("speed: %f, turn: %f \n", speed, turn);      
+       //printf("speed: %f, turn: %f \n", speed, turn);      
     }
  
     
