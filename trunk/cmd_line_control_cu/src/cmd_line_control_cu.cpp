@@ -70,9 +70,6 @@
 // global ROS publisher handles
 ros::Publisher user_control_pub;
 ros::Publisher user_state_pub;
-
-// other ROS globals
-ros::Rate loop_rate(100);
         
 // globals used to set user robot control
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
@@ -106,7 +103,7 @@ int main(int argc, char *argv[])
   // init ROS stuff  
   ros::init(argc, argv, "cmd_line_control_cu");  
   ros::NodeHandle nh;
-  
+  ros::Rate loop_rate(100);
  
   // set up ROS topic publishers
   user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
