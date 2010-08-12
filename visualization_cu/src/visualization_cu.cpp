@@ -157,9 +157,6 @@ ros::Publisher goal_pub;
 ros::Publisher new_pose_pub;
 ros::Publisher user_control_pub;
 ros::Publisher user_state_pub;
-
-// other ROS globals
-ros::Rate loop_rate(100);
         
 // globals used to set user robot control
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
@@ -2157,6 +2154,7 @@ int main(int argc, char *argv[])
   // init ROS stuff  
   ros::init(argc, argv, "visualization_cu");  
   ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
   ROS_INFO("Welcome to CU visualization");
   
   // load globals from parameter server
