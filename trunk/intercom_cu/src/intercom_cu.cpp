@@ -1,0 +1,1045 @@
+/*  
+ *  Copyrights:
+ *  Michael Otte July. 2010
+ *
+ *  This file is part of intercom_cu.
+ *
+ *  intercom_cu is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  client_server_cu is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with client_server_cu. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *  If you require a different license, contact Michael Otte at
+ *  michael.otte@colorado.edu
+ *
+ *
+ *  This listens to data from the client computer, then broadcasts on the approperiate topics 
+ *  server computer.
+ */
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <assert.h>
+#include <time.h>
+#include <math.h>
+#include <list>
+#include <sstream>
+#include <iostream>   // file I/O
+#include <fstream>   // file I/O
+#include <vector>
+#include <pthread.h>
+#include <string>
+
+#include <ros/ros.h>
+#include <tf/transform_listener.h>
+#include <tf/transform_broadcaster.h>
+#include <tinyxml/tinyxml.h>
+
+#include "roslib/Header.h"
+
+#include "geometry_msgs/PoseArray.h"
+#include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/Pose2D.h"
+#include "geometry_msgs/PolygonStamped.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "geometry_msgs/Point32.h"
+
+#include "nav_msgs/Path.h"
+#include "nav_msgs/GetMap.h"
+#include "nav_msgs/GridCells.h"
+
+#include "sensor_msgs/PointCloud.h"
+
+#include "move_base_msgs/MoveBaseActionGoal.h"
+
+#include "hokuyo_listener_cu/PointCloudWithOrigin.h"
+
+#include "std_msgs/Int32.h"
+
+#include "ros_to_buffer.cpp"
+
+#ifndef PI
+  #define PI 3.1415926535897
+#endif
+      
+#ifndef SQRT2
+  #define SQRT2 1.414213562373095
+#endif
+      
+#define SCANNER_RANGE 5.5 // the range of the scanner in meters;
+        
+using namespace std;      
+        
+// globals that can be reset using parameter server, see main();
+bool using_tf = true;              // when set to true, use the tf package
+
+int max_message_size = 500000;
+
+// global ROS subscriber handles
+ros::Subscriber new_goal_sub;
+ros::Subscriber new_pose_sub;
+ros::Subscriber user_control_sub;
+ros::Subscriber user_state_sub;
+
+ros::Subscriber pose_sub;
+ros::Subscriber global_path_sub;
+ros::Subscriber goal_sub;
+ros::Subscriber laser_scan_sub;
+ros::Subscriber map_changes_sub;
+ros::Subscriber system_state_sub;
+ros::Subscriber system_update_sub;
+
+// global ROS publisher handles
+ros::Publisher pose_pub;
+ros::Publisher global_path_pub;
+ros::Publisher goal_pub;
+ros::Publisher laser_scan_pub;
+ros::Publisher map_changes_pub;
+ros::Publisher system_state_pub;
+ros::Publisher system_update_pub;
+
+ros::Publisher new_goal_pub;
+ros::Publisher new_pose_pub;
+ros::Publisher user_control_pub;
+ros::Publisher user_state_pub;
+
+// global ROS provide service server handles
+ros::ServiceServer get_map_srv;
+
+// helper functions
+void error(const char *msg)
+{
+    perror(msg);
+}
+
+// store globals in this class so that we can have access to them from different threads
+class GlobalVariables
+{
+  public:
+
+   GlobalVariables();
+   GlobalVariables(int id, int total_agents); 
+   ~GlobalVariables();
+   
+   void Populate(int id, int total_agents);  // populate GlobalVariables
+   
+   bool read_IPS_from_file(std::string& config_file);       // reads the IPS from a file
+   bool set_up_OtherAddresseses();                         // sets other address data
+   bool set_up_MyAddress();                                // sets up outgoing socket
+   
+   void send_to_agent(void* buffer, size_t buffer_size, int ag);      // sends data to agent ag
+   void send_to_all_agents(void* buffer, size_t buffer_size); // sends data to all other agents
+   
+   // ip addresses
+   std::string MyIP;
+   vector<std::string> OtherIPs;
+      
+   // ports
+   int MyInPort;
+   int MyOutPort;
+   
+   vector<int> OtherInPorts;
+   
+   // socket numbers
+   int  MyInSock;
+   int  MyOutSock;
+      
+   // addresses
+   struct sockaddr_in MyAddress;
+   vector<struct sockaddr_in> OtherAddresses;
+   
+   // my agent id
+   int my_id;
+   
+   // total number of agents
+   int num_agents;
+   
+   // the agent we are currently communicating with
+   int target_agent;
+   
+   // message types we send, 'send_list[i] = true' denotes message type i is sent (via udp)
+   vector<bool> send_list;
+   
+   // message types we recieve 'listen_list[i] = true' denotes message type i is listened for (via udp)
+   vector<bool> listen_list;
+   
+   // global inter-thread flags and storage for service interaction
+   bool service_received_map;
+   nav_msgs::OccupancyGrid service_response_map;
+};
+GlobalVariables Globals;
+
+GlobalVariables::GlobalVariables()  
+{   
+  my_id = -1;
+  
+  MyOutSock = -1;
+  MyInSock = -1;
+  
+  num_agents = 0;
+  
+  target_agent = 0;
+  
+  service_received_map = false;
+}
+
+GlobalVariables::GlobalVariables(int id, int total_agents)  
+{  
+  my_id = id;  
+  
+  MyInSock = -1;
+  MyOutSock = -1;
+  
+  num_agents = total_agents;
+  
+  service_received_map = false;
+       
+  MyInPort = 57001 + id;
+  MyOutPort = 67001 + id;
+            
+  OtherInPorts.resize(num_agents);
+  for(int i = 0; i < num_agents; i++)
+    OtherInPorts[i] = 57001 + i;  
+  
+  OtherIPs.resize(num_agents);
+  OtherAddresses.resize(num_agents);
+}
+
+GlobalVariables::~GlobalVariables()  // destructor
+{
+}
+
+void GlobalVariables::Populate(int id, int total_agents) // populate GlobalVariables
+{
+  my_id = id;  
+  
+  MyInSock = -1;
+  MyOutSock = -1;
+  
+  num_agents = total_agents;
+  
+  service_received_map = false;
+       
+  MyInPort = 57001 + id;
+  MyOutPort = 67001 + id;
+  
+  OtherInPorts.resize(num_agents);
+  for(int i = 0; i < num_agents; i++)
+    OtherInPorts[i] = 57001 + i;  
+  
+  OtherIPs.resize(num_agents);
+  OtherAddresses.resize(num_agents);
+}
+
+
+bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // reads the IPs from a file
+{
+  TiXmlDocument doc(config_file.c_str());
+  if(!doc.LoadFile())
+  {
+    printf("Failed to load file: %s \n", config_file.c_str());
+    return false;
+  }
+
+  printf("loaded config file:\n");  
+
+  // init to not send or recieve anything
+  int NUM_MESSAGE_TYPES = 14;
+  send_list.resize(NUM_MESSAGE_TYPES, false);
+  listen_list.resize(NUM_MESSAGE_TYPES, false);
+  
+  //ADD ERROR CHECKING TO THE NEXT PART (look if TiXmlElement are null or not)
+  // read data about each node
+  TiXmlElement* agents_el = doc.RootElement();
+  TiXmlElement* agent_el = 0;
+  int i = 0;
+  while((agent_el = (TiXmlElement*)(agents_el->IterateChildren(agent_el))) && i < num_agents)
+  {
+    int i_id = atoi(agent_el->Attribute("id"));
+    
+    if(i_id >= num_agents)
+    {
+      printf("warning: agent id (%d) >= num agents (%d), so skipping it. \n", i_id, num_agents);
+      continue;
+    }
+    
+    const char* ip = agent_el->Attribute("ip");
+    OtherIPs[i_id].assign(ip);
+    printf("%d: %s\n", i_id, OtherIPs[i].c_str());
+    
+    if(i_id == my_id) // need to get lists of what we send and receive
+    {
+      TiXmlElement* broadcast_el = agent_el->FirstChildElement("broadcast");
+      TiXmlElement* message_el = 0;
+        
+      printf(" broadcast: \n");
+      while((message_el = (TiXmlElement *)(broadcast_el->IterateChildren(message_el))))
+      {
+        int message_type = atoi(message_el->Attribute("type"));
+        send_list[message_type] = true;
+        printf("  %d \n", message_type);
+      }
+    
+    
+      TiXmlElement *receive_el = agent_el->FirstChildElement("receive");
+      message_el = 0;
+        
+      printf(" receive: \n");
+      while((message_el = (TiXmlElement *)(receive_el->IterateChildren(message_el))))
+      {
+        int message_type = atoi(message_el->Attribute("type"));
+        listen_list[message_type] = true;
+        printf("  %d \n", message_type);
+      }
+      
+      
+    }  
+    
+    i++;   
+  }
+  MyIP = OtherIPs[my_id];  
+    
+//   if(my_id == 0)
+//   {
+//     send_list[0] = false;
+//     send_list[1] = false;
+//     send_list[2] = false;
+//     send_list[3] = false;
+//     send_list[4] = false;
+//     send_list[5] = false;
+//     send_list[6] = true;
+//     send_list[7] = true;
+//     send_list[8] = true;
+//     send_list[9] = true;
+//     send_list[10] = false;
+//     send_list[11] = true;
+//     send_list[12] =  false; 
+//     send_list[13] =  false;
+//             
+//     listen_list[0] = true;
+//     listen_list[1] = true;
+//     listen_list[2] = true;
+//     listen_list[3] = true;
+//     listen_list[4] = true;
+//     listen_list[5] = true;
+//     listen_list[6] = false;
+//     listen_list[7] = false;
+//     listen_list[8] = false;
+//     listen_list[9] = false;
+//     listen_list[10] = true;
+//     listen_list[11] = false;
+//     listen_list[12] =  true;
+//     listen_list[13] =  true;
+//   }
+//   else if(my_id == 1)
+//   {
+// //     send_list[0] = true;
+// //     send_list[1] = true;
+// //     send_list[2] = true;
+// //     send_list[3] = true;
+// //     send_list[4] = true;
+// //     send_list[5] = true;
+// //     send_list[6] = false;
+// //     send_list[7] = false;
+// //     send_list[8] = false;
+// //     send_list[9] = false;
+// //     send_list[10] = true;
+// //     send_list[11] = false;
+// //     send_list[12] = true;
+// //     send_list[13] = true;
+// //             
+// //     listen_list[0] = false;
+// //     listen_list[1] = false;
+// //     listen_list[2] = false;
+// //     listen_list[3] = false;
+// //     listen_list[4] = false;
+// //     listen_list[5] = false;
+// //     listen_list[6] = true;
+// //     listen_list[7] = true;
+// //     listen_list[8] = true;
+// //     listen_list[9] = true;
+// //     listen_list[10] = false;
+// //     listen_list[11] = true;
+// //     listen_list[12] = false;
+// //     listen_list[13] = false;
+//       
+//      send_list[0] = false;
+//     send_list[1] = false;
+//     send_list[2] = false;
+//     send_list[3] = false;
+//     send_list[4] = false;
+//     send_list[5] = false;
+//     send_list[6] = false;
+//     send_list[7] = false;
+//     send_list[8] = false;
+//     send_list[9] = false;
+//     send_list[10] = false;
+//     send_list[11] = false;
+//     send_list[12] = false;
+//     send_list[13] = false;
+//             
+//     listen_list[0] = false;
+//     listen_list[1] = false;
+//     listen_list[2] = false;
+//     listen_list[3] = false;
+//     listen_list[4] = false;
+//     listen_list[5] = false;
+//     listen_list[6] = false;
+//     listen_list[7] = false;
+//     listen_list[8] = false;
+//     listen_list[9] = false;
+//     listen_list[10] = false;
+//     listen_list[11] = false;
+//     listen_list[12] = false;
+//     listen_list[13] = false;     
+//       
+//       
+//   }
+  return true;
+}
+
+bool GlobalVariables::set_up_OtherAddresseses() // sets up other address data
+{
+  for(int i = 0; i < num_agents; i++)
+  {
+    if(i == my_id)
+      continue;
+    
+    struct hostent *hp_this = gethostbyname(OtherIPs[i].c_str());
+     
+    if(hp_this==0) 
+    {
+      error("Unknown host");
+      continue;
+    }
+
+    // populate OtherAddresseses
+    OtherAddresses[i].sin_family = AF_INET;
+
+    bcopy((char *)hp_this->h_addr, (char *)&OtherAddresses[i].sin_addr, hp_this->h_length); // copy in address
+
+    OtherAddresses[i].sin_port = htons(OtherInPorts[i]);       
+  }
+
+  return true;
+}
+
+bool GlobalVariables::set_up_MyAddress() // sets up outgoing socket
+{
+  if(MyOutSock < 0)
+  {
+    MyOutSock = socket(AF_INET, SOCK_DGRAM, 0); 
+    if(MyOutSock < 0)        // failed to create socket
+    {
+      error("problems creating socket");
+      return false;
+    }
+  }
+
+  if(MyInSock < 0)
+  {
+    MyInSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if(MyInSock < 0)  // failed to open socket
+    {
+      error("Problems opening socket\n");
+      return false;
+    }
+  }
+  
+  // clear all memory of MyAddress structure
+  int MyAddress_length = sizeof(MyAddress);
+  memset(&(MyAddress), NULL, MyAddress_length); 
+   
+  // populate MyAddress structure
+  MyAddress.sin_family = AF_INET;
+  MyAddress.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
+  MyAddress.sin_port = htons(MyInPort);  // htons() converts 'number' to proper network byte order
+
+  // bind in_socket with MyAddress
+  if(bind(MyInSock, (struct sockaddr *)&(MyAddress), MyAddress_length)<0) 
+  {
+    error("problems binding MyInSock");
+    return false;
+  }
+
+  return true;
+}
+
+void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) // sends data to agent ag
+{
+  //printf("trying to send: %s\n", (char*)buffer);
+  int sent_size = sendto(MyOutSock, buffer, buffer_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
+  if(sent_size < 0) 
+    error("Problems sending data");
+}
+
+void GlobalVariables::send_to_all_agents(void* buffer, size_t buffer_size) // sends data to all other agents
+{
+  for(int i = 0; i < num_agents; i++)
+  {
+    if(i == my_id)
+      continue;
+    send_to_agent(buffer, buffer_size, i);
+  } 
+}
+
+
+/*--------------------------  listner thread ----------------------------*/
+void *Listner(void * inG)
+{
+  GlobalVariables* G = (GlobalVariables*)inG;  
+  char message_buffer[max_message_size];
+  struct sockaddr_in senders_address;
+    
+  while(true)
+  {
+    int senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct  
+    memset(&message_buffer,'\0',sizeof(message_buffer)); 
+    int message_length = recvfrom(G->MyInSock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
+    if(message_length < 0) 
+      printf("had problems getting a message \n");
+    
+    size_t buffer_ptr = (size_t)message_buffer;
+    size_t buffer_max = buffer_ptr + (size_t)max_message_size;
+    
+    // get sending agent
+    int sending_agent = -1;
+    buffer_ptr = extract_from_buffer_int(buffer_ptr, sending_agent, buffer_max); 
+    
+    // get message type
+    uint message_type;
+    buffer_ptr = extract_from_buffer_uint(buffer_ptr, message_type, buffer_max); 
+
+    //printf("recieved message type %d from %d \n", (int)message_type, sending_agent); 
+    
+    if(message_type == 0 && G->listen_list[0]) // it is a pose message
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      pose_pub.publish(msg);
+      
+      //printf("pose message:\n %f\n %f\n %f\n %f\n %f\n %f\n %f\n\n", msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z);       
+      //double secs = msg.header.stamp.toSec();
+      //printf("header: %d, %f, %s \n", (int)msg.header.seq, secs, msg.header.frame_id.c_str());
+    }
+    else if(message_type == 1 && G->listen_list[1]) // it is a goal message
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      goal_pub.publish(msg);
+    } 
+    else if(message_type == 2 && G->listen_list[2]) // it is a system state message
+    {
+      std_msgs::Int32 msg;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      system_state_pub.publish(msg);
+    } 
+    else if(message_type == 3 && G->listen_list[3]) // it is a system update message
+    {
+      std_msgs::Int32 msg;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      system_update_pub.publish(msg);
+    }
+    else if(message_type == 4 && G->listen_list[4]) // it is a map changes message
+    {
+      sensor_msgs::PointCloud msg;
+      buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
+      map_changes_pub.publish(msg);
+    } 
+    else if(message_type == 5 && G->listen_list[5]) // it is a global path message
+    {
+      nav_msgs::Path msg;
+      buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
+      global_path_pub.publish(msg);
+    }
+    else if(message_type == 6 && G->listen_list[6]) // it is a goal reset message
+    {
+       geometry_msgs::PoseStamped msg;
+       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+       new_goal_pub.publish(msg);
+    } 
+    else if(message_type == 7 && G->listen_list[7]) // it is a pose reset message
+    {
+       geometry_msgs::PoseStamped msg;
+       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+       new_pose_pub.publish(msg);
+    } 
+    else if(message_type == 8 && G->listen_list[8]) // it is a user control message
+    {
+       geometry_msgs::Pose2D msg;
+       buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
+       user_control_pub.publish(msg);
+    }
+    else if(message_type == 9 && G->listen_list[9]) // it is a user state message
+    {
+       std_msgs::Int32 msg;
+       buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+       user_state_pub.publish(msg);
+    }
+    else if(message_type == 10 && G->listen_list[10]) // it is a laser scan message
+    {
+      hokuyo_listener_cu::PointCloudWithOrigin msg;
+      buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
+      laser_scan_pub.publish(msg);
+    }
+    else if(message_type == 11 && G->listen_list[11]) // it is a map service request message
+    {
+      nav_msgs::GetMap::Request  req;
+      nav_msgs::GetMap::Response resp;
+      
+      if(G->send_list[12])
+      {
+        if(ros::service::call("/cu/get_map_cu", req, resp) )
+        {
+          // send response to master
+         
+          uint this_msg_size = max_message_size; 
+          char buffer[this_msg_size];
+          size_t buffer_ptr = (size_t)buffer;
+          size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+   
+          buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+          buffer_ptr = add_to_buffer_uint(buffer_ptr, 12, buffer_max);                // add messagetype 12
+          buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max); // add occupancy grid
+        
+          Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master    
+        }
+      }
+    }
+    else if(message_type == 12 && G->listen_list[12]) // it is a map service response message
+    {
+      if(!Globals.service_received_map)
+      {
+        // store in globals so service provider can access it
+        buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
+        Globals.service_received_map = true;
+      }
+    }
+    else if(message_type == 13 && G->listen_list[13]) // it is a "/map_cu" -> "/world_cu" transform
+    {
+      if(using_tf)
+      {
+        static tf::TransformBroadcaster br;  
+        tf::StampedTransform transform;   
+
+        buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
+        transform.frame_id_ = std::string("/map_cu");
+        transform.child_frame_id_ = std::string("/world_cu");
+        
+        br.sendTransform(transform);
+        
+      }
+    }
+  }
+}
+
+/*----------------------- ROS Callbacks ---------------------------------*/
+void goal_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 6, buffer_max);                     // add messagetype 6
+  buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);           // add posestamped
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to client 
+}
+
+void pose_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 7, buffer_max);                     // add messagetype 7
+  buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);           // add posestamped
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to client 
+}
+
+void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
+{    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 8, buffer_max);                     // add messagetype 8
+  buffer_ptr = add_to_buffer_Pose2D(buffer_ptr, *msg, buffer_max);               // add posestamped
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master
+}
+
+void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
+{        
+  uint this_msg_size = 20; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 9, buffer_max);                     // add messagetype 9
+  buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);             // add int
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+
+bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &resp)
+{
+  // need to send message to client requesting map
+  ros::Rate loop_rate(100);
+  
+  uint this_msg_size = 20; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 11, buffer_max);                    // add messagetype 11  
+  
+  Globals.service_received_map = false;
+  while(!Globals.service_received_map) // wait for response
+  {
+    Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master   
+    loop_rate.sleep();
+  }
+  
+  // now the map info is available in Globals.service_response_map
+  resp.map = Globals.service_response_map;
+  
+  return true;
+}
+
+void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  if(msg->header.frame_id != "/map_cu")
+      ROS_INFO("Received unknown pose message");
+    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 0, buffer_max);                // add messagetype 0
+  buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);      // add posestamped
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master
+  
+  //printf("sending:\n %f\n %f\n %f\n %f\n %f\n %f\n %f\n\n",msg->pose.position.x, msg->pose.position.y, msg->pose.position.z, msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z );
+  //double secs = msg->header.stamp.toSec();
+  //printf("header:\n %d, %s, %f\n", (int)msg->header.seq, msg->header.frame_id.c_str(), secs);
+}
+
+void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
+{     
+  uint this_msg_size = max_message_size; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 5, buffer_max);                // add messagetype 5
+  buffer_ptr = add_to_buffer_Path(buffer_ptr, *msg, buffer_max);             // add path
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+
+void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 1, buffer_max);                // add messagetype 1
+  buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);      // add posestamped
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+ 
+void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
+{    
+  uint this_msg_size = max_message_size; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);      // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 10, buffer_max);                   // add messagetype 10
+  buffer_ptr = add_to_buffer_PointCloudWithOrigin(buffer_ptr, *msg, buffer_max); // add pointcloud with origin
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+
+void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
+{    
+  uint this_msg_size = max_message_size; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 4, buffer_max);                // add messagetype 4
+  buffer_ptr = add_to_buffer_PointCloud(buffer_ptr, *msg, buffer_max);       // add pointcloud
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master  
+}
+
+void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
+{        
+  uint this_msg_size = 20; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 2, buffer_max);                // add messagetype 2
+  buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);        // add int
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+
+void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
+{      
+  uint this_msg_size = 20; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 3, buffer_max);                // add messagetype 3
+  buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);        // add int
+
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master  
+}
+
+void transform_sender(const tf::StampedTransform& t)
+{      
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, 13, buffer_max);               // add messagetype 13
+  buffer_ptr = add_to_buffer_StampedTransform(buffer_ptr, t, buffer_max);    // add StampedTransform 
+          
+  Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master 
+}
+
+int main(int argc, char * argv[]) 
+{    
+  // init ROS
+  ros::init(argc, argv, "server_cu");
+  ros::NodeHandle nh;
+  ros::Rate loop_rate(100);
+ 
+  int my_id_default = 0;
+  int num_agents_default = 1;
+  std::string config_file;
+  
+  // load globals from command line
+  if(argc > 1)
+    my_id_default = atoi(argv[1]);      // this robots id
+  if(argc > 2)    
+    num_agents_default = atoi(argv[2]); // total number of robots
+  
+  // load (or overwrite) globals from parameter server
+  bool bool_input;
+  int int_input;
+  std::string string_input;
+  if(ros::param::get("intercom_cu/my_id", int_input)) 
+    my_id_default = int_input;          // this robot's id
+  if(ros::param::get("intercom_cu/num_agents", int_input)) 
+    num_agents_default = int_input;     // total number of robots
+  if(ros::param::get("intercom_cu/config_file", string_input))                       
+    config_file = string_input;         // the config file with ip and other data
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;              // when set to true, use the tf package 
+  
+  printf("I am agent %d of %d \n", my_id_default, num_agents_default); 
+    
+  Globals.Populate(my_id_default, num_agents_default);
+  Globals.read_IPS_from_file(config_file);
+  
+  // set up ROS topic subscriber callbacks
+  if(Globals.send_list[0])
+    pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+  if(Globals.send_list[1]) 
+    goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
+  if(Globals.send_list[2])
+    system_state_sub = nh.subscribe("/cu/system_state_cu", 10, system_state_callback);
+  if(Globals.send_list[3])
+    system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
+  if(Globals.send_list[4])
+    map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
+  if(Globals.send_list[5])
+    global_path_sub = nh.subscribe("/cu/global_path_cu", 2, global_plan_callback);
+  if(Globals.send_list[6])
+    new_goal_sub = nh.subscribe("/cu/reset_goal_cu", 1, goal_reset_callback);
+  if(Globals.send_list[7])
+    new_pose_sub = nh.subscribe("/cu/user_pose_cu", 1, pose_reset_callback); 
+  if(Globals.send_list[8])
+    user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
+  if(Globals.send_list[9])
+    user_state_sub = nh.subscribe("/cu/user_state_cu", 1, user_state_callback); 
+  if(Globals.send_list[10])
+    laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
+
+  // set up ROS topic publishers
+  if(Globals.listen_list[0])
+    pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
+  if(Globals.listen_list[1]) 
+    goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
+  if(Globals.listen_list[2])
+    system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 1);
+  if(Globals.listen_list[3])
+    system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 1);
+  if(Globals.listen_list[4])
+    map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+  if(Globals.listen_list[5])
+    global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
+  if(Globals.listen_list[6])
+    new_goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
+  if(Globals.listen_list[7])
+    new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
+  if(Globals.listen_list[8])
+    user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
+  if(Globals.listen_list[9])
+     user_state_pub = nh.advertise<std_msgs::Int32>("/cu/user_state_cu", 1);
+  if(Globals.listen_list[10])
+    laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
+      
+  // set up service servers
+  if(Globals.send_list[11])
+    get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
+
+  while(! Globals.set_up_MyAddress())
+  {}
+
+  while(! Globals.set_up_OtherAddresseses())
+  {}
+
+  pthread_t Listener_thread;
+  pthread_create(&Listener_thread, NULL, Listner, &Globals); // listens for incomming messages
+
+  // 'prime' transform listners
+  bool setup_tf = false;             // flag used to help init tf
+  static tf::TransformListener listener_map_world;  
+  tf::StampedTransform transform_map_world; 
+  ros::Time get_most_recent(0);
+  
+  
+  if(Globals.send_list[13])
+  {
+    if(using_tf)
+    {
+      while(setup_tf)  // there is usually a problem looking up the first transform, so do this to avoid that
+      {
+        try
+        {
+          // "/map_cu" -> "/world_cu"
+          listener_map_world.waitForTransform("/map_cu", "/world_cu", ros::Time(0), ros::Duration(3.0));
+          listener_map_world.lookupTransform(std::string("/map_cu"), std::string("/world_cu"), get_most_recent, transform_map_world);
+        }
+        catch(tf::TransformException ex)
+        { 
+          //printf("attempt failed \n");
+          ROS_ERROR("client_server: %s",ex.what());
+          setup_tf = true;  
+        }   
+      } 
+    }
+  }
+  
+  
+  while (nh.ok()) 
+  {   
+    // listen for transforms
+    if(Globals.send_list[13])
+    {
+      if(using_tf)
+      {
+        // if using tf then we want to send in the world_cu frame
+        bool no_problems_with_transform = true;
+        try
+        {  
+          // "/map_cu" -> "/world_cu" transform
+          listener_map_world.lookupTransform(std::string("/map_cu"), std::string("/world_cu"), get_most_recent, transform_map_world);
+        }
+        catch (tf::TransformException ex)
+        {
+          ROS_ERROR("client_server: %s",ex.what());
+          no_problems_with_transform = false;
+        }
+        
+        if(no_problems_with_transform) 
+          transform_sender(transform_map_world);  
+      } 
+    }
+    
+    ros::spinOnce();
+    loop_rate.sleep();
+    
+    
+  } // end main control loop
+  
+  
+  
+  // destroy subscribers
+  new_goal_sub.shutdown();
+  new_pose_sub.shutdown();
+  user_control_sub.shutdown();
+  user_state_sub.shutdown();
+ 
+  pose_sub.shutdown();
+  global_path_sub.shutdown();
+  goal_sub.shutdown();
+  laser_scan_sub.shutdown();
+  map_changes_sub.shutdown();
+  system_state_sub.shutdown();
+  system_update_sub.shutdown();
+  
+  // destroy publishers
+  pose_pub.shutdown();
+  global_path_pub.shutdown();
+  goal_pub.shutdown();
+  laser_scan_pub.shutdown();
+  map_changes_pub.shutdown();
+  system_state_pub.shutdown();
+  system_update_pub.shutdown();
+  
+  new_goal_pub.shutdown();
+  new_pose_pub.shutdown();
+  user_control_pub.shutdown();
+  user_state_pub.shutdown();
+  
+  // destroy service providers
+  get_map_srv.shutdown();
+  
+  return 0;
+}
