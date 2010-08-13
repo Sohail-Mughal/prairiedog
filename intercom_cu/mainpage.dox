@@ -1,0 +1,28 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b intercom_cu listens for incoming topics on the host robot then sends the messages over udp to a predefined list of IPs. It also gets messages from other intercom_cu nodes running on other IPs and broadcasts them on topics on the host robot. Service requests and replies are handled in a similar fashion.
+
+\section rosapi ROS API
+
+List of nodes:
+- \b intercom_cu
+
+<hr>
+
+\subsection intercom_cu
+
+
+\subsubsection Usage
+\verbatim
+$ intercom_cu
+\end verbatim
+
+\par Example
+
+\verbatim
+$ intercom_cu
+\end verbatim
+
+*/
