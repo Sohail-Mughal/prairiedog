@@ -326,6 +326,13 @@ size_t add_to_buffer_StampedTransform(size_t buffer_ptr, const tf::StampedTransf
   return buffer_ptr;
 }
 
+size_t add_to_buffer_ethernetheader(size_t buffer_ptr, int id, uint messagetype, size_t buffer_max) // adds space for an ethernet header at the buffer pointed to by (void*)buffer_ptr, returns the next free location in the buffer, errors if try to insert past buffer_max
+{
+  buffer_ptr = add_to_buffer_int(buffer_ptr, id, buffer_max);             // add agentID
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, messagetype, buffer_max);   // add messagetype
+  return buffer_ptr;
+}
+
 /*------------ functions for extracting ros data to a buffer ------------*/
 size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 {
