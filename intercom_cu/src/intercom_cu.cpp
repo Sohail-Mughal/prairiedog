@@ -72,6 +72,9 @@
 
 #include "std_msgs/Int32.h"
 
+
+#include "intercom_cu/PoseStamped_CU_ID.h"
+
 #include "ros_to_buffer.cpp"
 
 #ifndef PI
@@ -145,9 +148,10 @@ class GlobalVariables
    bool set_up_OtherAddresseses();                         // sets other address data
    bool set_up_MyAddress();                                // sets up outgoing socket
    
-   void send_to_agent(void* buffer, size_t buffer_size, int ag);        // sends data to agent ag
-   void send_to_all_agents(void* buffer, size_t buffer_size);           // sends data to all other agents
-   void send_message_type(void* buffer, size_t buffer_size, int type);  // sends data of message-type send_mode_list as defined by send_mode_list[type]
+   void send_to_agent(void* buffer, size_t buffer_size, int ag);                    // sends data to agent ag
+   void send_to_all_agents(void* buffer, size_t buffer_size);                       // sends data to all other agents
+   void send_to_destination_matrix(void* buffer, size_t buffer_size, int msg_type); // sends data to all destination_matrix[msg_type]==true
+   void send_message_type(void* buffer, size_t buffer_size, int type);              // sends data of message-type send_mode_list as defined by send_mode_list[type]
    
    // ip addresses
    std::string MyIP;
@@ -170,7 +174,7 @@ class GlobalVariables
    // my agent id
    int my_id;
    
-   // total number of agents
+   // total number of agents (not including the visualization agent)
    int num_agents;
    
    // the agent we are currently communicating to (if we don't wish to broadcast to all)
@@ -178,10 +182,12 @@ class GlobalVariables
    
    // message types we send, 'send_list[i] = true' denotes message type i is sent (via udp)
    vector<bool> send_list;
-   vector<int>  send_mode_list;  // 0=broadcast, 1=send only to the current target_agent 
+   vector<int>  send_mode_list;  // 0=broadcast (default), 1=send only to the current target_agent, 2=send only to a subset of agents as defined in the config file 
+   vector<vector<bool> > destination_matrix; // destination_matrix[x][y] means that we need to send message x to agent y
    
    // message types we recieve 'listen_list[i] = true' denotes message type i is listened for (via udp)
    vector<bool> listen_list;
+   vector<int>  listen_mode_list;  //0=publish original message , 1=wrap original message so that message contains sending robot's id
    
    // global inter-thread flags and storage for service interaction
    bool service_received_map;
@@ -267,7 +273,9 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
   int NUM_MESSAGE_TYPES = 14;
   send_list.resize(NUM_MESSAGE_TYPES, false);
   send_mode_list.resize(NUM_MESSAGE_TYPES, 0);
+  destination_matrix.resize(NUM_MESSAGE_TYPES);
   listen_list.resize(NUM_MESSAGE_TYPES, false);
+  listen_mode_list.resize(NUM_MESSAGE_TYPES, 0);
   
   //ADD ERROR CHECKING TO THE NEXT PART (look if TiXmlElement are null or not)
   // read data about each node
@@ -306,9 +314,29 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
             send_mode_list[message_type] = atoi(message_el->Attribute("mode"));
           
           printf("  %d (using mode %d)\n", message_type, send_mode_list[message_type]);
+          
+          if(send_mode_list[message_type] == 2) // then we need to read the list of destination agents
+          {
+            destination_matrix[message_type].resize(num_agents, false);
+             
+            TiXmlElement* to_el = message_el->FirstChildElement("to");;
+            TiXmlElement* to_agent_el = 0;
+            
+            printf("    to:\n");
+            
+            while((to_agent_el = (TiXmlElement *)(to_el->IterateChildren(to_agent_el))))
+            {
+              if(to_agent_el->Attribute("id"))
+              {
+                int dest_agent = atoi(to_agent_el->Attribute("id"));
+                destination_matrix[message_type][dest_agent] = true;
+                    
+                printf("    -> %d \n", dest_agent);
+              }
+            }
+          }
         }
       }
-    
     
       TiXmlElement *receive_el = agent_el->FirstChildElement("receive");
       message_el = 0;
@@ -321,7 +349,11 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
         {
           message_type = atoi(message_el->Attribute("type"));
           listen_list[message_type] = true;
-          printf("  %d \n", message_type);
+          
+          if(message_el->Attribute("mode"))
+            listen_mode_list[message_type] = atoi(message_el->Attribute("mode"));
+          
+          printf("  %d (using mode %d) \n", message_type, listen_mode_list[message_type]);
         }
       }
     }  
@@ -329,7 +361,7 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
     i++;   
   }
   MyIP = OtherIPs[my_id];  
-    
+
   return true;
 }
 
@@ -418,12 +450,25 @@ void GlobalVariables::send_to_all_agents(void* buffer, size_t buffer_size) // se
   } 
 }
 
+void GlobalVariables::send_to_destination_matrix(void* buffer, size_t buffer_size, int msg_type) // sends data to all destination_matrix[msg_type]==true
+{
+  for(int i = 0; i < num_agents; i++)
+  {
+    if(i == my_id)
+      continue;
+    if(destination_matrix[msg_type][i])
+      send_to_agent(buffer, buffer_size, i);
+  }  
+}
+
 void GlobalVariables::send_message_type(void* buffer, size_t buffer_size, int type)  // sends data of message-type send_mode_list as defined by send_mode_list[type]
 {
   if(send_mode_list[type] == 0)
     send_to_all_agents(buffer, buffer_size);            // broadcast
-  else if(send_mode_list[0] == 1)
-    send_to_agent(buffer, buffer_size, target_agent);   // send to target agent      
+  else if(send_mode_list[type] == 1)
+    send_to_agent(buffer, buffer_size, target_agent);   // send to target agent 
+  else if(send_mode_list[type] == 2)
+    send_to_destination_matrix(buffer, buffer_size, type);    // send to all agents in destination matrix
 }
  
 /*--------------------------  listner thread ----------------------------*/
@@ -456,120 +501,220 @@ void *Listner(void * inG)
     
     if(message_type == 0 && G->listen_list[0]) // it is a pose message
     {
-      geometry_msgs::PoseStamped msg;
-      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-      pose_pub.publish(msg);
+      if(G->listen_mode_list[0] == 0)
+      {
+        geometry_msgs::PoseStamped msg;
+        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+        pose_pub.publish(msg);
       
-      //printf("pose message:\n %f\n %f\n %f\n %f\n %f\n %f\n %f\n\n", msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z);       
-      //double secs = msg.header.stamp.toSec();
-      //printf("header: %d, %f, %s \n", (int)msg.header.seq, secs, msg.header.frame_id.c_str());
+        //printf("pose message:\n %f\n %f\n %f\n %f\n %f\n %f\n %f\n\n", msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z);       
+        //double secs = msg.header.stamp.toSec();
+        //printf("header: %d, %f, %s \n", (int)msg.header.seq, secs, msg.header.frame_id.c_str());
+      }
+      else if(G->listen_mode_list[0] == 1)
+      {
+        intercom_cu::PoseStamped_CU_ID msg;
+        msg.id.data = sending_agent;
+        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
+        pose_pub.publish(msg);
+      }
     }
     else if(message_type == 1 && G->listen_list[1]) // it is a goal message
     {
-      geometry_msgs::PoseStamped msg;
-      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-      goal_pub.publish(msg);
+      if(G->listen_mode_list[1] == 0)
+      {
+        geometry_msgs::PoseStamped msg;
+        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+        goal_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[1] == 1)
+      {
+          
+      }
     } 
     else if(message_type == 2 && G->listen_list[2]) // it is a system state message
     {
-      std_msgs::Int32 msg;
-      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-      system_state_pub.publish(msg);
+      if(G->listen_mode_list[2] == 0)
+      {
+        std_msgs::Int32 msg;
+        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+        system_state_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[2] == 1)
+      {
+          
+      }
     } 
     else if(message_type == 3 && G->listen_list[3]) // it is a system update message
     {
-      std_msgs::Int32 msg;
-      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-      system_update_pub.publish(msg);
+      if(G->listen_mode_list[3] == 0)
+      {
+        std_msgs::Int32 msg;
+        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+        system_update_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[3] == 1)
+      {
+          
+      }
     }
     else if(message_type == 4 && G->listen_list[4]) // it is a map changes message
     {
-      sensor_msgs::PointCloud msg;
-      buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
-      map_changes_pub.publish(msg);
+      if(G->listen_mode_list[4] == 0)
+      {
+        sensor_msgs::PointCloud msg;
+        buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
+        map_changes_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[4] == 1)
+      {
+          
+      }
     } 
     else if(message_type == 5 && G->listen_list[5]) // it is a global path message
     {
-      nav_msgs::Path msg;
-      buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
-      global_path_pub.publish(msg);
+      if(G->listen_mode_list[5] == 0)
+      {
+        nav_msgs::Path msg;
+        buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
+        global_path_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[5] == 1)
+      {
+          
+      }
     }
     else if(message_type == 6 && G->listen_list[6]) // it is a goal reset message
     {
-       geometry_msgs::PoseStamped msg;
-       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-       new_goal_pub.publish(msg);
+      if(G->listen_mode_list[6] == 0)
+      {
+        geometry_msgs::PoseStamped msg;
+        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+        new_goal_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[6] == 1)
+      {
+          
+      }
     } 
     else if(message_type == 7 && G->listen_list[7]) // it is a pose reset message
     {
-       geometry_msgs::PoseStamped msg;
-       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-       new_pose_pub.publish(msg);
+      if(G->listen_mode_list[7] == 0)
+      {
+        geometry_msgs::PoseStamped msg;
+        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+        new_pose_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[7] == 1)
+      {
+          
+      }
     } 
     else if(message_type == 8 && G->listen_list[8]) // it is a user control message
     {
-       geometry_msgs::Pose2D msg;
-       buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
-       user_control_pub.publish(msg);
+      if(G->listen_mode_list[8] == 0)
+      {
+        geometry_msgs::Pose2D msg;
+        buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
+        user_control_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[8] == 1)
+      {
+          
+      }
     }
     else if(message_type == 9 && G->listen_list[9]) // it is a user state message
     {
-       std_msgs::Int32 msg;
-       buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-       user_state_pub.publish(msg);
+      if(G->listen_mode_list[9] == 0)
+      {
+        std_msgs::Int32 msg;
+        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+        user_state_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[9] == 1)
+      {
+          
+      }
     }
     else if(message_type == 10 && G->listen_list[10]) // it is a laser scan message
     {
-      hokuyo_listener_cu::PointCloudWithOrigin msg;
-      buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
-      laser_scan_pub.publish(msg);
+      if(G->listen_mode_list[10] == 0)
+      {
+        hokuyo_listener_cu::PointCloudWithOrigin msg;
+        buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
+        laser_scan_pub.publish(msg);
+      }
+      else if(G->listen_mode_list[10] == 1)
+      {
+          
+      }
     }
     else if(message_type == 11 && G->listen_list[11]) // it is a map service request message
     {
-      nav_msgs::GetMap::Request  req;
-      nav_msgs::GetMap::Response resp;
-      
-      if(G->send_list[12])
+      if(G->listen_mode_list[11] == 0)
       {
-        if(ros::service::call("/cu/get_map_cu", req, resp) )
+        nav_msgs::GetMap::Request  req;
+        nav_msgs::GetMap::Response resp;
+      
+        if(G->send_list[12])
         {
-          // send response to master
+          if(ros::service::call("/cu/get_map_cu", req, resp) )
+          {
+            // send response to master
          
-          uint this_msg_size = max_message_size; 
-          char buffer[this_msg_size];
-          size_t buffer_ptr = (size_t)buffer;
-          size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+            uint this_msg_size = max_message_size; 
+            char buffer[this_msg_size];
+            size_t buffer_ptr = (size_t)buffer;
+            size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
    
-          buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
-          buffer_ptr = add_to_buffer_uint(buffer_ptr, 12, buffer_max);                // add messagetype 12
-          buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max); // add occupancy grid
+            buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
+            buffer_ptr = add_to_buffer_uint(buffer_ptr, 12, buffer_max);                // add messagetype 12
+            buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max); // add occupancy grid
         
-          Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master    
+            Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master    
+          }
         }
+      }
+      else if(G->listen_mode_list[11] == 1)
+      {
+          
       }
     }
     else if(message_type == 12 && G->listen_list[12]) // it is a map service response message
     {
       if(!Globals.service_received_map)
       {
-        // store in globals so service provider can access it
-        buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
-        Globals.service_received_map = true;
+        if(G->listen_mode_list[12] == 0)
+        {
+          // store in globals so service provider can access it
+          buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
+          Globals.service_received_map = true;
+        }
+        else if(G->listen_mode_list[12] == 1)
+        {
+          
+        }
       }
     }
     else if(message_type == 13 && G->listen_list[13]) // it is a "/map_cu" -> "/world_cu" transform
     {
       if(using_tf)
       {
-        static tf::TransformBroadcaster br;  
-        tf::StampedTransform transform;   
+        if(G->listen_mode_list[13] == 0)
+        {
+          static tf::TransformBroadcaster br;  
+          tf::StampedTransform transform;   
 
-        buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
-        transform.frame_id_ = std::string("/map_cu");
-        transform.child_frame_id_ = std::string("/world_cu");
+          buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
+          transform.frame_id_ = std::string("/map_cu");
+          transform.child_frame_id_ = std::string("/world_cu");
         
-        br.sendTransform(transform);
-        
+          br.sendTransform(transform);
+        }
+        else if(G->listen_mode_list[13] == 1)
+        {
+          
+        }
       }
     }
   }
@@ -788,7 +933,7 @@ void transform_sender(const tf::StampedTransform& t)
 int main(int argc, char * argv[]) 
 {    
   // init ROS
-  ros::init(argc, argv, "server_cu");
+  ros::init(argc, argv, "intercom_cu");
   ros::NodeHandle nh;
   ros::Rate loop_rate(100);
  
@@ -800,7 +945,7 @@ int main(int argc, char * argv[])
   if(argc > 1)
     my_id_default = atoi(argv[1]);      // this robots id
   if(argc > 2)    
-    num_agents_default = atoi(argv[2]); // total number of robots
+    num_agents_default = atoi(argv[2]); // total number of agents
   
   // load (or overwrite) globals from parameter server
   bool bool_input;
@@ -809,7 +954,7 @@ int main(int argc, char * argv[])
   if(ros::param::get("intercom_cu/my_id", int_input)) 
     my_id_default = int_input;          // this robot's id
   if(ros::param::get("intercom_cu/num_agents", int_input)) 
-    num_agents_default = int_input;     // total number of robots
+    num_agents_default = int_input;     // total number of agents
   if(ros::param::get("intercom_cu/config_file", string_input))                       
     config_file = string_input;         // the config file with ip and other data
   if(ros::param::get("prairiedog/using_tf", bool_input)) 
@@ -847,7 +992,12 @@ int main(int argc, char * argv[])
 
   // set up ROS topic publishers
   if(Globals.listen_list[0])
-    pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
+  { 
+    if(Globals.listen_mode_list[0] == 0)
+      pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
+    else if(Globals.listen_mode_list[0] == 1)
+      pose_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu/pose_cu", 1);
+  }
   if(Globals.listen_list[1]) 
     goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
   if(Globals.listen_list[2])
@@ -904,7 +1054,7 @@ int main(int argc, char * argv[])
         catch(tf::TransformException ex)
         { 
           //printf("attempt failed \n");
-          ROS_ERROR("client_server: %s",ex.what());
+          ROS_ERROR("intercom_cu: %s",ex.what());
           setup_tf = true;  
         }   
       } 

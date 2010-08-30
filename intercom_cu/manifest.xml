@@ -10,6 +10,7 @@
   <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/RobotBase</url>
   <depend package="roscpp"/>
   <depend package="nav_msgs"/>
+  <depend package="std_msgs"/>
   <depend package="geometry_msgs"/>
   <depend package="sensor_msgs"/>
   <depend package="tf"/>
@@ -18,6 +19,9 @@
   <depend package="hokuyo_listener_cu"/>
   <depend package="tinyxml" />
 
+  <export>
+    <cpp cflags="-I${prefix}/msg/cpp"/>
+  </export>
 </package>
 
 
