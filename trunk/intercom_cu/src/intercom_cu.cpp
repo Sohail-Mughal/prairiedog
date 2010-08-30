@@ -434,10 +434,14 @@ bool GlobalVariables::set_up_MyAddress() // sets up outgoing socket
 
 void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) // sends data to agent ag
 {
-  //printf("trying to send: %s\n", (char*)buffer);
+  printf("trying to send: %s\n", (char*)buffer);
   int sent_size = sendto(MyOutSock, buffer, buffer_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
   if(sent_size < 0) 
+  {
     error("Problems sending data");
+    printf("problems \n");
+getchar();
+  }
 }
 
 void GlobalVariables::send_to_all_agents(void* buffer, size_t buffer_size) // sends data to all other agents
@@ -463,6 +467,7 @@ void GlobalVariables::send_to_destination_matrix(void* buffer, size_t buffer_siz
 
 void GlobalVariables::send_message_type(void* buffer, size_t buffer_size, int type)  // sends data of message-type send_mode_list as defined by send_mode_list[type]
 {
+printf("sending message type %d \n", type);
   if(send_mode_list[type] == 0)
     send_to_all_agents(buffer, buffer_size);            // broadcast
   else if(send_mode_list[type] == 1)
@@ -497,7 +502,7 @@ void *Listner(void * inG)
     uint message_type;
     buffer_ptr = extract_from_buffer_uint(buffer_ptr, message_type, buffer_max); 
 
-    //printf("recieved message type %d from %d \n", (int)message_type, sending_agent); 
+    printf("recieved message type %d from %d \n", (int)message_type, sending_agent); 
     
     if(message_type == 0 && G->listen_list[0]) // it is a pose message
     {
@@ -660,7 +665,7 @@ void *Listner(void * inG)
         {
           if(ros::service::call("/cu/get_map_cu", req, resp) )
           {
-            // send response to master
+            // send response back to the sending agent
          
             uint this_msg_size = max_message_size; 
             char buffer[this_msg_size];
@@ -671,13 +676,15 @@ void *Listner(void * inG)
             buffer_ptr = add_to_buffer_uint(buffer_ptr, 12, buffer_max);                // add messagetype 12
             buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max); // add occupancy grid
         
-            Globals.send_to_all_agents(buffer, buffer_ptr-(size_t)buffer);     // send it to master    
+            //Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 12);        // send      
+            printf("sending message type 12 to %d at %s\n", sending_agent, G->OtherIPs[2].c_str());
+            Globals.send_to_agent(buffer, buffer_ptr-(size_t)buffer, 2);
           }
         }
       }
       else if(G->listen_mode_list[11] == 1)
       {
-          
+
       }
     }
     else if(message_type == 12 && G->listen_list[12]) // it is a map service response message
@@ -898,7 +905,7 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, 11, buffer_max);                    // add messagetype 11  
   
   Globals.service_received_map = false;
