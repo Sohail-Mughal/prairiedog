@@ -187,7 +187,7 @@ class GlobalVariables
    
    // message types we recieve 'listen_list[i] = true' denotes message type i is listened for (via udp)
    vector<bool> listen_list;
-   vector<int>  listen_mode_list;  //0=publish original message , 1=wrap original message so that message contains sending robot's id
+   vector<int>  listen_mode_list;  //0=publish original message , 1=wrap original message so that message contains sending robot's id and send on /cu_multi/ topic instead
    
    // global inter-thread flags and storage for service interaction
    bool service_received_map;
@@ -831,7 +831,7 @@ void goal_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, 6, buffer_max);                     // add messagetype 6
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);           // add posestamped
 
@@ -845,7 +845,7 @@ void pose_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, 7, buffer_max);                     // add messagetype 7
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);           // add posestamped
 
@@ -859,7 +859,7 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, 8, buffer_max);                     // add messagetype 8
   buffer_ptr = add_to_buffer_Pose2D(buffer_ptr, *msg, buffer_max);               // add posestamped
 
@@ -873,7 +873,7 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.target_agent, buffer_max);  // add agentID
+  buffer_ptr = add_to_buffer_int(buffer_ptr, Globals.my_id, buffer_max);  // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, 9, buffer_max);                     // add messagetype 9
   buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);             // add int
 
@@ -1003,7 +1003,7 @@ int main(int argc, char * argv[])
     if(Globals.listen_mode_list[0] == 0)
       pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/pose_cu", 1);
     else if(Globals.listen_mode_list[0] == 1)
-      pose_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu/pose_cu", 1);
+      pose_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/pose_cu", 1);
   }
   if(Globals.listen_list[1]) 
     goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
