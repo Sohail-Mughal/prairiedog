@@ -47,16 +47,19 @@
 #include "port_setup.h"
 #include <ros/ros.h>
 #include <unistd.h>
-#include <std_msgs/String.h>
+#include <std_msgs/Int8.h>
 #include <string.h>
 #include "geometry_msgs/Pose2D.h"
 #include "stargazer_cu/Pose2DTagged.h"
 #include "../include/pseudo_obj.h"
 #include "../include/tinyxml/tinyxml.h"
 
+bool kill = false;
+
 void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data );
 geometry_msgs::Pose2D convert2global ( geometry_msgs::Pose2D meas, Pseudolite p_data );
 void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const char * command_file);
+void kill_stargazer(const std_msgs::Int8::ConstPtr& msg);
 
 int main ( int argc, char ** argv ) {
 
@@ -93,6 +96,7 @@ int main ( int argc, char ** argv ) {
 	ros::NodeHandle n;
 	ros::Publisher data_pub = n.advertise<geometry_msgs::Pose2D>("/cu/stargazer_pose_cu",1);
 	ros::Publisher marker_pub = n.advertise<stargazer_cu::Pose2DTagged>("/cu/stargazer_marker_cu",1);
+        ros::Subscriber kill_sub = n.subscribe("/cu/killsg", 1, kill_stargazer);
 	ros::Rate loop_rate(1000);
 
   // Load the xml files
@@ -107,7 +111,7 @@ int main ( int argc, char ** argv ) {
   setup_stargazer( port, n, loop_rate, command_file );
   
 	STATE = waiting_for_STX;
-	while ( n.ok() ) {
+	while ( n.ok() && !kill) {
 		// waiting for STX		
 		memset(sensor_data, '\0', sizeof(sensor_data));
 		while ( sensor_data[0] != '~' ) {
@@ -125,12 +129,18 @@ int main ( int argc, char ** argv ) {
 		++i;
 		sensor_data[i] = '\0';
 		process_and_send_data ( sensor_data, &data_pub, &marker_pub, pseudo_1b50 );
+		ros::spinOnce();
 		
 	}
 	free( sensor_data );
 
 }
 
+void kill_stargazer(const std_msgs::Int8::ConstPtr& msg)
+{
+	if (msg->data == 1) kill = true;
+        ROS_INFO("Kill Received");
+}
 
 void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data) {
 
