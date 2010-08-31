@@ -492,7 +492,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     
       // send nth packet
       printf("sending %u of %u \n", packet_number, total_packets);
-      int sent_size = sendto(MyOutSock, buffer, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
+      int sent_size = sendto(MyOutSock, (void *)buffer_ptr, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
       if(sent_size < 0) 
       {
         error("Problems sending data");
@@ -561,6 +561,7 @@ void *Listner(void * inG)
     buffer_ptr = (size_t)network_message_buffer;
     buffer_max = buffer_ptr + (size_t)max_network_message_size;
     
+    printf("extracting header \n");
     //extract header elements
     int sending_agent;
     uint message_type;
@@ -569,11 +570,18 @@ void *Listner(void * inG)
     uint packet_number;
     buffer_ptr = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, sent_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
+
+    printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
+    
     if(total_packets > 1) // this message has more packets still to come
     {
       // copy this into where it should go in the large message buffer 
       memcpy(large_message_buffer + header_size + (((size_t)packet_number)*adjusted_network_data_size), (void *)buffer_ptr, adjusted_network_data_size); 
         
+      //set up structure to record what we have received
+      vector<bool> msg_rec(total_packets, false);
+      msg_rec[packet_number] = true;
+              
       // now we try to get the rest of the message
       while(true)
       { 
@@ -583,25 +591,44 @@ void *Listner(void * inG)
         if(message_length < 0) 
           printf("had problems getting a message \n");
     
+        buffer_max = buffer_ptr + (size_t)max_network_message_size;
+        
         //extract header elements
         int sending_agent_b;
         uint message_type_b;
         uint sent_message_counter_b;
         uint total_packets_b;
         uint packet_number_b;
-        buffer_ptr = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent_b, message_type_b, sent_message_counter_b, total_packets_b, packet_number_b, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+        buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent_b, message_type_b, sent_message_counter_b, total_packets_b, packet_number_b, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-        if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
-          continue;
+        printf("recieved message %u: %u, %u of %u \n", message_type_b, sent_message_counter_b, packet_number_b, total_packets_b);
         
-        if(sent_message_counter_b > sent_message_counter) // then we failed to get all of the message 
+        if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
         {
+            printf("continuing \n");
+            continue;
+        }
+        //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
+        if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
+        {
+          printf("failed to receive all packets \n");
           message_type = -1;  
           break;
-        }
-         
+        }        
+        
         // copy this into where it should go in the large message buffer 
         memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
+        msg_rec[packet_number_b] = true;
+        
+        for(uint j = 0; j < total_packets; j++)
+        {
+          if(msg_rec[j])   
+            printf("1");
+          else
+            printf("0");
+        }
+        printf("\n");
+        
       }
      
       message_buffer = large_message_buffer;
@@ -876,7 +903,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 
 void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
 {        
-  uint this_msg_size = 20; 
+  uint this_msg_size = 100; 
   char buffer[this_msg_size];
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
@@ -889,7 +916,7 @@ void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
 
 void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
 {      
-  uint this_msg_size = 20; 
+  uint this_msg_size = 100; 
   char buffer[this_msg_size];
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
@@ -967,7 +994,7 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
 
 void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
 {        
-  uint this_msg_size = 20; 
+  uint this_msg_size = 100; 
   char buffer[this_msg_size];
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
@@ -997,7 +1024,7 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   // need to send message to client requesting map
   ros::Rate loop_rate(100);
   
-  uint this_msg_size = 20; 
+  uint this_msg_size = 100; 
   char buffer[this_msg_size];
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
