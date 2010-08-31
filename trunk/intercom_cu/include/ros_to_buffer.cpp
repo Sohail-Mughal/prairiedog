@@ -326,10 +326,13 @@ size_t add_to_buffer_StampedTransform(size_t buffer_ptr, const tf::StampedTransf
   return buffer_ptr;
 }
 
-size_t add_to_buffer_ethernetheader(size_t buffer_ptr, int id, uint messagetype, size_t buffer_max) // adds space for an ethernet header at the buffer pointed to by (void*)buffer_ptr, returns the next free location in the buffer, errors if try to insert past buffer_max
+size_t add_to_buffer_ethernetheader(size_t buffer_ptr, int id, uint messagetype, uint msg_counter, uint total_packets, uint packet_num, size_t buffer_max) // adds space for an ethernet header at the buffer pointed to by (void*)buffer_ptr, returns the next free location in the buffer, errors if try to insert past buffer_max
 {
   buffer_ptr = add_to_buffer_int(buffer_ptr, id, buffer_max);             // add agentID
   buffer_ptr = add_to_buffer_uint(buffer_ptr, messagetype, buffer_max);   // add messagetype
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, msg_counter, buffer_max);   // add space for message counter
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, total_packets, buffer_max); // add space for total message size in packets
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, packet_num, buffer_max);    // add space for packet number
   return buffer_ptr;
 }
 
@@ -652,3 +655,13 @@ size_t extract_from_buffer_StampedTransform(size_t buffer_ptr, tf::StampedTransf
   return buffer_ptr;
 }
 
+size_t extract_from_buffer_ethernetheader(size_t buffer_ptr, int& id, uint& messagetype, uint& counter, uint& total_packets, uint& packet_number, size_t buffer_max) // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+{
+  buffer_ptr = extract_from_buffer_int(buffer_ptr, id, buffer_max);             // extracts agentID
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, messagetype, buffer_max);   // extracts agentID
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, counter, buffer_max);       // extracts message counter
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, total_packets, buffer_max); // extracts total message size in packets
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, packet_number, buffer_max); // extracts packet number
+
+  return buffer_ptr;
+}
