@@ -80,4 +80,6 @@
   <node name="base_planner_cu" pkg="base_planner_cu" type="base_planner_cu" respawn="true" output="screen" />
 
   <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+  <node name="tagmapper_cu" pkg="tagmapper_cu" type="tagmapper_cu" cwd="node" respawn="true" output="screen" />
 </launch>
