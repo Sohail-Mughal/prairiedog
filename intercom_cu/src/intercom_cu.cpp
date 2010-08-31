@@ -469,7 +469,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     size_t header_size = header_end - buffer_ptr;
     size_t adjusted_data_size = max_network_message_size - header_size;
     
-    total_packets = max_message_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
+    total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
     message_counter++; // increment global message counter
     
     // replace buffer of first packet
