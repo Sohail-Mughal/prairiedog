@@ -455,7 +455,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   }
   else // message must be split into multiple packets
   {
-    printf("must split message into multiple packets \n");
+    //printf("must split message into multiple packets \n");
     
     // extract message type (and other info)
     size_t buffer_max = (size_t)buffer + max_message_size;
@@ -476,7 +476,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, 0, buffer_max);
     
     // send first packet
-    printf("sending %u of %u \n", 0, total_packets);
+    //printf("sending %u of %u \n", 0, total_packets);
     int sent_size = sendto(MyOutSock, buffer, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
     if(sent_size < 0) 
     {
@@ -491,7 +491,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
       add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
     
       // send nth packet
-      printf("sending %u of %u \n", packet_number, total_packets);
+      //printf("sending %u of %u \n", packet_number, total_packets);
       int sent_size = sendto(MyOutSock, (void *)buffer_ptr, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
       if(sent_size < 0) 
       {
@@ -561,7 +561,6 @@ void *Listner(void * inG)
     buffer_ptr = (size_t)network_message_buffer;
     buffer_max = buffer_ptr + (size_t)max_network_message_size;
     
-    printf("extracting header \n");
     //extract header elements
     int sending_agent;
     uint message_type;
@@ -571,7 +570,7 @@ void *Listner(void * inG)
     buffer_ptr = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, sent_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
 
-    printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
+    //printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
     
     if(total_packets > 1) // this message has more packets still to come
     {
@@ -602,12 +601,12 @@ void *Listner(void * inG)
         uint packet_number_b;
         buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent_b, message_type_b, sent_message_counter_b, total_packets_b, packet_number_b, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-        printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
+        //printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
         
         if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
         {
-            printf("continuing \n");
-            continue;
+          //printf("continuing \n");
+          continue;
         }
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
         if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
@@ -634,12 +633,8 @@ void *Listner(void * inG)
       buffer_max = buffer_ptr + (size_t)max_message_size - header_size;
     }
     
-    
+    //printf("recieved message type %u from %d \n", message_type, sending_agent); 
 
-    printf("recieved message type %u from %d \n", message_type, sending_agent); 
-
-    if(message_type == 12)
-        getchar();
     
     if(message_type == 0 && G->listen_list[0]) // it is a pose message
     {
@@ -813,7 +808,7 @@ void *Listner(void * inG)
             buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max);                    // add occupancy grid
         
             //Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 12);                            // send      
-            printf("sending message type 12 to %d at %s\n", sending_agent, G->OtherIPs[2].c_str());
+            //printf("sending message type 12 to %d at %s\n", sending_agent, G->OtherIPs[2].c_str());
             Globals.send_to_agent(buffer, buffer_ptr-(size_t)buffer, 2);
           }
         }
