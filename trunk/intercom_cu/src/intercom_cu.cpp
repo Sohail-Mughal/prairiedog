@@ -473,7 +473,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     message_counter++; // increment global message counter
     
     // replace buffer of first packet
-    add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 13, message_counter, total_packets, 0, buffer_max);
+    add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, 0, buffer_max);
     
     // send first packet
     printf("sending %u of %u \n", 0, total_packets);
@@ -488,7 +488,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     {
       // add buffer before next part of data to send
       buffer_ptr += adjusted_data_size; 
-      add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 13, message_counter, total_packets, packet_number, buffer_max);   
+      add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
     
       // send nth packet
       printf("sending %u of %u \n", packet_number, total_packets);
@@ -583,7 +583,8 @@ void *Listner(void * inG)
       msg_rec[packet_number] = true;
               
       // now we try to get the rest of the message
-      while(true)
+      bool keep_going = true;
+      while(keep_going)
       { 
         int senders_address_length_b = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
         memset(&network_message_buffer,'\0',sizeof(network_message_buffer)); 
@@ -601,7 +602,7 @@ void *Listner(void * inG)
         uint packet_number_b;
         buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent_b, message_type_b, sent_message_counter_b, total_packets_b, packet_number_b, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-        printf("recieved message %u: %u, %u of %u \n", message_type_b, sent_message_counter_b, packet_number_b, total_packets_b);
+        printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
         
         if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
         {
@@ -622,13 +623,10 @@ void *Listner(void * inG)
         
         for(uint j = 0; j < total_packets; j++)
         {
-          if(msg_rec[j])   
-            printf("1");
-          else
-            printf("0");
+          if(! msg_rec[j]) // still need to receive a packet  
+            break;
+          keep_going = false;
         }
-        printf("\n");
-        
       }
      
       message_buffer = large_message_buffer;
@@ -638,7 +636,10 @@ void *Listner(void * inG)
     
     
 
-    printf("recieved message type %d from %d \n", (int)message_type, sending_agent); 
+    printf("recieved message type %u from %d \n", message_type, sending_agent); 
+
+    if(message_type == 12)
+        getchar();
     
     if(message_type == 0 && G->listen_list[0]) // it is a pose message
     {
