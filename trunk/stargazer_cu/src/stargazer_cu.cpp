@@ -67,7 +67,7 @@ int main ( int argc, char ** argv ) {
   const char * port_name = "/dev/stargazer";
 
   char * sensor_data;
-	sensor_data = (char *)malloc( 40 * sizeof(char) );
+	sensor_data = (char *)malloc( 256 * sizeof(char) );
 	int i = 0;
 
   // Read in command line arguments
@@ -108,39 +108,24 @@ int main ( int argc, char ** argv ) {
   
 	STATE = waiting_for_STX;
 	while ( n.ok() ) {
-		switch ( STATE ) {
-
-			case waiting_for_STX:
-				sensor_data[0] = '\0';
-				while ( sensor_data[0] != '~' ) {
-					read ( port, sensor_data, 1 );
-					loop_rate.sleep();
-				}
-				STATE = reading_data;
-				break;
-
-			case reading_data:
-				i = 0;
-				while ( sensor_data[i] != '`' ) {
-					++i;
-					read ( port, sensor_data + i, 1 );
-				}
-				++i;
-				if ( read( port, sensor_data + i, 1) == '~' ) { STATE = reading_data; }
-				else { STATE = processing; }
-				break;
-
-			case processing:
-				++i;
-				sensor_data[i] = '\0';
-				process_and_send_data ( sensor_data, &data_pub, &marker_pub, pseudo_1b50 );
-				STATE = waiting_for_STX;
-				break;
-
-			default:
-				ROS_INFO("onoz!: System has reached an unknown state\n");
-				break;
-			}
+		// waiting for STX		
+		memset(sensor_data, '\0', sizeof(sensor_data));
+		while ( sensor_data[0] != '~' ) {
+			read ( port, sensor_data, 1 );
+		}
+		
+		// reading data:
+		i = 0;
+		while ( sensor_data[i] != '`' ) {
+			++i;
+			read ( port, sensor_data + i, 1 );
+		}
+		
+		// processing:
+		++i;
+		sensor_data[i] = '\0';
+		process_and_send_data ( sensor_data, &data_pub, &marker_pub, pseudo_1b50 );
+		
 	}
 	free( sensor_data );
 
@@ -152,17 +137,19 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::
 	char mode;
 	float angle, x, y;
 	int ID;
+	int scanreturn;
 	geometry_msgs::Pose2D meas; // The position measurement to be published
 	stargazer_cu::Pose2DTagged marker; // The (relative?) position measurement of a marker
 
 	// Read in the data from the serial port.
 
-	if ( strcmp( input_data, "~DeadZone`" ) == 0 )
+	if ( strcmp( input_data, "~*DeadZone`" ) == 0 )
 	{
 		// could not detect position
 		ROS_INFO("...dead zone...\n");
 	}else {
-		sscanf(input_data, "~^%c%i|%f|%f|%f`", &mode, &ID, &angle, &x, &y );
+		scanreturn = sscanf(input_data, "~^%c%i|%f|%f|%f`", &mode, &ID, &angle, &x, &y );
+		//ROS_INFO("%d, %s\n", scanreturn, input_data);
 
 		// Convert the measurement to radians and metres.
 		meas.theta = angle*M_PI/180;
@@ -197,11 +184,17 @@ void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::
 geometry_msgs::Pose2D convert2global ( geometry_msgs::Pose2D meas, Pseudolite p_data ) {
 	// This function takes in the measurement and pseudolite and converts to global coordinates
 	geometry_msgs::Pose2D meas_g;
+	float pth, px, py;
 
 	// Transform from the pseudolites local coordinate frame to the global
 	meas_g.theta = meas.theta + p_data.angle;	
 	meas_g.x = meas.x*cos(p_data.angle) + meas.y*sin(p_data.angle) + p_data.x;
 	meas_g.y = meas.y*cos(p_data.angle) - meas.x*sin(p_data.angle) + p_data.y;
+
+	//pth = meas_g.theta - meas.theta;
+	//px = meas_g.x - meas.x*cos(pth) - meas.y*sin(pth);
+	//py = meas_g.y - meas.y*cos(pth) + meas.x*sin(pth);
+	//ROS_INFO("Tag is at: X = %f, Y = %f, TH = %f", px, py, pth);
 	return meas_g;
 }
 

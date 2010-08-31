@@ -15,7 +15,7 @@ int setup_serial_port ( const char * portname ) {
 	//sensor_data = (char *)malloc(40*sizeof(char));
 	//char * my_port = "/dev/ttyUSB0";
 
-	fd = open( portname, O_RDWR | O_NOCTTY | O_NDELAY );
+	fd = open( portname, O_RDWR | O_NOCTTY );
 	if ( fd == -1 ) {
 		perror("error: Could not open port\n");
 		exit(-1);
