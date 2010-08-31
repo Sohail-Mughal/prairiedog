@@ -572,7 +572,7 @@ void *Listner(void * inG)
     if(total_packets > 1) // this message has more packets still to come
     {
       // copy this into where it should go in the large message buffer 
-      memcpy(large_message_buffer + (((size_t)packet_number)*adjusted_network_data_size), (void *)buffer_ptr, adjusted_network_data_size); 
+      memcpy(large_message_buffer + header_size + (((size_t)packet_number)*adjusted_network_data_size), (void *)buffer_ptr, adjusted_network_data_size); 
         
       // now we try to get the rest of the message
       while(true)
@@ -601,7 +601,7 @@ void *Listner(void * inG)
         }
          
         // copy this into where it should go in the large message buffer 
-        memcpy(large_message_buffer + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
+        memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
       }
      
       message_buffer = large_message_buffer;
