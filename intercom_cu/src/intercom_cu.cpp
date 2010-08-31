@@ -497,7 +497,6 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
       {
         error("Problems sending data");
       }
-      
     }
   }
 }
@@ -557,9 +556,7 @@ void *Listner(void * inG)
     if(message_length < 0) 
       printf("had problems getting a message \n");
     
-    message_buffer = network_message_buffer;
-    buffer_ptr = (size_t)network_message_buffer;
-    buffer_max = buffer_ptr + (size_t)max_network_message_size;
+    buffer_max = (size_t)network_message_buffer + (size_t)max_network_message_size;
     
     //extract header elements
     int sending_agent;
@@ -567,7 +564,7 @@ void *Listner(void * inG)
     uint sent_message_counter;
     uint total_packets;
     uint packet_number;
-    buffer_ptr = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, sent_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+    buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent, message_type, sent_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
 
     //printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
@@ -591,7 +588,7 @@ void *Listner(void * inG)
         if(message_length < 0) 
           printf("had problems getting a message \n");
     
-        buffer_max = buffer_ptr + (size_t)max_network_message_size;
+        buffer_max = (size_t)network_message_buffer + (size_t)max_network_message_size;
         
         //extract header elements
         int sending_agent_b;
@@ -620,17 +617,26 @@ void *Listner(void * inG)
         memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
         msg_rec[packet_number_b] = true;
         
+        keep_going = false;
         for(uint j = 0; j < total_packets; j++)
         {
           if(! msg_rec[j]) // still need to receive a packet  
+          {
+            keep_going = true;
             break;
-          keep_going = false;
+          }
         }
       }
      
       message_buffer = large_message_buffer;
       buffer_ptr = (size_t)large_message_buffer + header_size;
       buffer_max = buffer_ptr + (size_t)max_message_size - header_size;
+    }
+    else // single message is in network_message_buffer
+    {
+      message_buffer = network_message_buffer;
+      buffer_ptr = (size_t)network_message_buffer + header_size;
+      buffer_max = buffer_ptr + adjusted_network_data_size;      
     }
     
     //printf("recieved message type %u from %d \n", message_type, sending_agent); 
@@ -1018,7 +1024,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
 bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &resp)
 {
   // need to send message to client requesting map
-  ros::Rate loop_rate(100);
+  ros::Rate loop_rate(5);
   
   uint this_msg_size = 100; 
   char buffer[this_msg_size];
@@ -1090,6 +1096,14 @@ int main(int argc, char * argv[])
   Globals.Populate(my_id_default, num_agents_default);
   Globals.read_IPS_from_file(config_file);
   
+  
+  while(! Globals.set_up_MyAddress())
+  {}
+
+  while(! Globals.set_up_OtherAddresseses())
+  {}
+  
+  
   // set up ROS topic subscriber callbacks
   selected_robot_sub = nh.subscribe("/cu/selected_robot_cu", 1, selected_robot_callback);
   if(Globals.send_list[0])
@@ -1147,13 +1161,8 @@ int main(int argc, char * argv[])
   // set up service servers
   if(Globals.send_list[11])
     get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
-
-  while(! Globals.set_up_MyAddress())
-  {}
-
-  while(! Globals.set_up_OtherAddresseses())
-  {}
-
+  
+  
   pthread_t Listener_thread;
   pthread_create(&Listener_thread, NULL, Listner, &Globals); // listens for incomming messages
 
