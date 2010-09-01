@@ -196,6 +196,8 @@ class GlobalVariables
    
    // counter for messages that require being chopped up
    uint message_counter;
+   
+   bool send_mutext; // used to keep everybody from sending at the same time
 };
 GlobalVariables Globals;
 
@@ -213,6 +215,8 @@ GlobalVariables::GlobalVariables()
   service_received_map = false;
   
   message_counter = 0;
+  
+  send_mutext = false;
 }
 
 GlobalVariables::GlobalVariables(int id, int total_agents)  
@@ -237,6 +241,8 @@ GlobalVariables::GlobalVariables(int id, int total_agents)
   OtherAddresses.resize(num_agents);
   
   message_counter = 0;
+  
+  send_mutext = false;
 }
 
 GlobalVariables::~GlobalVariables()  // destructor
@@ -265,6 +271,8 @@ void GlobalVariables::Populate(int id, int total_agents) // populate GlobalVaria
   OtherAddresses.resize(num_agents);
   
   message_counter = 0;
+  
+  send_mutext = false;
 }
 
 
@@ -444,6 +452,11 @@ bool GlobalVariables::set_up_MyAddress() // sets up outgoing socket
 
 void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) // sends data to agent ag
 {
+  if(send_mutext) // somebody else is sending, so drop the message
+    return;
+    
+  send_mutext = true;
+  
   // extract message type (and other info)
   size_t buffer_max = (size_t)buffer + max_message_size;
   size_t buffer_ptr = size_t(buffer);
@@ -503,6 +516,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
       }
     }
   }
+  send_mutext = false;
 }
 
 void GlobalVariables::send_to_all_agents(void* buffer, size_t buffer_size) // sends data to all other agents
