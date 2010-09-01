@@ -457,7 +457,8 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   size_t adjusted_data_size = max_network_message_size - header_size;
         
   // replace buffer with current message counter
-  add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, 0, buffer_max);  
+  message_counter++;
+  add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, 0, buffer_max);  
     
   //printf("trying to send: %s\n", (char*)buffer);  
   if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
@@ -488,7 +489,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     {
       // add buffer before next part of data to send
       buffer_ptr += adjusted_data_size; 
-      add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
+      add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
     
       // send nth packet
       //printf("sending %u of %u \n", packet_number, total_packets);
