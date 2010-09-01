@@ -444,6 +444,21 @@ bool GlobalVariables::set_up_MyAddress() // sets up outgoing socket
 
 void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) // sends data to agent ag
 {
+  // extract message type (and other info)
+  size_t buffer_max = (size_t)buffer + max_message_size;
+  size_t buffer_ptr = size_t(buffer);
+  int sending_agent;
+  uint message_type;
+  uint temp_message_counter;
+  uint total_packets;
+  uint packet_number;
+  size_t header_end = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, temp_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+  size_t header_size = header_end - buffer_ptr;
+  size_t adjusted_data_size = max_network_message_size - header_size;
+        
+  // replace buffer with current message counter
+  add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, 0, buffer_max);  
+    
   //printf("trying to send: %s\n", (char*)buffer);  
   if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
   {
@@ -457,23 +472,8 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   {
     //printf("must split message into multiple packets \n");
     
-    // extract message type (and other info)
-    size_t buffer_max = (size_t)buffer + max_message_size;
-    size_t buffer_ptr = size_t(buffer);
-    int sending_agent;
-    uint message_type;
-    uint temp_message_counter;
-    uint total_packets;
-    uint packet_number;
-    size_t header_end = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, temp_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
-    size_t header_size = header_end - buffer_ptr;
-    size_t adjusted_data_size = max_network_message_size - header_size;
-    
     total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
     message_counter++; // increment global message counter
-    
-    // replace buffer of first packet
-    add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, message_type, message_counter, total_packets, 0, buffer_max);
     
     // send first packet
     //printf("sending %u of %u \n", 0, total_packets);
@@ -810,7 +810,7 @@ void *Listner(void * inG)
             size_t buffer_ptr = (size_t)buffer;
             size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
    
-            buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 12, Globals.message_counter, 0, 0, buffer_max); // add space for ethernet header 
+            buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 12, 0, 0, 0, buffer_max); // add space for ethernet header 
             buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max);                    // add occupancy grid
         
             //Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 12);                            // send      
@@ -880,7 +880,7 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 0,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 0,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);                      // add posestamped
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 0);                           // send 
@@ -897,7 +897,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 1,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 1,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);                      // add posestamped
   
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 1);                           // send 
@@ -910,7 +910,7 @@ void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 2,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 2,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);                        // add int
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 2);                           // send   
@@ -923,7 +923,7 @@ void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 3,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 3,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);                        // add int
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 3);                           // send 
@@ -936,7 +936,7 @@ void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 4,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 4,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PointCloud(buffer_ptr, *msg, buffer_max);                       // add pointcloud
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 4);                           // send 
@@ -949,7 +949,7 @@ void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 5,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 5,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_Path(buffer_ptr, *msg, buffer_max);                             // add path
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 5);                           // send 
@@ -962,7 +962,7 @@ void goal_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 6,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 6,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);                      // add posestamped
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 6);                           // send 
@@ -975,7 +975,7 @@ void pose_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 7,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 7
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 7,0,0,0, buffer_max); // add space for ethernet header 7
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);                      // add posestamped
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 7);                           // send 
@@ -988,7 +988,7 @@ void user_control_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 8,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 8,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_Pose2D(buffer_ptr, *msg, buffer_max);                           // add posestamped
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 8);                           // send 
@@ -1001,7 +1001,7 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 9,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 9,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_int(buffer_ptr,  msg->data, buffer_max);                        // add int
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 9);                           // send 
@@ -1015,7 +1015,7 @@ void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPt
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 10,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 10,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PointCloudWithOrigin(buffer_ptr, *msg, buffer_max);              // add pointcloud with origin
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 10);                           // send   
@@ -1031,7 +1031,7 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 11,Globals.message_counter,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 11,0,0,0, buffer_max); // add space for ethernet header 
   
   Globals.service_received_map = false;
   while(!Globals.service_received_map) // wait for response
