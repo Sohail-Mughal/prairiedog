@@ -469,7 +469,9 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   size_t header_size = header_end - buffer_ptr;
          
     
-  //printf("trying to send: %s\n", (char*)buffer);  
+  //printf("trying to send: %s\n", (char*)buffer);
+  //printf("trying to send message type: %d \n", message_type);
+  
   if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
   {
     // replace buffer with current message counter
@@ -485,7 +487,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   else // message must be split into multiple packets
   {
     size_t adjusted_data_size = max_network_message_size - header_size;
-    //printf("must split message into multiple packets \n");
+    printf("must split message into multiple packets \n");
     
     // replace buffer with current message counter and total packets we need to send
     message_counter++;
@@ -618,11 +620,6 @@ void *Listner(void * inG)
 
         printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
         
-        if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
-        {
-          //printf("continuing \n");
-          continue;
-        }
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
         if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
         {
@@ -630,6 +627,14 @@ void *Listner(void * inG)
           message_type = -1;  
           break;
         }        
+        
+        if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
+        {
+          //printf("continuing \n");
+          continue;
+        }
+        
+        printf("waiting for %u > %u \n", sent_message_counter_b, sent_message_counter + total_packets*3);
         
         // copy this into where it should go in the large message buffer 
         memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
@@ -1084,7 +1089,7 @@ int main(int argc, char * argv[])
   // init ROS
   ros::init(argc, argv, "intercom_cu");
   ros::NodeHandle nh;
-  ros::Rate loop_rate(100);
+  ros::Rate loop_rate(10);
  
   int my_id_default = 0;
   int num_agents_default = 1;
@@ -1212,7 +1217,6 @@ int main(int argc, char * argv[])
       } 
     }
   }
-  
   
   while (nh.ok()) 
   {   
