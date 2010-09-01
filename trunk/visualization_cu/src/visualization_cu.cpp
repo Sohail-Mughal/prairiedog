@@ -26,6 +26,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include <math.h>
+#include <list>
+#include <vector>
 
 #include </usr/include/GL/glut.h>	    // GLUT
 #include </usr/include/GL/glu.h>	    // GLU
@@ -53,14 +55,16 @@
 
 #include "std_msgs/Int32.h"
 
-#include <list>
+#include "intercom_cu/PoseStamped_CU_ID.h"
 
 #ifndef PI
   #define PI 3.1415926535897
 #endif
 
 #define SCANNER_RANGE 5.5 // the range of the scanner in meters;
-        
+    
+using namespace std;
+
 struct MAP;
 typedef struct MAP MAP;
 
@@ -131,7 +135,6 @@ float new_heading_y;
 
 // globals used for map etc.
 MAP* costmap = NULL;
-ROBOT* robot = NULL;
 POINT_LIST* global_path = NULL;
 POINT_LIST* local_path = NULL;
 GRID_LIST* inflated_obs_local = NULL;
@@ -139,8 +142,13 @@ GRID_LIST* obstacles_local = NULL;
 POSE* goal_pose;
 POINT_LIST* laser_scan_data = NULL;
 
+vector< ROBOT * > robots;
+int num_robots = 1;
+int current_robot = 0;
+
 // global ROS subscriber handles
 ros::Subscriber pose_sub;
+ros::Subscriber pose_multi_sub;
 ros::Subscriber robot_footprint_sub; 
 ros::Subscriber global_path_sub;
 ros::Subscriber local_path_sub;
@@ -157,7 +165,8 @@ ros::Publisher goal_pub;
 ros::Publisher new_pose_pub;
 ros::Publisher user_control_pub;
 ros::Publisher user_state_pub;
-        
+ros::Publisher selected_robot_pub;
+
 // globals used to set user robot control
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
 double change_turn = 0; // 0 = no, -1 = decrease turn, 1 = increase turn
@@ -901,6 +910,19 @@ void draw_robot(ROBOT* bot, float z_height)
   }
 }
 
+// draws the robots in the gui at buffer height z_height as quads
+void draw_robots(const vector<ROBOT*>& bots, float z_height)
+{
+  for(int i = 0; i< num_robots; i++)
+  {
+      
+    draw_robot(bots[i], z_height);
+    
+    //if(i == current_robot)
+    //draw_crosshairs(); 
+  } 
+}
+
 /*-------------------------- MENU ---------------------------------------*/
 
 //draws the menu at buffer height z_height
@@ -1023,27 +1045,28 @@ void draw_menu(float z_height)
 }
 
 /*----------------------- ROS Callbacks ---------------------------------*/
-
-void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void pose_callback_helper(const geometry_msgs::PoseStamped msg, int robot_id) // helps with the next two functions
 {
   if(costmap == NULL)
     return;
    
-  if(msg->header.frame_id != "/map_cu")
+  if(msg.header.frame_id != "/map_cu")
       ROS_INFO("Received unknown pose message");
-    
+   
+  ROBOT* robot = robots[robot_id];
+  
   // currently, just use the first particle in the cloud as the robot position
   float x_scl = 1/costmap->resolution;
   float y_scl = 1/costmap->resolution;
   float z_scl = 0;
   
   destroy_pose(robot->pose);
-  robot->pose = make_pose(msg->pose.position.x*x_scl, msg->pose.position.y*y_scl, msg->pose.position.z*z_scl);
+  robot->pose = make_pose(msg.pose.position.x*x_scl, msg.pose.position.y*y_scl, msg.pose.position.z*z_scl);
   
-  float qw = msg->pose.orientation.w;
-  float qx = msg->pose.orientation.x;
-  float qy = msg->pose.orientation.y;
-  float qz = msg->pose.orientation.z; 
+  float qw = msg.pose.orientation.w;
+  float qx = msg.pose.orientation.x;
+  float qy = msg.pose.orientation.y;
+  float qz = msg.pose.orientation.z; 
   
   robot->pose->qw = qw;
   robot->pose->qx = qx;
@@ -1054,14 +1077,27 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   robot->pose->sin_alpha = 2*qw*qz + 2*qx*qy; 
 
   display_flag = 1;
-  glutPostRedisplay(); 
+  glutPostRedisplay();       
 }
 
+
+void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  pose_callback_helper(*msg, current_robot);
+}
+
+void pose_multi_callback(const intercom_cu::PoseStamped_CU_ID::ConstPtr& msg)
+{
+  pose_callback_helper(msg->data, msg->id.data);
+}       
+        
 void robot_footprint_callback(const geometry_msgs::PolygonStamped::ConstPtr& msg)
 {
   if(costmap == NULL)
     return;
      
+  ROBOT* robot = robots[current_robot];
+  
   float x_scl = 1/costmap->resolution;
   float y_scl = 1/costmap->resolution;
   float z_scl = 0;
@@ -1336,6 +1372,13 @@ void publish_user_state(int u_state)
   user_state_pub.publish(msg); 
 }
 
+void publish_selected_robot()
+{
+  std_msgs::Int32 msg;  
+  
+  msg.data = current_robot;
+  selected_robot_pub.publish(msg);  
+}
 
 /*----------------------- GLUT Callbacks --------------------------------*/
 
@@ -1414,10 +1457,9 @@ void display()
      }
      
      // draw the robot
-     if(robot != NULL)
-     {
-        draw_robot(robot, .98);
-     }
+
+     draw_robots(robots, .98);
+
    
      // draw arrows for setting pose and goal
      if(display_state == SETGOAL && left_pressed)
@@ -1580,6 +1622,19 @@ void key(unsigned char ch,int x,int y)
   {   
     display_state = SETPOSE;
     menu_flag = 1; 
+    glutPostRedisplay(); 
+  }
+  else if (ch == 'a' || ch == 'A')
+  {   
+    current_robot++;
+    if(current_robot >= num_robots)
+      current_robot = 0;
+    
+    publish_selected_robot();
+    
+    printf("current robot: %d \n", current_robot);
+    
+    display_flag = 1;
     glutPostRedisplay(); 
   }
   else if (ch == 'r' || ch == 'R')
@@ -2071,13 +2126,14 @@ void idle()
     max_grids_on_side = 500;
           
     destroy_map(costmap);
-    costmap = load_map();
+    costmap = load_map(); 
     //costmap = load_blank_map(1000, 1000, .01);
     
     if(costmap != NULL)
     {
         display_state = MOVE;
         //ROS_INFO("STATE: MOVE\n");
+        display_flag = 1; 
     }
     else
     {
@@ -2106,6 +2162,7 @@ void idle()
   }
   
   publish_user_state(user_control_state);
+  publish_selected_robot();
   
   ros::spinOnce();
     
@@ -2119,6 +2176,7 @@ void idle()
 void cleanup()
 {
   pose_sub.shutdown();
+  pose_multi_sub.shutdown();
   robot_footprint_sub.shutdown();
   global_path_sub.shutdown();
   local_path_sub.shutdown();
@@ -2134,9 +2192,11 @@ void cleanup()
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
   user_state_pub.shutdown();
-  
+  selected_robot_pub.shutdown();
+          
   destroy_map(costmap);
-  destroy_robot(robot);
+  for(int i = 0; i < num_robots; i++)
+    destroy_robot(robots[i]);
   destroy_point_list(global_path);
   destroy_point_list(local_path);
   destroy_grid_list(inflated_obs_local);
@@ -2160,6 +2220,7 @@ int main(int argc, char *argv[])
   // load globals from parameter server
   double param_input;
   bool bool_input;
+  int int_input;
   if(ros::param::get("prairiedog/using_tf", bool_input)) 
     using_tf = bool_input;                                                 // when set to true, use the tf package (as everything arrives in map coords already, this is essentially unused here)
   if(ros::param::get("mapper_cu/global_map_x_offset", param_input))
@@ -2172,23 +2233,32 @@ int main(int argc, char *argv[])
     robot_display_radius = param_input;                                    //(m)
   if(ros::param::get("visualization_cu/no_user_control_pub", bool_input)) 
     no_publish = bool_input;                                               // when true this node does not publish user control data
-
+  if(ros::param::get("visualization_cu/num_robots", int_input)) 
+    num_robots = int_input;                                                // number of robots to look at
+  
+  
   if(using_tf)
     printf("using tf\n");
   else
     printf("not using tf\n");
   printf("map offset (x, y, theta): [%f %f %f]\n", global_map_x_offset, global_map_y_offset, global_map_theta_offset);
   printf("robot radius (used by planning node): %f \n", robot_display_radius);
-  
+  printf("num robots = %d \n", num_robots);
   // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
   ros::service::waitForService("/cu/get_map_cu", -1);
   
   // global variable init stuff
-  robot =  make_robot(0, 0, 0, RED);
+  robots.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    robots[i] =  make_robot(0, 0, 0, BLACK);
+  
+  
   goal_pose = make_pose(0, 0, 0);
   
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
+  pose_multi_sub = nh.subscribe("/cu_multi/pose_cu", 1, pose_multi_callback);
+  
   robot_footprint_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/robot_footprint", 2, robot_footprint_callback);
   global_path_sub = nh.subscribe("/cu/global_path_cu", 2, global_plan_callback);
   local_path_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
@@ -2205,6 +2275,7 @@ int main(int argc, char *argv[])
   new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
   user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
   user_state_pub = nh.advertise<std_msgs::Int32>("/cu/user_state_cu", 1);
+  selected_robot_pub = nh.advertise<std_msgs::Int32>("/cu/selected_robot_cu", 1);
   
   //  Initialize GLUT
   glutInit(&argc,argv);

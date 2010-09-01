@@ -34,7 +34,9 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 find_package(GLUT)
 find_package(OpenGL)
 
-set(GRAPHICSLIBS ${GLUT_LIBRARY} ${OPENGL_LIBRAR})
+set(GRAPHICSLIBS ${GLUT_LIBRARY} ${OPENGL_LIBRARY})
+
+message(${GLUT_LIBRARY})
 
 rosbuild_add_executable(visualization_cu src/visualization_cu.cpp)
 target_link_libraries(visualization_cu ${GRAPHICSLIBS})
