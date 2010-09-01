@@ -474,7 +474,6 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     //printf("must split message into multiple packets \n");
     
     total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
-    message_counter++; // increment global message counter
     
     // send first packet
     //printf("sending %u of %u \n", 0, total_packets);
