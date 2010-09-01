@@ -171,14 +171,14 @@ ros::Publisher selected_robot_pub;
 double change_speed = 0; // 0 = no, -1 = decrease speed, 1 = increase speed
 double change_turn = 0; // 0 = no, -1 = decrease turn, 1 = increase turn
 
-// globals for overall system state
-int advertised_control_state; // as recieved from the controller node (irobot_crate_cu)
-                              // 0 = initial state (havn't recieved enough info to start moving)
-                              // 1 = planning and moving normally, 
-                              // 2 = bumper hit, backing up
-                              // 3 = no path to goal exists
-                              // 4 = manual stop
-                              // 5 = manual control
+// globals for overall system state, per robot
+vector<int> advertised_control_state; // as recieved from the controller node (irobot_crate_cu)
+                                      // 0 = initial state (havn't recieved enough info to start moving)
+                                      // 1 = planning and moving normally, 
+                                      // 2 = bumper hit, backing up
+                                      // 3 = no path to goal exists
+                                      // 4 = manual stop
+                                      // 5 = manual control
 
 int user_control_state = 0; // as broadcast by this node
                             // 0 = passive, doing nothing
@@ -270,6 +270,7 @@ void draw_string(float* pos, float pad_left, float pad_bottom, const char* strin
     for(int i = 0; string[i] != '\0'; i++)
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, string[i]);
 }
+
 
 /*---------------------- MAP --------------------------------------------*/
 struct MAP
@@ -864,7 +865,7 @@ void destroy_robot(ROBOT* bot)
 }
 
 // draws the robot in the gui at buffer height z_height as quads
-void draw_robot(ROBOT* bot, float z_height)
+void draw_robot(ROBOT* bot, float* color, float z_height)
 {    
   if(bot == NULL) 
     return;
@@ -888,26 +889,72 @@ void draw_robot(ROBOT* bot, float z_height)
     float scaled_rad = robot_display_radius/costmap->resolution;
     float pos[] = {bot->pose->x, bot->pose->y, 0};
     
-    float* BOT_CLR = NULL; 
-    if(advertised_control_state == 0) // initial state (havn't recieved enough info to start moving)
-      BOT_CLR = BLACK;
-    else if(advertised_control_state == 1)  // planning and moving normally, 
-      BOT_CLR = BLUE;
-    else if(advertised_control_state == 2)  // bumper hit, backing up
-      BOT_CLR = RED;
-    else if(advertised_control_state == 3) // no path to goal exists
-      BOT_CLR = ORANGE; 
-    else if(advertised_control_state == 4)  // manual stop
-      BOT_CLR = PURPLE;
-    else if(advertised_control_state == 5)  // manual control
-      BOT_CLR = LIGHTBLUE;
-    
-    draw_circle(pos, scaled_rad , BOT_CLR);
+    draw_circle(pos, scaled_rad , color);
     float pos2[] = {bot->pose->x + scaled_rad*bot->pose->cos_alpha, bot->pose->y + scaled_rad*bot->pose->sin_alpha, 0};
-    draw_arrow(pos, pos2, BOT_CLR);
+    draw_arrow(pos, pos2, color);
     
     glPopMatrix(); 
   }
+}
+
+// draws crosshairs centered at pose, that are c_rad large, thick bold, with segments length long, and spaced half_gap*2 apart, where all of these are in terms of robot radius
+void draw_crosshairs(POSE* pose, float c_rad, float thick, float length, float half_gap, float* color, float z_height)
+{ 
+  if(pose == NULL) 
+    return;
+          
+    
+  // now draw pose circle and directional arrow 
+  if(costmap!= NULL)
+  { 
+    glPushMatrix(); 
+    glTranslatef(-1, -1, z_height);
+  
+    if(costmap != NULL)
+    {
+      float map_rad = 2/(float)max(costmap->height, costmap->width); 
+      glScaled(map_rad,map_rad,1);
+    }
+    
+    float scaled_robot_rad = robot_display_radius/costmap->resolution;
+    c_rad *= scaled_robot_rad;
+    thick *= scaled_robot_rad;
+    length *= scaled_robot_rad;
+    half_gap *= scaled_robot_rad;
+    
+    // upper right
+    float pos1[] = {pose->x+half_gap, pose->y+c_rad, 0};
+    float size_horiz[] = {length, thick, 0};
+    drawRectangle(pos1, size_horiz, color);
+    
+    float pos2[] = {pose->x+c_rad, pose->y+half_gap, 0};
+    float size_vert[] = {thick, length, 0};
+    drawRectangle(pos2, size_vert, color);
+    
+    
+    // upper left
+    float pos3[] = {pose->x-half_gap-length, pose->y+c_rad, 0};
+    drawRectangle(pos3, size_horiz, color);
+    
+    float pos4[] = {pose->x-c_rad-thick, pose->y+half_gap, 0};
+    drawRectangle(pos4, size_vert, color);
+    
+    // lower left
+    float pos5[] = {pose->x-half_gap-length, pose->y-c_rad-thick, 0};
+    drawRectangle(pos5, size_horiz, color);
+    
+    float pos6[] = {pose->x-c_rad-thick, pose->y-half_gap-length, 0};
+    drawRectangle(pos6, size_vert, color);
+    
+    // lower right
+    float pos7[] = {pose->x+half_gap, pose->y-c_rad-thick, 0};
+    drawRectangle(pos7, size_horiz, color);
+    
+    float pos8[] = {pose->x+c_rad, pose->y-half_gap-length, 0};
+    drawRectangle(pos8, size_vert, color);
+    
+    glPopMatrix(); 
+  }  
 }
 
 // draws the robots in the gui at buffer height z_height as quads
@@ -916,10 +963,24 @@ void draw_robots(const vector<ROBOT*>& bots, float z_height)
   for(int i = 0; i< num_robots; i++)
   {
       
-    draw_robot(bots[i], z_height);
+    float* BOT_CLR = NULL; 
+    if(advertised_control_state[i] == 0) // initial state (havn't recieved enough info to start moving)
+      BOT_CLR = BLACK;
+    else if(advertised_control_state[i] == 1)  // planning and moving normally, 
+      BOT_CLR = BLUE;
+    else if(advertised_control_state[i] == 2)  // bumper hit, backing up
+      BOT_CLR = RED;
+    else if(advertised_control_state[i] == 3) // no path to goal exists
+      BOT_CLR = ORANGE; 
+    else if(advertised_control_state[i] == 4)  // manual stop
+      BOT_CLR = PURPLE;
+    else if(advertised_control_state[i] == 5)  // manual control
+      BOT_CLR = LIGHTBLUE;
+      
+    draw_robot(bots[i], BOT_CLR, z_height);
     
-    //if(i == current_robot)
-    //draw_crosshairs(); 
+    if(i == current_robot)
+      draw_crosshairs(bots[i]->pose, 1.5, .3, 1, .5, ORANGE, z_height);
   } 
 }
 
@@ -1323,10 +1384,10 @@ void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
 void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
 {      
   
-  if(advertised_control_state != msg->data)
+  if(advertised_control_state[current_robot] != msg->data)
   {
-    advertised_control_state = msg->data;
-    if(advertised_control_state == 0 || advertised_control_state == 3)  
+    advertised_control_state[current_robot] = msg->data;
+    if(advertised_control_state[current_robot] == 0 || advertised_control_state[current_robot] == 3)  
       safe_path_exists = 0;
     
     display_flag = 1;
@@ -2250,8 +2311,9 @@ int main(int argc, char *argv[])
   // global variable init stuff
   robots.resize(num_robots, NULL);
   for(int i = 0; i < num_robots; i++)
-    robots[i] =  make_robot(0, 0, 0, BLACK);
+    robots[i] = make_robot(0, 0, 0, BLACK);
   
+  advertised_control_state.resize(num_robots, 0);
   
   goal_pose = make_pose(0, 0, 0);
   
