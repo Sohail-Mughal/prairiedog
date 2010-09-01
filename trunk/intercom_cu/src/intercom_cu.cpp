@@ -454,15 +454,15 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   uint packet_number;
   size_t header_end = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, temp_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
   size_t header_size = header_end - buffer_ptr;
-  size_t adjusted_data_size = max_network_message_size - header_size;
-        
-  // replace buffer with current message counter
-  message_counter++;
-  add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, 0, buffer_max);  
+         
     
   //printf("trying to send: %s\n", (char*)buffer);  
   if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
   {
+    // replace buffer with current message counter
+    message_counter++;
+    add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, 1, 0, buffer_max);
+      
     int sent_size = sendto(MyOutSock, buffer, buffer_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
     if(sent_size < 0) 
     {
@@ -471,9 +471,13 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   }
   else // message must be split into multiple packets
   {
+    size_t adjusted_data_size = max_network_message_size - header_size;
     //printf("must split message into multiple packets \n");
     
+    // replace buffer with current message counter and total packets we need to send
+    message_counter++;
     total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
+    add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, 0, buffer_max);
     
     // send first packet
     //printf("sending %u of %u \n", 0, total_packets);
