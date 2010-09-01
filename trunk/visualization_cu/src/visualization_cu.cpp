@@ -60,7 +60,10 @@
 #ifndef PI
   #define PI 3.1415926535897
 #endif
-
+#ifndef LARGE
+  #define LARGE 3.1415926535897
+#endif
+        
 #define SCANNER_RANGE 5.5 // the range of the scanner in meters;
     
 using namespace std;
@@ -984,6 +987,31 @@ void draw_robots(const vector<ROBOT*>& bots, float z_height)
   } 
 }
 
+// returns the index of the closest robot to the point (x,y) that is also within c_rad
+int closest_robot_to_point_within(const vector<ROBOT*>& bots, float world_x, float world_y, float c_rad) 
+{
+  float closest_dist = c_rad;
+  int closest_ind = -1;
+  float this_dist; 
+  
+  for(int i = 0; i < num_robots; i++)
+  { 
+    float x_diff = costmap->resolution*bots[i]->pose->x - world_x;
+    float y_diff = costmap->resolution*bots[i]->pose->y - world_y;
+    
+    this_dist = sqrt(x_diff*x_diff + y_diff*y_diff);
+     
+    if(this_dist < closest_dist)
+    {
+      closest_dist = this_dist;  
+      closest_ind = i;
+    }
+  }
+  
+  return closest_ind;
+}
+
+
 /*-------------------------- MENU ---------------------------------------*/
 
 //draws the menu at buffer height z_height
@@ -1873,6 +1901,22 @@ void mouse(int button, int mouse_state, int x, int y)
   }
   
   // if we get to here then the mouse is below the menu
+  float map_rad = 2/(float)max(costmap->height, costmap->width);
+  
+  // check if user is clicking on a robot
+  if(button == GLUT_LEFT_BUTTON && mouse_state == GLUT_DOWN)
+  {
+    float mouse_x_global = (mouse_x_world + 1)/map_rad*costmap->resolution; // in meters
+    float mouse_y_global = (mouse_y_world + 1)/map_rad*costmap->resolution; // in meters
+    int closest_bot = closest_robot_to_point_within(robots, mouse_x_global, mouse_y_global, robot_display_radius*2);
+    if(closest_bot != -1)
+    {
+      current_robot = closest_bot;
+      display_flag = 1; 
+      glutPostRedisplay();
+    }
+  }
+  
   if(display_state == MOVE)
   {
     if(button == GLUT_LEFT_BUTTON && mouse_state == GLUT_DOWN && left_pressed == 0)
@@ -1912,7 +1956,6 @@ void mouse(int button, int mouse_state, int x, int y)
       
       msg.header.frame_id = "/map_cu";
       
-      float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
       float absolute_goal_y = (new_location_y + 1)/map_rad*costmap->resolution; // in meters
       
@@ -1961,7 +2004,6 @@ void mouse(int button, int mouse_state, int x, int y)
       
       msg.header.frame_id = "/map_cu";
       
-      float map_rad = 2/(float)max(costmap->height, costmap->width); 
       float absolute_goal_x = (new_location_x + 1)/map_rad*costmap->resolution; // in meters
       float absolute_goal_y = (new_location_y + 1)/map_rad*costmap->resolution; // in meters
       
