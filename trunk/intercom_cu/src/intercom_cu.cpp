@@ -95,6 +95,8 @@ bool using_tf = true;              // when set to true, use the tf package
 int max_message_size = 500000;
 size_t max_network_message_size = 15000; // messages larger than this are split into multiple messages to be sent
 
+int NUM_MESSAGE_TYPES = 14;
+  
 // global ROS subscriber handles
 ros::Subscriber selected_robot_sub;
 
@@ -146,31 +148,47 @@ class GlobalVariables
    void Populate(int id, int total_agents);  // populate GlobalVariables
    
    bool read_IPS_from_file(std::string& config_file);       // reads the IPS from a file
-   bool set_up_OtherAddresseses();                         // sets other address data
-   bool set_up_MyAddress();                                // sets up outgoing socket
+   bool set_up_OtherAddressesUDP();                         // sets other address data for UDP socket connections
+   bool set_up_MyAddressUDP();                              // sets up incomming UDP sockets
+   bool set_up_IncommingTCP();                              // sets up incomming TCP sockets
+   bool set_up_OutgoingTCP();                               // sets up outgoing TCP sockets
+   bool set_up_single_IncommingTCP(int s);                  // sets up incomming TCP socket, s is the agent we want to set it up to
+   bool set_up_single_OutgoingTCP(int s);                   // sets up outgoing TCP socket, s is the agent we want to set it up to
    
    void send_to_agent(void* buffer, size_t buffer_size, int ag);                    // sends data to agent ag
    void send_to_all_agents(void* buffer, size_t buffer_size);                       // sends data to all other agents
    void send_to_destination_matrix(void* buffer, size_t buffer_size, int msg_type); // sends data to all destination_matrix[msg_type]==true
    void send_message_type(void* buffer, size_t buffer_size, int type);              // sends data of message-type send_mode_list as defined by send_mode_list[type]
    
+   bool using_tcp();    // returns true if any messages need tcp
+   bool using_udp();    // returns true if any messages need udp
+   
    // ip addresses
    std::string MyIP;
    vector<std::string> OtherIPs;
-      
-   // ports
-   int MyInPort;
-   int MyOutPort;
    
-   vector<int> OtherInPorts;
+   // ports
+   int MyInPortUDP;
+   int MyOutPortUDP;
+   
+   vector<int> OtherInPortsUDP;
+   
+   vector<int> MyInPortsTCP;
+   int MyDestinationPortTCP;
    
    // socket numbers
-   int  MyInSock;
-   int  MyOutSock;
-      
-   // addresses
-   struct sockaddr_in MyAddress;
-   vector<struct sockaddr_in> OtherAddresses;
+   int MyInSockUDP;
+   int MyOutSockUDP;
+   
+   vector<int> MyInSocksTCP;
+   vector<int> MyOutSocksTCP;
+   
+   // sockaddr_in addresses
+   struct sockaddr_in MyAddressUDP;
+   vector<struct sockaddr_in> OtherAddressesUDP;
+   
+   vector<struct sockaddr_in> MyInAddressesTCP;
+   vector<struct sockaddr_in> DestinationAddressesTCP;
    
    // my agent id
    int my_id;
@@ -185,6 +203,7 @@ class GlobalVariables
    vector<bool> send_list;
    vector<int>  send_mode_list;  // 0=broadcast (default), 1=send only to the current target_agent, 2=send only to a subset of agents as defined in the config file 
    vector<vector<bool> > destination_matrix; // destination_matrix[x][y] means that we need to send message x to agent y
+   vector<int> protocol; // 0 = udp (default), 1 = tcp
    
    // message types we recieve 'listen_list[i] = true' denotes message type i is listened for (via udp)
    vector<bool> listen_list;
@@ -205,8 +224,8 @@ GlobalVariables::GlobalVariables()
 {   
   my_id = -1;
   
-  MyOutSock = -1;
-  MyInSock = -1;
+  MyOutSockUDP = -1;
+  MyInSockUDP = -1;
   
   num_agents = 0;
   
@@ -221,28 +240,7 @@ GlobalVariables::GlobalVariables()
 
 GlobalVariables::GlobalVariables(int id, int total_agents)  
 {  
-  my_id = id;  
-  
-  MyInSock = -1;
-  MyOutSock = -1;
-  
-  num_agents = total_agents;
-  
-  service_received_map = false;
-       
-  MyInPort = 57001 + id;
-  MyOutPort = 67001 + id;
-            
-  OtherInPorts.resize(num_agents);
-  for(int i = 0; i < num_agents; i++)
-    OtherInPorts[i] = 57001 + i;  
-  
-  OtherIPs.resize(num_agents);
-  OtherAddresses.resize(num_agents);
-  
-  message_counter = 0;
-  
-  send_mutext = false;
+   Populate(id, total_agents);
 }
 
 GlobalVariables::~GlobalVariables()  // destructor
@@ -253,25 +251,36 @@ void GlobalVariables::Populate(int id, int total_agents) // populate GlobalVaria
 {
   my_id = id;  
   
-  MyInSock = -1;
-  MyOutSock = -1;
-  
   num_agents = total_agents;
   
   service_received_map = false;
        
-  MyInPort = 57001 + id;
-  MyOutPort = 67001 + id;
+  MyInPortUDP = 57001 + id;
+  MyOutPortUDP = 67001 + id;
   
-  OtherInPorts.resize(num_agents);
+  OtherInPortsUDP.resize(num_agents);
   for(int i = 0; i < num_agents; i++)
-    OtherInPorts[i] = 57001 + i;  
+    OtherInPortsUDP[i] = 57001 + i;   
+  
+  MyInPortsTCP.resize(num_agents);    // this is the reserved port on us for robot i to contact us
+  for(int i = 0; i < num_agents; i++)
+    MyInPortsTCP[i] = 37001 + i;
+    
+  MyDestinationPortTCP = 37001 + id;  // this is the reserved port on other agents for us to contact them
+  
+  MyInSockUDP = -1;
+  MyOutSockUDP = -1;
+  
+  MyInSocksTCP.resize(num_agents, -1);
+  MyOutSocksTCP.resize(num_agents, -1);
   
   OtherIPs.resize(num_agents);
-  OtherAddresses.resize(num_agents);
+  OtherAddressesUDP.resize(num_agents);
+  MyInAddressesTCP.resize(num_agents);
+  DestinationAddressesTCP.resize(num_agents);
   
   message_counter = 0;
-  
+
   send_mutext = false;
 }
 
@@ -288,10 +297,10 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
   printf("loaded config file:\n");  
 
   // init to not send or recieve anything
-  int NUM_MESSAGE_TYPES = 14;
   send_list.resize(NUM_MESSAGE_TYPES, false);
   send_mode_list.resize(NUM_MESSAGE_TYPES, 0);
   destination_matrix.resize(NUM_MESSAGE_TYPES);
+  protocol.resize(NUM_MESSAGE_TYPES, 0);
   listen_list.resize(NUM_MESSAGE_TYPES, false);
   listen_mode_list.resize(NUM_MESSAGE_TYPES, 0);
   
@@ -331,7 +340,10 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
           if(message_el->Attribute("mode"))
             send_mode_list[message_type] = atoi(message_el->Attribute("mode"));
           
-          printf("  %d (using mode %d)\n", message_type, send_mode_list[message_type]);
+          if(message_el->Attribute("protocol"))
+            protocol[message_type] = atoi(message_el->Attribute("protocol"));
+          
+          printf("  %d (using mode %d), on protocol %d\n", message_type, send_mode_list[message_type], protocol[message_type]);
           
           if(send_mode_list[message_type] == 2) // then we need to read the list of destination agents
           {
@@ -383,7 +395,7 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
   return true;
 }
 
-bool GlobalVariables::set_up_OtherAddresseses() // sets up other address data
+bool GlobalVariables::set_up_OtherAddressesUDP() // sets up other address data for UDP connections
 {
   for(int i = 0; i < num_agents; i++)
   {
@@ -398,64 +410,151 @@ bool GlobalVariables::set_up_OtherAddresseses() // sets up other address data
       continue;
     }
 
-    // populate OtherAddresseses
-    OtherAddresses[i].sin_family = AF_INET;
+    // populate OtherAddressesUDP
+    OtherAddressesUDP[i].sin_family = AF_INET;
 
-    bcopy((char *)hp_this->h_addr, (char *)&OtherAddresses[i].sin_addr, hp_this->h_length); // copy in address
+    bcopy((char *)hp_this->h_addr, (char *)&OtherAddressesUDP[i].sin_addr, hp_this->h_length); // copy in address
 
-    OtherAddresses[i].sin_port = htons(OtherInPorts[i]);       
+    OtherAddressesUDP[i].sin_port = htons(OtherInPortsUDP[i]);       
   }
 
   return true;
 }
 
-bool GlobalVariables::set_up_MyAddress() // sets up outgoing socket
+bool GlobalVariables::set_up_MyAddressUDP() // sets up incomming UDP socket
 {
-  if(MyOutSock < 0)
+  if(MyOutSockUDP < 0)
   {
-    MyOutSock = socket(AF_INET, SOCK_DGRAM, 0); 
-    if(MyOutSock < 0)        // failed to create socket
+    MyOutSockUDP = socket(AF_INET, SOCK_DGRAM, 0); 
+    if(MyOutSockUDP < 0)        // failed to create socket
     {
       error("problems creating socket");
       return false;
     }
   }
 
-  if(MyInSock < 0)
+  if(MyInSockUDP < 0)
   {
-    MyInSock = socket(AF_INET, SOCK_DGRAM, 0);
-    if(MyInSock < 0)  // failed to open socket
+    MyInSockUDP = socket(AF_INET, SOCK_DGRAM, 0);
+    if(MyInSockUDP < 0)  // failed to open socket
     {
       error("Problems opening socket\n");
       return false;
     }
   }
   
-  // clear all memory of MyAddress structure
-  int MyAddress_length = sizeof(MyAddress);
-  memset(&(MyAddress), NULL, MyAddress_length); 
+  // clear all memory of MyAddressUDP structure
+  int MyAddressUDP_length = sizeof(MyAddressUDP);
+  memset(&(MyAddressUDP), NULL, MyAddressUDP_length); 
    
-  // populate MyAddress structure
-  MyAddress.sin_family = AF_INET;
-  MyAddress.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
-  MyAddress.sin_port = htons(MyInPort);  // htons() converts 'number' to proper network byte order
+  // populate MyAddressUDP structure
+  MyAddressUDP.sin_family = AF_INET;
+  MyAddressUDP.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
+  MyAddressUDP.sin_port = htons(MyInPortUDP);  // htons() converts 'number' to proper network byte order
 
-  // bind in_socket with MyAddress
-  if(bind(MyInSock, (struct sockaddr *)&(MyAddress), MyAddress_length)<0) 
+  // bind in_socket with MyAddressUDP
+  if(bind(MyInSockUDP, (struct sockaddr *)&(MyAddressUDP), MyAddressUDP_length)<0) 
   {
-    error("problems binding MyInSock");
+    error("problems binding MyInSockUDP");
     return false;
   }
 
   return true;
 }
 
+bool GlobalVariables::set_up_IncommingTCP()  // sets up incomming TCP sockets
+{   
+  bool r_value = true; 
+  for(int i = 0; i < num_agents; i++)
+    r_value = set_up_single_IncommingTCP(i);
+  
+  return r_value;     
+}
+
+
+
+bool GlobalVariables::set_up_OutgoingTCP()   // sets up outgoing TCP sockets
+{
+  bool r_value = true;
+  for(int i = 0; i < num_agents; i++)
+    r_value = set_up_single_OutgoingTCP(i);
+  
+  return r_value;   
+}
+
+bool GlobalVariables::set_up_single_IncommingTCP(int s)  // sets up incomming TCP socket, s is the agent we want to set it up for
+{   
+  bool r_value = true; 
+   
+  int i = s;
+
+  if(MyInSocksTCP[i] < 0)
+    MyInSocksTCP[i] = socket(AF_INET, SOCK_STREAM, 0);   
+  if(MyInSocksTCP[i] < 0) 
+  {
+    error("error opening socket");  
+    r_value = false;
+  }
+  bzero((char *) &(MyInAddressesTCP[i]), sizeof(MyInAddressesTCP[i])); 
+     
+  MyInAddressesTCP[i].sin_family = AF_INET;
+  MyInAddressesTCP[i].sin_addr.s_addr = INADDR_ANY;
+  MyInAddressesTCP[i].sin_port = htons(MyInPortsTCP[i]);
+     
+  size_t size_temp = sizeof(MyInAddressesTCP[i]);
+    
+  if(bind(MyInSocksTCP[i], (struct sockaddr *) &(MyInAddressesTCP[i]), size_temp) < 0) 
+  {
+    error("problems binding socket");
+    r_value = false;
+  }
+  else
+    printf("binding socket %d \n", MyInSocksTCP[i]);
+
+  return true;  
+}
+
+bool GlobalVariables::set_up_single_OutgoingTCP(int s)   // sets up outgoing TCP socket, s is the agent we want to set it up to
+{
+  int i = s;
+  
+  if(MyOutSocksTCP[i]  < 0)
+    MyOutSocksTCP[i] = socket(AF_INET, SOCK_STREAM, 0);
+  if(MyOutSocksTCP[i]  < 0)
+  {
+    error("problems opening socket");
+    return false;
+  }
+    
+  struct hostent *server;
+  server = gethostbyname(OtherIPs[i].c_str());
+    
+  if(server == NULL) 
+  {
+    error("problems opening socket: cannot locate host");
+    return false;
+  }
+    
+  bzero((char *) &DestinationAddressesTCP[i], sizeof(DestinationAddressesTCP[i]));
+  DestinationAddressesTCP[i].sin_family = AF_INET;
+    
+  bcopy((char *)server->h_addr, (char *)&DestinationAddressesTCP[i].sin_addr.s_addr, server->h_length);
+    
+  DestinationAddressesTCP[i].sin_port = htons(MyDestinationPortTCP);
+    
+  if(connect(MyOutSocksTCP[i], (struct sockaddr *) &(DestinationAddressesTCP[i]),sizeof(DestinationAddressesTCP[i])) < 0) 
+  {
+    error("problems connecting to other agent");
+    return false;
+  }    
+  
+  return true;   
+}
+
 void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) // sends data to agent ag
 {
   if(send_mutext) // somebody else is sending, so drop the message
     return;
-    
-  send_mutext = true;
   
   // extract message type (and other info)
   size_t buffer_max = (size_t)buffer + max_message_size;
@@ -467,58 +566,79 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
   uint packet_number;
   size_t header_end = extract_from_buffer_ethernetheader(buffer_ptr, sending_agent, message_type, temp_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
   size_t header_size = header_end - buffer_ptr;
-         
-    
-  //printf("trying to send: %s\n", (char*)buffer);
-  //printf("trying to send message type: %d \n", message_type);
   
-  if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
+  if(protocol[message_type] == 0) // want to send using UDP
   {
-    // replace buffer with current message counter
-    message_counter++;
-    add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, 1, 0, buffer_max);
+    send_mutext = true;
+    
+    //printf("trying to send: %s\n", (char*)buffer);
+    //printf("trying to send message type: %d \n", message_type);
+  
+    if(buffer_size <= max_network_message_size)  // message is small enough to fit in one packet
+    {
+      // replace buffer with current message counter
+      message_counter++;
+      add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, 1, 0, buffer_max);
       
-    int sent_size = sendto(MyOutSock, buffer, buffer_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
-    if(sent_size < 0) 
-    {
-      error("Problems sending data");
-    }
-  }
-  else // message must be split into multiple packets
-  {
-    size_t adjusted_data_size = max_network_message_size - header_size;
-    printf("must split message into multiple packets \n");
-    
-    // replace buffer with current message counter and total packets we need to send
-    message_counter++;
-    total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
-    add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, 0, buffer_max);
-    
-    // send first packet
-    //printf("sending %u of %u \n", 0, total_packets);
-    int sent_size = sendto(MyOutSock, buffer, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
-    if(sent_size < 0) 
-    {
-      error("Problems sending data");
-    }
-    
-    // send the rest of the packets
-    for(packet_number = 1; packet_number < total_packets; packet_number++)
-    {
-      // add buffer before next part of data to send
-      buffer_ptr += adjusted_data_size; 
-      add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
-    
-      // send nth packet
-      //printf("sending %u of %u \n", packet_number, total_packets);
-      int sent_size = sendto(MyOutSock, (void *)buffer_ptr, max_network_message_size, 0, (struct sockaddr *)&(OtherAddresses[ag]), sizeof(struct sockaddr_in));
+      int sent_size = sendto(MyOutSockUDP, buffer, buffer_size, 0, (struct sockaddr *)&(OtherAddressesUDP[ag]), sizeof(struct sockaddr_in));
       if(sent_size < 0) 
       {
         error("Problems sending data");
       }
     }
+    else // message must be split into multiple packets
+    {
+      size_t adjusted_data_size = max_network_message_size - header_size;
+      printf("must split message into multiple packets \n");
+    
+      // replace buffer with current message counter and total packets we need to send
+      message_counter++;
+      total_packets = buffer_size/(max_network_message_size-header_size) + 1; // number of packets we need to send
+      add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, 0, buffer_max);
+    
+      // send first packet
+      //printf("sending %u of %u \n", 0, total_packets);
+      int sent_size = sendto(MyOutSockUDP, buffer, max_network_message_size, 0, (struct sockaddr *)&(OtherAddressesUDP[ag]), sizeof(struct sockaddr_in));
+      if(sent_size < 0) 
+      {
+        error("Problems sending data");
+      }
+    
+      // send the rest of the packets
+      for(packet_number = 1; packet_number < total_packets; packet_number++)
+      {
+        // add buffer before next part of data to send
+        buffer_ptr += adjusted_data_size; 
+        add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, total_packets, packet_number, buffer_max);   
+    
+        // send nth packet
+        //printf("sending %u of %u \n", packet_number, total_packets);
+        int sent_size = sendto(MyOutSockUDP, (void *)buffer_ptr, max_network_message_size, 0, (struct sockaddr *)&(OtherAddressesUDP[ag]), sizeof(struct sockaddr_in));
+        if(sent_size < 0) 
+        {
+          error("Problems sending data");
+        }
+      } 
+    }
+    send_mutext = false;
   }
-  send_mutext = false;
+  else if(protocol[message_type] == 1) // want to send using TCP
+  {  
+    message_counter++;
+    add_to_buffer_ethernetheader(buffer_ptr, my_id, message_type, message_counter, (uint)buffer_size, 0, buffer_max);  
+    
+    //printf("sending message %d of size %d \n", message_type, (int)buffer_size);
+    int n = -1;
+    while(n < 0)
+    {
+      n = write(MyOutSocksTCP[ag],(const void*)buffer_ptr,buffer_size);
+      if(n < 0)
+      {
+        error("S problems writing to socket");
+        Globals.set_up_single_OutgoingTCP(ag);
+      }
+    }
+  }
 }
 
 void GlobalVariables::send_to_all_agents(void* buffer, size_t buffer_size) // sends data to all other agents
@@ -553,8 +673,251 @@ void GlobalVariables::send_message_type(void* buffer, size_t buffer_size, int ty
     send_to_destination_matrix(buffer, buffer_size, type);    // send to all agents in destination matrix
 }
  
-/*--------------------------  listner thread ----------------------------*/
-void *Listner(void * inG)
+bool GlobalVariables::using_tcp()    // returns true if any messages need tcp
+{
+  for(int i = 0; i <= NUM_MESSAGE_TYPES; i++)  
+  {
+    if(protocol[i] == 1)
+      return true;
+  }
+  return false;
+}
+
+
+bool GlobalVariables::using_udp()    // returns true if any messages need udp
+{
+  for(int i = 0; i <= NUM_MESSAGE_TYPES; i++)  
+  {
+    if(protocol[i] == 0)
+      return true;
+  }
+  return false;  
+    
+}
+
+void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_t buffer_max, GlobalVariables* G, int sending_agent) // extracts the message denoted by type starting at buffer_ptr and publishes on approperiate topic, errors if tries to read past buffer_max
+{   
+  if(message_type == 0 && G->listen_list[0]) // it is a pose message
+  {
+    if(G->listen_mode_list[0] == 0)
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      pose_pub.publish(msg);  
+    }
+    else if(G->listen_mode_list[0] == 1)
+    {
+      intercom_cu::PoseStamped_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
+      pose_pub.publish(msg);
+    }
+  }
+  else if(message_type == 1 && G->listen_list[1]) // it is a goal message
+  {
+    if(G->listen_mode_list[1] == 0)
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      goal_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[1] == 1)
+    {
+        
+    }
+  } 
+  else if(message_type == 2 && G->listen_list[2]) // it is a system state message
+  {
+    if(G->listen_mode_list[2] == 0)
+    {
+      std_msgs::Int32 msg;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      system_state_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[2] == 1)
+    {
+         
+    }
+  } 
+  else if(message_type == 3 && G->listen_list[3]) // it is a system update message
+  {
+    if(G->listen_mode_list[3] == 0)
+    {
+      std_msgs::Int32 msg;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      system_update_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[3] == 1)
+    {
+        
+    }
+  }
+  else if(message_type == 4 && G->listen_list[4]) // it is a map changes message
+  {
+    if(G->listen_mode_list[4] == 0)
+    {
+      sensor_msgs::PointCloud msg;
+      buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
+      map_changes_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[4] == 1)
+    {
+        
+    }
+  } 
+  else if(message_type == 5 && G->listen_list[5]) // it is a global path message
+  {
+    if(G->listen_mode_list[5] == 0)
+    {
+      nav_msgs::Path msg;
+      buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
+      global_path_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[5] == 1)
+    {
+          
+    }
+  }
+  else if(message_type == 6 && G->listen_list[6]) // it is a goal reset message
+  {
+    if(G->listen_mode_list[6] == 0)
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      new_goal_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[6] == 1)
+    {
+          
+    }
+  } 
+  else if(message_type == 7 && G->listen_list[7]) // it is a pose reset message
+  {
+    if(G->listen_mode_list[7] == 0)
+    {
+      geometry_msgs::PoseStamped msg;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      new_pose_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[7] == 1)
+    {
+          
+    }
+  } 
+  else if(message_type == 8 && G->listen_list[8]) // it is a user control message
+  {
+    if(G->listen_mode_list[8] == 0)
+    {
+      geometry_msgs::Pose2D msg;
+      buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
+      user_control_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[8] == 1)
+    {
+          
+    }
+  }
+  else if(message_type == 9 && G->listen_list[9]) // it is a user state message
+  {
+    if(G->listen_mode_list[9] == 0)
+    {
+      std_msgs::Int32 msg;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      user_state_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[9] == 1)
+    {
+          
+    }
+  }
+  else if(message_type == 10 && G->listen_list[10]) // it is a laser scan message
+  {
+    if(G->listen_mode_list[10] == 0)
+    {
+      hokuyo_listener_cu::PointCloudWithOrigin msg;
+      buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
+      laser_scan_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[10] == 1)
+    {
+          
+    }
+  }
+  else if(message_type == 11 && G->listen_list[11]) // it is a map service request message
+  {
+    if(G->listen_mode_list[11] == 0)
+    {
+      nav_msgs::GetMap::Request  req;
+      nav_msgs::GetMap::Response resp;
+      
+      if(G->send_list[12])
+      {
+        if(ros::service::call("/cu/get_map_cu", req, resp) )
+        {
+          // send response back to the sending agent
+          uint this_msg_size = max_message_size; 
+          char buffer[this_msg_size];
+          size_t buffer_ptr = (size_t)buffer;
+          size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+   
+          buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 12, 0, 0, 0, buffer_max); // add space for ethernet header 
+          buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max);                    // add occupancy grid
+            
+          //printf("sending message type 12 to %d at %s\n", sending_agent, G->OtherIPs[2].c_str());
+          Globals.send_to_agent(buffer, buffer_ptr-(size_t)buffer, sending_agent);
+        }
+      }
+    }
+    else if(G->listen_mode_list[11] == 1)
+    {
+
+    }
+  }
+  else if(message_type == 12 && G->listen_list[12]) // it is a map service response message
+  {
+    if(!Globals.service_received_map)
+    {
+      if(G->listen_mode_list[12] == 0)
+      {
+        // store in globals so service provider can access it
+        buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
+        Globals.service_received_map = true;
+      }
+      else if(G->listen_mode_list[12] == 1)
+      {
+          
+      }
+    }
+  }
+  else if(message_type == 13 && G->listen_list[13]) // it is a "/map_cu" -> "/world_cu" transform
+  {
+    if(using_tf)
+    {
+      if(G->listen_mode_list[13] == 0)
+      {
+        static tf::TransformBroadcaster br;  
+        tf::StampedTransform transform;   
+
+        buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
+        transform.frame_id_ = std::string("/map_cu");
+        transform.child_frame_id_ = std::string("/world_cu");
+        
+        br.sendTransform(transform);
+      }
+      else if(G->listen_mode_list[13] == 1)
+      {
+          
+      }
+    }
+  }   
+}  
+    
+    
+
+
+
+/*-------------------------- UDP listner thread -------------------------*/
+void *Listner_UDP(void * inG)
 {
   GlobalVariables* G = (GlobalVariables*)inG;  
   char network_message_buffer[max_network_message_size]; // used for a single message
@@ -572,7 +935,7 @@ void *Listner(void * inG)
   {    
     int senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct  
     memset(&network_message_buffer,'\0',sizeof(network_message_buffer)); 
-    int message_length = recvfrom(G->MyInSock, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
+    int message_length = recvfrom(G->MyInSockUDP, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
     if(message_length < 0) 
       printf("had problems getting a message \n");
     
@@ -586,8 +949,7 @@ void *Listner(void * inG)
     uint packet_number;
     buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent, message_type, sent_message_counter, total_packets, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-
-    printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
+    //printf("recieved message %u: %u, %u of %u \n", message_type, sent_message_counter, packet_number, total_packets);
     
     if(total_packets > 1) // this message has more packets still to come
     {
@@ -604,7 +966,7 @@ void *Listner(void * inG)
       { 
         int senders_address_length_b = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
         memset(&network_message_buffer,'\0',sizeof(network_message_buffer)); 
-        int message_length = recvfrom(G->MyInSock, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length_b);  // blocks untill a message is recieved
+        int message_length = recvfrom(G->MyInSockUDP, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length_b);  // blocks untill a message is recieved
         if(message_length < 0) 
           printf("had problems getting a message \n");
     
@@ -618,13 +980,14 @@ void *Listner(void * inG)
         uint packet_number_b;
         buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent_b, message_type_b, sent_message_counter_b, total_packets_b, packet_number_b, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-        printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
+        //printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
         
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
         if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
         {
           printf("failed to receive all packets \n");
-          message_type = -1;  
+          // REMOVED THE FOLLOWING BECAUSE DECIDED IT WAS BETTER TO LET PARTIAL MESSAGES GET THROUGH IN CASE THEY WERE STILL OF USE
+          //message_type = -1;  
           break;
         }        
         
@@ -634,7 +997,7 @@ void *Listner(void * inG)
           continue;
         }
         
-        printf("waiting for %u > %u \n", sent_message_counter_b, sent_message_counter + total_packets*3);
+        printf("waiting for %u > %u \n", sent_message_counter_b, sent_message_counter + total_packets);
         
         // copy this into where it should go in the large message buffer 
         memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
@@ -664,228 +1027,88 @@ void *Listner(void * inG)
     
     //printf("--recieved message type %u from %d \n", message_type, sending_agent); 
 
+    extract_and_publish_message_type(message_type, buffer_ptr, buffer_max, G, sending_agent);
+  }
+}   
     
-    if(message_type == 0 && G->listen_list[0]) // it is a pose message
+    
+
+/*-------------------------- TCP listner thread -------------------------*/
+// this class stores the stuff that needs to be sent to a (TCP) thread
+class ThreadHelper
+{
+  public:
+   GlobalVariables* G;  // pointer to the global variables structure
+   int listen_id;       // the id of the robot this is listening for
+};
+vector<ThreadHelper> TCPThreadHelpers; // resized and populated once we know how many agents there are
+
+void *Listner_TCP(void * inT)
+{
+  ThreadHelper* T = (ThreadHelper*)inT;
+  GlobalVariables* G = T->G;  
+  int i = T->listen_id;
+  
+  char network_message_buffer[max_message_size];
+  
+  int l = listen(G->MyInSocksTCP[i],5);
+  if(l < 0)
+  {
+    printf("L%d error listining to socket %d\n", i, G->MyInSocksTCP[i]);
+    G->set_up_single_IncommingTCP(i); 
+  }
+     
+  int newsockfd = accept(G->MyInSocksTCP[i], NULL, NULL);
+  if(newsockfd < 0)
+  {
+    printf("L%d ", i);
+    error("error accepting connection");
+    G->set_up_single_IncommingTCP(i);
+  }
+  
+  while(true)
+  {
+    int n = -1;
+    n = read(newsockfd,network_message_buffer,max_message_size-1);
+    if(n < 0) 
     {
-      if(G->listen_mode_list[0] == 0)
-      {
-        geometry_msgs::PoseStamped msg;
-        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-        pose_pub.publish(msg);
-      
-        //printf("pose message:\n %f\n %f\n %f\n %f\n %f\n %f\n %f\n\n", msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z);       
-        //double secs = msg.header.stamp.toSec();
-        //printf("header: %d, %f, %s \n", (int)msg.header.seq, secs, msg.header.frame_id.c_str());
-      }
-      else if(G->listen_mode_list[0] == 1)
-      {
-        intercom_cu::PoseStamped_CU_ID msg;
-        msg.id.data = sending_agent;
-        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
-        pose_pub.publish(msg);
-      }
+      printf("L%d ", i);
+      error("error reading from socket");
+      G->set_up_single_IncommingTCP(i);
     }
-    else if(message_type == 1 && G->listen_list[1]) // it is a goal message
-    {
-      if(G->listen_mode_list[1] == 0)
-      {
-        geometry_msgs::PoseStamped msg;
-        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-        goal_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[1] == 1)
-      {
-          
-      }
-    } 
-    else if(message_type == 2 && G->listen_list[2]) // it is a system state message
-    {
-      if(G->listen_mode_list[2] == 0)
-      {
-        std_msgs::Int32 msg;
-        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-        system_state_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[2] == 1)
-      {
-          
-      }
-    } 
-    else if(message_type == 3 && G->listen_list[3]) // it is a system update message
-    {
-      if(G->listen_mode_list[3] == 0)
-      {
-        std_msgs::Int32 msg;
-        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-        system_update_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[3] == 1)
-      {
-          
-      }
-    }
-    else if(message_type == 4 && G->listen_list[4]) // it is a map changes message
-    {
-      if(G->listen_mode_list[4] == 0)
-      {
-        sensor_msgs::PointCloud msg;
-        buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
-        map_changes_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[4] == 1)
-      {
-          
-      }
-    } 
-    else if(message_type == 5 && G->listen_list[5]) // it is a global path message
-    {
-      if(G->listen_mode_list[5] == 0)
-      {
-        nav_msgs::Path msg;
-        buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
-        global_path_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[5] == 1)
-      {
-          
-      }
-    }
-    else if(message_type == 6 && G->listen_list[6]) // it is a goal reset message
-    {
-      if(G->listen_mode_list[6] == 0)
-      {
-        geometry_msgs::PoseStamped msg;
-        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-        new_goal_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[6] == 1)
-      {
-          
-      }
-    } 
-    else if(message_type == 7 && G->listen_list[7]) // it is a pose reset message
-    {
-      if(G->listen_mode_list[7] == 0)
-      {
-        geometry_msgs::PoseStamped msg;
-        buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
-        new_pose_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[7] == 1)
-      {
-          
-      }
-    } 
-    else if(message_type == 8 && G->listen_list[8]) // it is a user control message
-    {
-      if(G->listen_mode_list[8] == 0)
-      {
-        geometry_msgs::Pose2D msg;
-        buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
-        user_control_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[8] == 1)
-      {
-          
-      }
-    }
-    else if(message_type == 9 && G->listen_list[9]) // it is a user state message
-    {
-      if(G->listen_mode_list[9] == 0)
-      {
-        std_msgs::Int32 msg;
-        buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
-        user_state_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[9] == 1)
-      {
-          
-      }
-    }
-    else if(message_type == 10 && G->listen_list[10]) // it is a laser scan message
-    {
-      if(G->listen_mode_list[10] == 0)
-      {
-        hokuyo_listener_cu::PointCloudWithOrigin msg;
-        buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
-        laser_scan_pub.publish(msg);
-      }
-      else if(G->listen_mode_list[10] == 1)
-      {
-          
-      }
-    }
-    else if(message_type == 11 && G->listen_list[11]) // it is a map service request message
-    {
-      if(G->listen_mode_list[11] == 0)
-      {
-        nav_msgs::GetMap::Request  req;
-        nav_msgs::GetMap::Response resp;
-      
-        if(G->send_list[12])
-        {
-          if(ros::service::call("/cu/get_map_cu", req, resp) )
-          {
-            // send response back to the sending agent
-         
-            uint this_msg_size = max_message_size; 
-            char buffer[this_msg_size];
-            size_t buffer_ptr = (size_t)buffer;
-            size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
    
-            buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 12, 0, 0, 0, buffer_max); // add space for ethernet header 
-            buffer_ptr = add_to_buffer_OccupancyGrid(buffer_ptr, resp.map, buffer_max);                    // add occupancy grid
-        
-            //Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 12);                            // send      
-            //printf("sending message type 12 to %d at %s\n", sending_agent, G->OtherIPs[2].c_str());
-            Globals.send_to_agent(buffer, buffer_ptr-(size_t)buffer, 2);
-          }
-        }
-      }
-      else if(G->listen_mode_list[11] == 1)
-      {
+    //extract header elements
+    int sending_agent;
+    uint message_type;
+    uint sent_message_counter;
+    uint total_bytes;
+    uint packet_number;
+    size_t buffer_max = (size_t)network_message_buffer + max_message_size;
+    size_t buffer_ptr = extract_from_buffer_ethernetheader((size_t)network_message_buffer, sending_agent, message_type, sent_message_counter, total_bytes, packet_number, buffer_max); // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
 
-      }
-    }
-    else if(message_type == 12 && G->listen_list[12]) // it is a map service response message
+    // read the rest of the message
+    while((uint)n < total_bytes-1)
     {
-      if(!Globals.service_received_map)
+      int m = read(newsockfd,network_message_buffer+n,max_message_size-1);
+      if(m < 0) 
       {
-        if(G->listen_mode_list[12] == 0)
-        {
-          // store in globals so service provider can access it
-          buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
-          Globals.service_received_map = true;
-        }
-        else if(G->listen_mode_list[12] == 1)
-        {
-          
-        }
+        printf("L%d ", i);
+        error("error reading from socket");
+        G->set_up_single_IncommingTCP(i);
+        break;
       }
+      
+      n += m;
     }
-    else if(message_type == 13 && G->listen_list[13]) // it is a "/map_cu" -> "/world_cu" transform
+    
+    if((uint)n >= total_bytes-1)
     {
-      if(using_tf)
-      {
-        if(G->listen_mode_list[13] == 0)
-        {
-          static tf::TransformBroadcaster br;  
-          tf::StampedTransform transform;   
-
-          buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
-          transform.frame_id_ = std::string("/map_cu");
-          transform.child_frame_id_ = std::string("/world_cu");
-        
-          br.sendTransform(transform);
-        }
-        else if(G->listen_mode_list[13] == 1)
-        {
-          
-        }
-      }
+      //printf("L%d received message %u: %u, %u of %u --- %d\n", i, message_type, sent_message_counter, packet_number, total_bytes, max_message_size-1);
+      extract_and_publish_message_type(message_type, buffer_ptr, buffer_max, G, sending_agent);
     }
   }
 }
+
 
 /*----------------------- ROS Callbacks ---------------------------------*/
 void selected_robot_callback(const std_msgs::Int32::ConstPtr& msg)
@@ -1057,9 +1280,12 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 11,0,0,0, buffer_max); // add space for ethernet header 
   
   Globals.service_received_map = false;
+  
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 11);                         // send 
   while(!Globals.service_received_map) // wait for response
   {
-    Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 11);                         // send 
+    if(Globals.protocol[11] == 0) // being sent via UDP so may be dropped (NOTE: if TCP is used, i.e. protocol[12] == 1, then we assume the return message is also sent TCP) 
+      Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 11);                     // re-send 
     
     loop_rate.sleep();
   }
@@ -1119,13 +1345,11 @@ int main(int argc, char * argv[])
   Globals.Populate(my_id_default, num_agents_default);
   Globals.read_IPS_from_file(config_file);
   
+  Globals.set_up_MyAddressUDP();
+  Globals.set_up_OtherAddressesUDP();
   
-  while(! Globals.set_up_MyAddress())
-  {}
-
-  while(! Globals.set_up_OtherAddresseses())
-  {}
-  
+  Globals.set_up_IncommingTCP();
+  Globals.set_up_OutgoingTCP();
   
   // set up ROS topic subscriber callbacks
   selected_robot_sub = nh.subscribe("/cu/selected_robot_cu", 1, selected_robot_callback);
@@ -1185,10 +1409,23 @@ int main(int argc, char * argv[])
   if(Globals.send_list[11])
     get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
   
-  
-  pthread_t Listener_thread;
-  pthread_create(&Listener_thread, NULL, Listner, &Globals); // listens for incomming messages
+  //kick off udp listener thread
+  pthread_t Listener_thread_UDP;
+  pthread_create(&Listener_thread_UDP, NULL, Listner_UDP, &Globals); // listens for incomming messages on udp
 
+  // populate TCPThreadHelpers
+  TCPThreadHelpers.resize(Globals.num_agents);
+  for(int i = 0; i < Globals.num_agents; i++)
+  {
+    TCPThreadHelpers[i].G = &Globals;
+    TCPThreadHelpers[i].listen_id = i;
+  }
+  
+  // kick off TCP threads (one for each robot to listen for
+  vector<pthread_t> Listener_threads_TCP(Globals.num_agents);
+  for(int i = 0; i < Globals.num_agents; i++)
+    pthread_create(&(Listener_threads_TCP[i]), NULL, Listner_TCP, &(TCPThreadHelpers[i])); // listens for incomming messages on tcp
+  
   // 'prime' transform listners
   bool setup_tf = false;             // flag used to help init tf
   static tf::TransformListener listener_map_world;  
