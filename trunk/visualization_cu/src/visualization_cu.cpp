@@ -142,22 +142,27 @@ POINT_LIST* global_path = NULL;
 POINT_LIST* local_path = NULL;
 GRID_LIST* inflated_obs_local = NULL;
 GRID_LIST* obstacles_local = NULL;
-POSE* goal_pose;
 POINT_LIST* laser_scan_data = NULL;
 
 vector< ROBOT * > robots;
+vector<POSE*> goal_poses;
+
 int num_robots = 1;
 int current_robot = 0;
 
 // global ROS subscriber handles
 ros::Subscriber pose_sub;
 ros::Subscriber pose_multi_sub;
+
 ros::Subscriber robot_footprint_sub; 
 ros::Subscriber global_path_sub;
 ros::Subscriber local_path_sub;
 ros::Subscriber inflated_obs_local_sub;
 ros::Subscriber obstacles_local_sub;
+
 ros::Subscriber goal_sub;
+ros::Subscriber goal_multi_sub;
+
 ros::Subscriber laser_scan_sub;
 ros::Subscriber map_changes_sub;
 ros::Subscriber system_state_sub;
@@ -595,6 +600,17 @@ void draw_pose(POSE* pose, float* clr, float z_height)
   }
   
 }
+
+// draws all poses at z_height with color clr
+void draw_poses(vector<POSE*>& poses, float* clr, float z_height)
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(poses[i] != NULL)
+      draw_pose(poses[i], clr, z_height);
+  } 
+}
+
 /*----------------------- POINT_LIST ------------------------------------*/
 
 struct POINT_LIST
@@ -1325,15 +1341,17 @@ void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
   //print_point_list(inflated_obs_local->grids); 
 }
     
-void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void goal_callback_helper(const geometry_msgs::PoseStamped& msg, int robot_id)
 {    
-  goal_pose->x = msg->pose.position.x/costmap->resolution;
-  goal_pose->y = msg->pose.position.y/costmap->resolution;
-  goal_pose->z = msg->pose.position.z;
-  goal_pose->qw = msg->pose.orientation.w;
-  goal_pose->qx = msg->pose.orientation.x;
-  goal_pose->qy = msg->pose.orientation.y;
-  goal_pose->qz = msg->pose.orientation.z; 
+  POSE* goal_pose = goal_poses[robot_id];  
+    
+  goal_pose->x = msg.pose.position.x/costmap->resolution;
+  goal_pose->y = msg.pose.position.y/costmap->resolution;
+  goal_pose->z = msg.pose.position.z;
+  goal_pose->qw = msg.pose.orientation.w;
+  goal_pose->qx = msg.pose.orientation.x;
+  goal_pose->qy = msg.pose.orientation.y;
+  goal_pose->qz = msg.pose.orientation.z; 
   
   float qw = goal_pose->qw;
   float qx = goal_pose->qx;
@@ -1346,6 +1364,16 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   display_flag = 1;
   glutPostRedisplay(); 
 }
+
+void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  goal_callback_helper(*msg, current_robot);
+}
+
+void goal_multi_callback(const intercom_cu::PoseStamped_CU_ID::ConstPtr& msg)
+{
+  goal_callback_helper(msg->data, msg->id.data);
+}  
 
 void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
 { 
@@ -1540,10 +1568,8 @@ void display()
     //   draw_point_list_2D_lines(local_path, BLUE, .975);
     // }
    
-     if(goal_pose != NULL)
-     {
-       draw_pose(goal_pose, GREEN, .9775); 
-     }
+
+     draw_poses(goal_poses, GREEN, .9775); 
      
      // draw the robot
 
@@ -2286,6 +2312,7 @@ void cleanup()
   inflated_obs_local_sub.shutdown();
   obstacles_local_sub.shutdown();
   goal_sub.shutdown();
+  goal_multi_sub.shutdown();
   laser_scan_sub.shutdown();
   map_changes_sub.shutdown();
   system_state_sub.shutdown();
@@ -2304,7 +2331,8 @@ void cleanup()
   destroy_point_list(local_path);
   destroy_grid_list(inflated_obs_local);
   destroy_grid_list(obstacles_local);
-  destroy_pose(goal_pose);
+  for(int i = 0; i < num_robots; i++)
+    destroy_pose(goal_poses[i]);
   destroy_point_list(laser_scan_data);
   
   ROS_INFO("\nExit... \n");  
@@ -2356,8 +2384,10 @@ int main(int argc, char *argv[])
     robots[i] = make_robot(0, 0, 0, BLACK);
   
   advertised_control_state.resize(num_robots, 0);
-  
-  goal_pose = make_pose(0, 0, 0);
+ 
+  goal_poses.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    goal_poses[i] = make_pose(0, 0, 0);
   
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -2368,7 +2398,10 @@ int main(int argc, char *argv[])
   local_path_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
   inflated_obs_local_sub = nh.subscribe("/move_base/local_costmap/inflated_obstacles", 2, inflated_obs_local_callback);
   obstacles_local_sub = nh.subscribe("/move_base/local_costmap/obstacles", 2, obstacles_local_callback);
+  
   goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
+  goal_multi_sub = nh.subscribe("/cu_multi/goal_cu", 1, goal_multi_callback);
+  
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
   system_state_sub = nh.subscribe("/cu/system_state_cu", 10, system_state_callback);
