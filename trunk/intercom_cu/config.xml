@@ -7,7 +7,11 @@
           <agent id="2"/>  
         </to>
       </message>    
-      <message type="1"/>
+      <message type="1" mode="2">
+        <to>
+          <agent id="2"/>  
+        </to>
+      </message> 
       <message type="2"/>
       <message type="3"/>
       <message type="4"/>
@@ -62,7 +66,7 @@
     </broadcast>
     <receive>
       <message type="0" mode="1"/>
-      <message type="1"/>
+      <message type="1" mode="1"/>
       <message type="2"/>
       <message type="3"/>
       <message type="4"/>

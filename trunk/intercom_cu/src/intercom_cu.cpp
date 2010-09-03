@@ -683,7 +683,6 @@ bool GlobalVariables::using_tcp()    // returns true if any messages need tcp
   return false;
 }
 
-
 bool GlobalVariables::using_udp()    // returns true if any messages need udp
 {
   for(int i = 0; i <= NUM_MESSAGE_TYPES; i++)  
@@ -691,8 +690,7 @@ bool GlobalVariables::using_udp()    // returns true if any messages need udp
     if(protocol[i] == 0)
       return true;
   }
-  return false;  
-    
+  return false;     
 }
 
 void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_t buffer_max, GlobalVariables* G, int sending_agent) // extracts the message denoted by type starting at buffer_ptr and publishes on approperiate topic, errors if tries to read past buffer_max
@@ -723,7 +721,10 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     }
     else if(G->listen_mode_list[1] == 1)
     {
-        
+      intercom_cu::PoseStamped_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
+      goal_pub.publish(msg);  
     }
   } 
   else if(message_type == 2 && G->listen_list[2]) // it is a system state message
@@ -989,11 +990,10 @@ void *Listner_UDP(void * inG)
         }
         
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
-        if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
+        if(sent_message_counter_b > sent_message_counter + total_packets*1.5+1) // then we conclude we failed to get all of the message 
         {
           printf("failed to receive all packets \n");
-          // REMOVED THE FOLLOWING BECAUSE DECIDED IT WAS BETTER TO LET PARTIAL MESSAGES GET THROUGH IN CASE THEY WERE STILL OF USE
-          //message_type = -1;  
+          message_type = -1;  
           break;
         }        
         
@@ -1081,6 +1081,7 @@ void *Listner_TCP(void * inT)
       printf("L%d ", i);
       error("error reading from socket");
       G->set_up_single_IncommingTCP(i);
+      continue;
     }
    
     //extract header elements
@@ -1390,8 +1391,13 @@ int main(int argc, char * argv[])
     else if(Globals.listen_mode_list[0] == 1)
       pose_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/pose_cu", 1);
   }
-  if(Globals.listen_list[1]) 
-    goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
+  if(Globals.listen_list[1])
+  {
+    if(Globals.listen_mode_list[1] == 0)
+      goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/goal_cu", 1);
+    else if(Globals.listen_mode_list[1] == 1)
+      goal_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/goal_cu", 1);
+  }
   if(Globals.listen_list[2])
     system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 1);
   if(Globals.listen_list[3])
