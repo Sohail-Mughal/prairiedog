@@ -982,6 +982,12 @@ void *Listner_UDP(void * inG)
 
         //printf("recieved message %u(%u): %u, %u of %u \n", message_type_b, message_type, sent_message_counter_b, packet_number_b, total_packets_b);
         
+        if(sending_agent_b != sending_agent || sent_message_counter_b < sent_message_counter)
+        {
+          //printf("continuing \n");
+          continue;
+        }
+        
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
         if(sent_message_counter_b > sent_message_counter + total_packets*3) // then we conclude we failed to get all of the message 
         {
@@ -991,7 +997,7 @@ void *Listner_UDP(void * inG)
           break;
         }        
         
-        if(sending_agent_b != sending_agent || message_type_b != message_type || sent_message_counter_b < sent_message_counter || total_packets_b != total_packets)
+        if(sending_agent_b != sending_agent || message_type_b != message_type || total_packets_b != total_packets)
         {
           //printf("continuing \n");
           continue;
