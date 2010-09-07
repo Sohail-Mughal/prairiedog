@@ -56,7 +56,7 @@
       <message type="11"/>
     </receive> 
   </agent>  
-    <agent id="2" ip="172.21.211.153">
+    <agent id="2" ip="172.21.209.88">
     <broadcast>
       <message type="6" mode="1"/>
       <message type="7" mode="1"/>
