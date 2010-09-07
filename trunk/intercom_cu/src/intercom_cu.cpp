@@ -74,6 +74,11 @@
 
 
 #include "intercom_cu/PoseStamped_CU_ID.h"
+#include "intercom_cu/Int32_CU_ID.h"
+#include "intercom_cu/PointCloud_CU_ID.h"
+#include "intercom_cu/Path_CU_ID.h"
+#include "intercom_cu/Pose2D_CU_ID.h"
+#include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
 
 #include "ros_to_buffer.cpp"
 
@@ -466,7 +471,7 @@ bool GlobalVariables::set_up_IncommingTCP()  // sets up incomming TCP sockets
 {   
   bool r_value = true; 
   for(int i = 0; i < num_agents; i++)
-    r_value = set_up_single_IncommingTCP(i);
+    r_value = r_value & set_up_single_IncommingTCP(i);
   
   return r_value;     
 }
@@ -477,8 +482,8 @@ bool GlobalVariables::set_up_OutgoingTCP()   // sets up outgoing TCP sockets
 {
   bool r_value = true;
   for(int i = 0; i < num_agents; i++)
-    r_value = set_up_single_OutgoingTCP(i);
-  
+    r_value = r_value & set_up_single_OutgoingTCP(i);
+
   return r_value;   
 }
 
@@ -517,9 +522,10 @@ bool GlobalVariables::set_up_single_IncommingTCP(int s)  // sets up incomming TC
 bool GlobalVariables::set_up_single_OutgoingTCP(int s)   // sets up outgoing TCP socket, s is the agent we want to set it up to
 {
   int i = s;
-  
+
   if(MyOutSocksTCP[i]  < 0)
     MyOutSocksTCP[i] = socket(AF_INET, SOCK_STREAM, 0);
+  
   if(MyOutSocksTCP[i]  < 0)
   {
     error("problems opening socket");
@@ -538,16 +544,17 @@ bool GlobalVariables::set_up_single_OutgoingTCP(int s)   // sets up outgoing TCP
   bzero((char *) &DestinationAddressesTCP[i], sizeof(DestinationAddressesTCP[i]));
   DestinationAddressesTCP[i].sin_family = AF_INET;
     
+  
   bcopy((char *)server->h_addr, (char *)&DestinationAddressesTCP[i].sin_addr.s_addr, server->h_length);
-    
   DestinationAddressesTCP[i].sin_port = htons(MyDestinationPortTCP);
-    
+  printf("trying to connect to : %d \n", i);
   if(connect(MyOutSocksTCP[i], (struct sockaddr *) &(DestinationAddressesTCP[i]),sizeof(DestinationAddressesTCP[i])) < 0) 
   {
-    error("problems connecting to other agent");
+    printf("problems connecting to other agent: %d :\n", i);
+    error("");
     return false;
-  }    
-  
+  }
+  printf("connected : %d \n", i);
   return true;   
 }
 
@@ -629,15 +636,23 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     
     //printf("sending message %d of size %d \n", message_type, (int)buffer_size);
     int n = -1;
+    
     while(n < 0)
-    {
+    {  
+      if(MyOutSocksTCP[ag] < 0)  
+        Globals.set_up_single_OutgoingTCP(ag);
+      
+      printf("sending message %d of size %d \n", message_type, (int)buffer_size);
+      
       n = write(MyOutSocksTCP[ag],(const void*)buffer_ptr,buffer_size);
       if(n < 0)
       {
-        error("S problems writing to socket");
+        printf("S problems writing to socket %d: \n", (int)MyOutSocksTCP[ag]);
+        error("");
         Globals.set_up_single_OutgoingTCP(ag);
       }
     }
+    
   }
 }
 
@@ -693,7 +708,7 @@ bool GlobalVariables::using_udp()    // returns true if any messages need udp
   return false;     
 }
 
-void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_t buffer_max, GlobalVariables* G, int sending_agent) // extracts the message denoted by type starting at buffer_ptr and publishes on approperiate topic, errors if tries to read past buffer_max
+void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_t buffer_max, GlobalVariables* G, int sending_agent) // extracts the message denoted by type starting at buffer_ptr and publishes on approperiate topic
 {   
   if(message_type == 0 && G->listen_list[0]) // it is a pose message
   {
@@ -701,6 +716,9 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       geometry_msgs::PoseStamped msg;
       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       pose_pub.publish(msg);  
     }
     else if(G->listen_mode_list[0] == 1)
@@ -708,6 +726,9 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       intercom_cu::PoseStamped_CU_ID msg;
       msg.id.data = sending_agent;
       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       pose_pub.publish(msg);
     }
   }
@@ -717,13 +738,19 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       geometry_msgs::PoseStamped msg;
       buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       goal_pub.publish(msg);
     }
     else if(G->listen_mode_list[1] == 1)
     {
       intercom_cu::PoseStamped_CU_ID msg;
       msg.id.data = sending_agent;
-      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max); 
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       goal_pub.publish(msg);  
     }
   } 
@@ -733,11 +760,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       std_msgs::Int32 msg;
       buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       system_state_pub.publish(msg);
     }
     else if(G->listen_mode_list[2] == 1)
     {
-         
+      intercom_cu::Int32_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return; 
+      
+      system_state_pub.publish(msg);
     }
   } 
   else if(message_type == 3 && G->listen_list[3]) // it is a system update message
@@ -745,12 +781,21 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     if(G->listen_mode_list[3] == 0)
     {
       std_msgs::Int32 msg;
-      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       system_update_pub.publish(msg);
     }
     else if(G->listen_mode_list[3] == 1)
     {
-        
+      intercom_cu::Int32_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return; 
+      
+      system_update_pub.publish(msg);
     }
   }
   else if(message_type == 4 && G->listen_list[4]) // it is a map changes message
@@ -759,11 +804,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       sensor_msgs::PointCloud msg;
       buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       map_changes_pub.publish(msg);
     }
     else if(G->listen_mode_list[4] == 1)
     {
-        
+      intercom_cu::PointCloud_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return; 
+      
+      map_changes_pub.publish(msg);   
     }
   } 
   else if(message_type == 5 && G->listen_list[5]) // it is a global path message
@@ -772,11 +826,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       nav_msgs::Path msg;
       buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       global_path_pub.publish(msg);
     }
     else if(G->listen_mode_list[5] == 1)
     {
-          
+      intercom_cu::Path_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_Path(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
+      global_path_pub.publish(msg);  
     }
   }
   else if(message_type == 6 && G->listen_list[6]) // it is a goal reset message
@@ -784,12 +847,21 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     if(G->listen_mode_list[6] == 0)
     {
       geometry_msgs::PoseStamped msg;
-      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       new_goal_pub.publish(msg);
     }
     else if(G->listen_mode_list[6] == 1)
     {
-          
+      intercom_cu::PoseStamped_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+        
+      new_goal_pub.publish(msg); 
     }
   } 
   else if(message_type == 7 && G->listen_list[7]) // it is a pose reset message
@@ -797,12 +869,21 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     if(G->listen_mode_list[7] == 0)
     {
       geometry_msgs::PoseStamped msg;
-      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max); 
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       new_pose_pub.publish(msg);
     }
     else if(G->listen_mode_list[7] == 1)
     {
-          
+      intercom_cu::PoseStamped_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
+      new_pose_pub.publish(msg);
     }
   } 
   else if(message_type == 8 && G->listen_list[8]) // it is a user control message
@@ -811,11 +892,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       geometry_msgs::Pose2D msg;
       buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       user_control_pub.publish(msg);
     }
     else if(G->listen_mode_list[8] == 1)
     {
-          
+      intercom_cu::Pose2D_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
+      user_control_pub.publish(msg);   
     }
   }
   else if(message_type == 9 && G->listen_list[9]) // it is a user state message
@@ -824,11 +914,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       std_msgs::Int32 msg;
       buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
       user_state_pub.publish(msg);
     }
     else if(G->listen_mode_list[9] == 1)
     {
-          
+      intercom_cu::Int32_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_int(buffer_ptr, msg.data.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return; 
+      
+      user_state_pub.publish(msg);
     }
   }
   else if(message_type == 10 && G->listen_list[10]) // it is a laser scan message
@@ -837,11 +936,20 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
     {
       hokuyo_listener_cu::PointCloudWithOrigin msg;
       buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
       laser_scan_pub.publish(msg);
     }
     else if(G->listen_mode_list[10] == 1)
     {
-          
+      intercom_cu::PointCloudWithOrigin_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PointCloudWithOrigin(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
+      laser_scan_pub.publish(msg);    
     }
   }
   else if(message_type == 11 && G->listen_list[11]) // it is a map service request message
@@ -882,6 +990,9 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       {
         // store in globals so service provider can access it
         buffer_ptr = extract_from_buffer_OccupancyGrid(buffer_ptr, Globals.service_response_map, buffer_max);
+        if(buffer_ptr == 0)
+         return;
+        
         Globals.service_received_map = true;
       }
       else if(G->listen_mode_list[12] == 1)
@@ -900,6 +1011,9 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
         tf::StampedTransform transform;   
 
         buffer_ptr = extract_from_buffer_StampedTransform(buffer_ptr, transform, buffer_max);
+        if(buffer_ptr == 0)
+         return;
+        
         transform.frame_id_ = std::string("/map_cu");
         transform.child_frame_id_ = std::string("/world_cu");
         
@@ -1104,6 +1218,7 @@ void *Listner_TCP(void * inT)
         G->set_up_single_IncommingTCP(i);
         break;
       }
+      //printf("waiting for the rest \n");
       
       n += m;
     }
@@ -1356,8 +1471,8 @@ int main(int argc, char * argv[])
   Globals.set_up_OtherAddressesUDP();
   
   Globals.set_up_IncommingTCP();
-  Globals.set_up_OutgoingTCP();
-  
+  //Globals.set_up_OutgoingTCP();  // OUTGOING CONNECTION HAVE BEEN MOVED TO SET UP ONLY WHEN NEEDED DUE TO BLOCKING PROBLEMS
+    
   // set up ROS topic subscriber callbacks
   selected_robot_sub = nh.subscribe("/cu/selected_robot_cu", 1, selected_robot_callback);
   if(Globals.send_list[0])
@@ -1399,24 +1514,69 @@ int main(int argc, char * argv[])
       goal_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/goal_cu", 1);
   }
   if(Globals.listen_list[2])
-    system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 1);
+  {
+    if(Globals.listen_mode_list[2] == 0)
+      system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 1);
+    else if(Globals.listen_mode_list[2] == 1)
+      system_state_pub = nh.advertise<intercom_cu::Int32_CU_ID>("/cu_multi/system_state_cu", 1);
+  }
   if(Globals.listen_list[3])
-    system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 1);
+  {
+    if(Globals.listen_mode_list[3] == 0)  
+      system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 1);
+    else if(Globals.listen_mode_list[3] == 1)
+      system_update_pub = nh.advertise<intercom_cu::Int32_CU_ID>("/cu_multi/system_update_cu", 1);
+  }
   if(Globals.listen_list[4])
-    map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+  {
+    if(Globals.listen_mode_list[4] == 0)  
+      map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+    else if(Globals.listen_mode_list[4] == 1)
+      map_changes_pub = nh.advertise<intercom_cu::PointCloud_CU_ID>("/cu_multi/map_changes_cu", 1);
+  }
   if(Globals.listen_list[5])
-    global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
+  {
+    if(Globals.listen_mode_list[5] == 0)  
+      global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
+    else if(Globals.listen_mode_list[5] == 1)  
+      global_path_pub = nh.advertise<intercom_cu::Path_CU_ID>("/cu_multi/global_path_cu", 1);
+  }
   if(Globals.listen_list[6])
-    new_goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
+  {
+    if(Globals.listen_mode_list[6] == 0)  
+      new_goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
+    else if(Globals.listen_mode_list[6] == 1)  
+      new_goal_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/reset_goal_cu", 1);
+  }
   if(Globals.listen_list[7])
-    new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
+  {
+    if(Globals.listen_mode_list[7] == 0)  
+      new_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/user_pose_cu", 1);
+    else if(Globals.listen_mode_list[7] == 1)
+      new_pose_pub = nh.advertise<intercom_cu::PoseStamped_CU_ID>("/cu_multi/user_pose_cu", 1);
+  }
   if(Globals.listen_list[8])
-    user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
+  {
+    if(Globals.listen_mode_list[8] == 0) 
+      user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/user_control_cu", 1);
+    else if(Globals.listen_mode_list[8] == 1) 
+      user_control_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/user_control_cu", 1);
+  }
   if(Globals.listen_list[9])
-     user_state_pub = nh.advertise<std_msgs::Int32>("/cu/user_state_cu", 1);
+  {
+    if(Globals.listen_mode_list[9] == 0) 
+      user_state_pub = nh.advertise<std_msgs::Int32>("/cu/user_state_cu", 1);
+    else if(Globals.listen_mode_list[9] == 1) 
+      user_state_pub = nh.advertise<intercom_cu::Int32_CU_ID>("/cu_multi/user_state_cu", 1);
+  }
   if(Globals.listen_list[10])
-    laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
-      
+  {
+    if(Globals.listen_mode_list[10] == 0) 
+      laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
+    else if(Globals.listen_mode_list[10] == 1) 
+      laser_scan_pub = nh.advertise<intercom_cu::PointCloudWithOrigin_CU_ID>("/cu_multi/laser_scan_cu", 1);
+  }
+  
   // set up service servers
   if(Globals.send_list[11])
     get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);

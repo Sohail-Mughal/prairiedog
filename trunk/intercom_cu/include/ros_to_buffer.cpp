@@ -337,12 +337,12 @@ size_t add_to_buffer_ethernetheader(size_t buffer_ptr, int id, uint messagetype,
 }
 
 /*------------ functions for extracting ros data to a buffer ------------*/
-size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(i) >= buffer_max)
   {
     printf("could not extract int (int8) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(i), (void*)(buffer_ptr), sizeof(i));
   buffer_ptr += sizeof(i);
@@ -350,12 +350,12 @@ size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max)
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_int(size_t buffer_ptr, int& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_int(size_t buffer_ptr, int& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(i) >= buffer_max)
   {
     printf("could not extract int (int32) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(i), (void*)(buffer_ptr), sizeof(i));
   buffer_ptr += sizeof(i);
@@ -363,12 +363,12 @@ size_t extract_from_buffer_int(size_t buffer_ptr, int& i, size_t buffer_max) // 
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_uint(size_t buffer_ptr, uint& u, size_t buffer_max) // extracts uint u from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_uint(size_t buffer_ptr, uint& u, size_t buffer_max) // extracts uint u from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(u) >= buffer_max)
   {
     printf("could not extract uint from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(u), (void*)(buffer_ptr), sizeof(u));
   buffer_ptr += sizeof(u);
@@ -376,12 +376,12 @@ size_t extract_from_buffer_uint(size_t buffer_ptr, uint& u, size_t buffer_max) /
   return  buffer_ptr; 
 }
 
-size_t extract_from_buffer_float(size_t buffer_ptr, float& f, size_t buffer_max) // extracts double f from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_float(size_t buffer_ptr, float& f, size_t buffer_max) // extracts double f from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(f) >= buffer_max)
   {
     printf("could not extract double (float64) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(f), (void*)(buffer_ptr), sizeof(f));
   buffer_ptr += sizeof(f);
@@ -389,12 +389,12 @@ size_t extract_from_buffer_float(size_t buffer_ptr, float& f, size_t buffer_max)
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_double(size_t buffer_ptr, btScalar& d, size_t buffer_max) // extracts double d from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_double(size_t buffer_ptr, btScalar& d, size_t buffer_max) // extracts double d from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(d) >= buffer_max)
   {
     printf("could not extract double (float64) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(d), (void*)(buffer_ptr), sizeof(d));
   buffer_ptr += sizeof(d);
@@ -402,13 +402,13 @@ size_t extract_from_buffer_double(size_t buffer_ptr, btScalar& d, size_t buffer_
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_string(size_t buffer_ptr, std::string& s, size_t buffer_max) // extracts std::string s from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_string(size_t buffer_ptr, std::string& s, size_t buffer_max) // extracts std::string s from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   // get size of string
   if(buffer_ptr + sizeof(size_t) >= buffer_max)
   {
     printf("could not extract string (length) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   size_t size_of_s;
   memcpy((void*)&(size_of_s), (void*)(buffer_ptr), sizeof(size_of_s));
@@ -418,7 +418,7 @@ size_t extract_from_buffer_string(size_t buffer_ptr, std::string& s, size_t buff
   if(buffer_ptr + size_of_s >= buffer_max)
   {
     printf("could not extract string from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   }   
   std::string temp((char*)(buffer_ptr), size_of_s);
   s = temp;
@@ -427,12 +427,12 @@ size_t extract_from_buffer_string(size_t buffer_ptr, std::string& s, size_t buff
   return  buffer_ptr; 
 }
 
-size_t extract_from_buffer_btScalar(size_t buffer_ptr, btScalar& d, size_t buffer_max) // extracts btScalar d from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_btScalar(size_t buffer_ptr, btScalar& d, size_t buffer_max) // extracts btScalar d from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   if(buffer_ptr + sizeof(d) >= buffer_max)
   {
     printf("could not extract double (float64) from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   } 
   memcpy((void*)&(d), (void*)(buffer_ptr), sizeof(d));
   buffer_ptr += sizeof(d);
@@ -440,52 +440,76 @@ size_t extract_from_buffer_btScalar(size_t buffer_ptr, btScalar& d, size_t buffe
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_btVector3(size_t buffer_ptr, btVector3& v, size_t buffer_max) // extracts btVector3 v from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_btVector3(size_t buffer_ptr, btVector3& v, size_t buffer_max) // extracts btVector3 v from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 { 
   btScalar temp;  
   buffer_ptr = extract_from_buffer_btScalar(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   v.setX(temp);
+  
   buffer_ptr = extract_from_buffer_btScalar(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   v.setY(temp);
+  
   buffer_ptr = extract_from_buffer_btScalar(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   v.setZ(temp);
+  
   buffer_ptr = extract_from_buffer_btScalar(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   v.setW(temp);
   
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_btMatrix3x3(size_t buffer_ptr, btMatrix3x3& m, size_t buffer_max) // extracts btMatrix3x3 m from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_btMatrix3x3(size_t buffer_ptr, btMatrix3x3& m, size_t buffer_max) // extracts btMatrix3x3 m from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 { 
   btVector3 temp;  
   buffer_ptr = extract_from_buffer_btVector3(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   m[0] = temp;
+  
   buffer_ptr = extract_from_buffer_btVector3(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   m[1] = temp;
+  
   buffer_ptr = extract_from_buffer_btVector3(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   m[2] = temp;
-
+  
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_Time(size_t buffer_ptr, ros::Time& t, size_t buffer_max) // extracts ros::time t from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Time(size_t buffer_ptr, ros::Time& t, size_t buffer_max) // extracts ros::time t from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 { 
   int temp;  
   buffer_ptr = extract_from_buffer_int(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   t.sec = temp;
+  
   buffer_ptr = extract_from_buffer_int(buffer_ptr, temp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   t.nsec = temp;
 
   return  buffer_ptr;  
 }
 
-size_t extract_from_buffer_Pose(size_t buffer_ptr, geometry_msgs::Pose& pose, size_t buffer_max) // extracts Pose from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Pose(size_t buffer_ptr, geometry_msgs::Pose& pose, size_t buffer_max) // extracts Pose from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {    
   // get size of pose
   if(buffer_ptr + sizeof(size_t) >= buffer_max)
   {
     printf("could not extract Pose from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   }  
   size_t size_of_pose;
   memcpy((void*)&(size_of_pose), (void*)(buffer_ptr), sizeof(size_of_pose));
@@ -495,7 +519,7 @@ size_t extract_from_buffer_Pose(size_t buffer_ptr, geometry_msgs::Pose& pose, si
   if(buffer_ptr + size_of_pose >= buffer_max)
   {
     printf("could not extract Pose from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   }
   memcpy((void*)&(pose), (void*)(buffer_ptr), size_of_pose);
   buffer_ptr += size_of_pose;
@@ -503,36 +527,60 @@ size_t extract_from_buffer_Pose(size_t buffer_ptr, geometry_msgs::Pose& pose, si
   return  buffer_ptr;
 }
 
-size_t extract_from_buffer_Pose2D(size_t buffer_ptr, geometry_msgs::Pose2D& pose, size_t buffer_max) // extracts Pose2D from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Pose2D(size_t buffer_ptr, geometry_msgs::Pose2D& pose, size_t buffer_max) // extracts Pose2D from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {    
   buffer_ptr = extract_from_buffer_double(buffer_ptr, pose.x, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_double(buffer_ptr, pose.y, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_double(buffer_ptr, pose.theta, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   return  buffer_ptr;
 }
 
-size_t extract_from_buffer_Header(size_t buffer_ptr, roslib::Header& header, size_t buffer_max) // extracts Header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Header(size_t buffer_ptr, roslib::Header& header, size_t buffer_max) // extracts Header from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 { 
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, header.seq, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_Time(buffer_ptr, header.stamp, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_string(buffer_ptr, header.frame_id, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   return buffer_ptr;
 }
 
-size_t extract_from_buffer_PoseStamped(size_t buffer_ptr, geometry_msgs::PoseStamped& posestamped, size_t buffer_max) // extracts PoseStamped from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_PoseStamped(size_t buffer_ptr, geometry_msgs::PoseStamped& posestamped, size_t buffer_max) // extracts PoseStamped from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   buffer_ptr = extract_from_buffer_Pose(buffer_ptr, posestamped.pose, buffer_max); 
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_Header(buffer_ptr, posestamped.header, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   return buffer_ptr;       
 }      
        
-size_t extract_from_buffer_Point32(size_t buffer_ptr, geometry_msgs::Point32& point, size_t buffer_max) // extracts Point32 from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Point32(size_t buffer_ptr, geometry_msgs::Point32& point, size_t buffer_max) // extracts Point32 from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {    
   // get size of point
   if(buffer_ptr + sizeof(size_t) >= buffer_max)
   {
     printf("could not extract Point32 from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   }  
   size_t size_of_point;
   memcpy((void*)&(size_of_point), (void*)(buffer_ptr), sizeof(size_of_point));
@@ -542,7 +590,7 @@ size_t extract_from_buffer_Point32(size_t buffer_ptr, geometry_msgs::Point32& po
   if(buffer_ptr + size_of_point >= buffer_max)
   {
     printf("could not extract Point32 from buffer, buffer too small\n");
-    return  buffer_ptr;
+    return  0;
   }
   memcpy((void*)&(point), (void*)(buffer_ptr), size_of_point);
   buffer_ptr += size_of_point;
@@ -550,14 +598,18 @@ size_t extract_from_buffer_Point32(size_t buffer_ptr, geometry_msgs::Point32& po
   return  buffer_ptr;
 }
 
-size_t extract_from_buffer_PointCloud(size_t buffer_ptr, sensor_msgs::PointCloud& cloud, size_t buffer_max) // extracts PointCloud from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_PointCloud(size_t buffer_ptr, sensor_msgs::PointCloud& cloud, size_t buffer_max) // extracts PointCloud from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   // extract header  
   buffer_ptr = extract_from_buffer_Header(buffer_ptr, cloud.header, buffer_max);
-    
+  if(buffer_ptr == 0)
+    return 0;
+  
   // extract number of points
   uint num_points;
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_points, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   
   // extract each point
   cloud.points.resize(num_points);
@@ -565,13 +617,18 @@ size_t extract_from_buffer_PointCloud(size_t buffer_ptr, sensor_msgs::PointCloud
   for(uint i = 0; i < num_points; i++)
   {
     geometry_msgs::Point32 point;
-    buffer_ptr = extract_from_buffer_Point32(buffer_ptr, point, buffer_max);  
+    buffer_ptr = extract_from_buffer_Point32(buffer_ptr, point, buffer_max);
+    if(buffer_ptr == 0)
+      return 0;
+    
     cloud.points[i] = point;
   }
   
   // extract number of chanels
   uint num_channels;
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_channels, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   
   // extract each channel
   cloud.channels.resize(num_channels);
@@ -581,14 +638,18 @@ size_t extract_from_buffer_PointCloud(size_t buffer_ptr, sensor_msgs::PointCloud
   return buffer_ptr;
 }
 
-size_t extract_from_buffer_Path(size_t buffer_ptr, nav_msgs::Path& path, size_t buffer_max) // extracts PointCloud from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_Path(size_t buffer_ptr, nav_msgs::Path& path, size_t buffer_max) // extracts PointCloud from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   // extract header  
   buffer_ptr = extract_from_buffer_Header(buffer_ptr, path.header, buffer_max);
-    
+  if(buffer_ptr == 0)
+    return 0;
+  
   // extract number of poses
   uint num_poses;
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_poses, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   
   // extract each point
   path.poses.resize(num_poses);
@@ -597,71 +658,127 @@ size_t extract_from_buffer_Path(size_t buffer_ptr, nav_msgs::Path& path, size_t 
   {
     geometry_msgs::PoseStamped pose;
     buffer_ptr = extract_from_buffer_PoseStamped(buffer_ptr, pose, buffer_max);  
+    if(buffer_ptr == 0)
+      return 0;
+    
     path.poses[i] = pose;
   }
   
   return buffer_ptr;
 }
 
-size_t extract_from_buffer_PointCloudWithOrigin(size_t buffer_ptr, hokuyo_listener_cu::PointCloudWithOrigin& pcwo, size_t buffer_max) // extracts PointCloudWithOrigin from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_PointCloudWithOrigin(size_t buffer_ptr, hokuyo_listener_cu::PointCloudWithOrigin& pcwo, size_t buffer_max) // extracts PointCloudWithOrigin from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   // extract origin  
   buffer_ptr = extract_from_buffer_Point32(buffer_ptr, pcwo.origin, buffer_max);
-    
+  if(buffer_ptr == 0)
+    return 0;
+  
   // extract cloud
   buffer_ptr = extract_from_buffer_PointCloud(buffer_ptr, pcwo.cloud, buffer_max);
-   
+  if(buffer_ptr == 0)
+    return 0;
+  
   return buffer_ptr;        
 }  
 
-size_t extract_from_buffer_OccupancyGrid(size_t buffer_ptr, nav_msgs::OccupancyGrid& map, size_t buffer_max) // extracts OccupancyGrid from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_OccupancyGrid(size_t buffer_ptr, nav_msgs::OccupancyGrid& map, size_t buffer_max) // extracts OccupancyGrid from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   // extract header  
   buffer_ptr = extract_from_buffer_Header(buffer_ptr, map.header, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   
   // extract info
   buffer_ptr = extract_from_buffer_Time(buffer_ptr, map.info.map_load_time, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_float(buffer_ptr, map.info.resolution, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, map.info.width, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, map.info.height, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_Pose(buffer_ptr, map.info.origin, buffer_max);    
-
+  if(buffer_ptr == 0)
+    return 0;
+  
   // extract number of data
   uint num_data = -1;
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_data, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
   map.data.resize(num_data);
 
   // extract each data
   for(uint i = 0; i < num_data; i++)
+  {
     buffer_ptr = extract_from_buffer_int8(buffer_ptr, map.data[i], buffer_max);
+    if(buffer_ptr == 0)
+      return 0;
+  }
   
   return buffer_ptr;
 }
 
-size_t extract_from_buffer_StampedTransform(size_t buffer_ptr, tf::StampedTransform& t, size_t buffer_max) // extracts tf::StampedTransform from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_StampedTransform(size_t buffer_ptr, tf::StampedTransform& t, size_t buffer_max) // extracts tf::StampedTransform from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   buffer_ptr = extract_from_buffer_Time(buffer_ptr, t.stamp_, buffer_max);  
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_string(buffer_ptr, t.frame_id_, buffer_max);  
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_string(buffer_ptr, t.child_frame_id_, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
   
   btVector3 m_origin;
   buffer_ptr = extract_from_buffer_btVector3(buffer_ptr, m_origin, buffer_max); 
+  if(buffer_ptr == 0)
+    return 0;
   t.setOrigin(m_origin);
   
   btMatrix3x3 m_basis;
   buffer_ptr = extract_from_buffer_btMatrix3x3(buffer_ptr, m_basis, buffer_max); 
+  if(buffer_ptr == 0)
+    return 0;
   t.setBasis(m_basis);
   
   return buffer_ptr;
 }
 
-size_t extract_from_buffer_ethernetheader(size_t buffer_ptr, int& id, uint& messagetype, uint& counter, uint& total_packets, uint& packet_number, size_t buffer_max) // extracts an ethernet header from (void*)buffer_ptr, errors if try to extract past buffer_max, returns the next free location in the buffer
+size_t extract_from_buffer_ethernetheader(size_t buffer_ptr, int& id, uint& messagetype, uint& counter, uint& total_packets, uint& packet_number, size_t buffer_max) // extracts an ethernet header from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
   buffer_ptr = extract_from_buffer_int(buffer_ptr, id, buffer_max);             // extracts agentID
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, messagetype, buffer_max);   // extracts agentID
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, counter, buffer_max);       // extracts message counter
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, total_packets, buffer_max); // extracts total message size in packets
+  if(buffer_ptr == 0)
+    return 0;
+  
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, packet_number, buffer_max); // extracts packet number
-
+  if(buffer_ptr == 0)
+    return 0;
+  
   return buffer_ptr;
 }
