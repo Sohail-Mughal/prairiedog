@@ -56,6 +56,11 @@
 #include "std_msgs/Int32.h"
 
 #include "intercom_cu/PoseStamped_CU_ID.h"
+#include "intercom_cu/Int32_CU_ID.h"
+#include "intercom_cu/PointCloud_CU_ID.h"
+#include "intercom_cu/Path_CU_ID.h"
+#include "intercom_cu/Pose2D_CU_ID.h"
+#include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
 
 #ifndef PI
   #define PI 3.1415926535897
@@ -138,14 +143,15 @@ float new_heading_y;
 
 // globals used for map etc.
 MAP* costmap = NULL;
-POINT_LIST* global_path = NULL;
+
 POINT_LIST* local_path = NULL;
 GRID_LIST* inflated_obs_local = NULL;
 GRID_LIST* obstacles_local = NULL;
 POINT_LIST* laser_scan_data = NULL;
 
-vector< ROBOT * > robots;
+vector< ROBOT*> robots;
 vector<POSE*> goal_poses;
+vector<POINT_LIST*> global_paths;
 
 int num_robots = 1;
 int current_robot = 0;
@@ -154,19 +160,27 @@ int current_robot = 0;
 ros::Subscriber pose_sub;
 ros::Subscriber pose_multi_sub;
 
-ros::Subscriber robot_footprint_sub; 
+//ros::Subscriber robot_footprint_sub; 
+
 ros::Subscriber global_path_sub;
-ros::Subscriber local_path_sub;
-ros::Subscriber inflated_obs_local_sub;
-ros::Subscriber obstacles_local_sub;
+ros::Subscriber global_path_multi_sub;
+
+//ros::Subscriber local_path_sub;
+//ros::Subscriber inflated_obs_local_sub;
+//ros::Subscriber obstacles_local_sub;
 
 ros::Subscriber goal_sub;
 ros::Subscriber goal_multi_sub;
 
 ros::Subscriber laser_scan_sub;
 ros::Subscriber map_changes_sub;
+
+
 ros::Subscriber system_state_sub;
+ros::Subscriber system_state_multi_sub;
+
 ros::Subscriber system_update_sub;
+ros::Subscriber system_update_multi_sub;
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
@@ -193,7 +207,6 @@ int user_control_state = 0; // as broadcast by this node
                             // 1 = manual stop
                             // 2 = manual control
 
-int safe_path_exists = 0;
 bool setup_tf = true; // flag used to indicate that required transforms are available
 
 bool no_publish = false; // if true, then will not publish to manual control topics
@@ -601,6 +614,66 @@ void draw_pose(POSE* pose, float* clr, float z_height)
   
 }
 
+// draws crosshairs centered at pose, that are c_rad large, thick bold, with segments length long, and spaced half_gap*2 apart, where all of these are in terms of robot radius
+void draw_crosshairs(POSE* pose, float c_rad, float thick, float length, float half_gap, float* color, float z_height)
+{ 
+  if(pose == NULL) 
+    return;
+          
+    
+  // now draw pose circle and directional arrow 
+  if(costmap!= NULL)
+  { 
+    glPushMatrix(); 
+    glTranslatef(-1, -1, z_height);
+  
+    if(costmap != NULL)
+    {
+      float map_rad = 2/(float)max(costmap->height, costmap->width); 
+      glScaled(map_rad,map_rad,1);
+    }
+    
+    float scaled_robot_rad = robot_display_radius/costmap->resolution;
+    c_rad *= scaled_robot_rad;
+    thick *= scaled_robot_rad;
+    length *= scaled_robot_rad;
+    half_gap *= scaled_robot_rad;
+    
+    // upper right
+    float pos1[] = {pose->x+half_gap, pose->y+c_rad, 0};
+    float size_horiz[] = {length, thick, 0};
+    drawRectangle(pos1, size_horiz, color);
+    
+    float pos2[] = {pose->x+c_rad, pose->y+half_gap, 0};
+    float size_vert[] = {thick, length, 0};
+    drawRectangle(pos2, size_vert, color);
+    
+    
+    // upper left
+    float pos3[] = {pose->x-half_gap-length, pose->y+c_rad, 0};
+    drawRectangle(pos3, size_horiz, color);
+    
+    float pos4[] = {pose->x-c_rad-thick, pose->y+half_gap, 0};
+    drawRectangle(pos4, size_vert, color);
+    
+    // lower left
+    float pos5[] = {pose->x-half_gap-length, pose->y-c_rad-thick, 0};
+    drawRectangle(pos5, size_horiz, color);
+    
+    float pos6[] = {pose->x-c_rad-thick, pose->y-half_gap-length, 0};
+    drawRectangle(pos6, size_vert, color);
+    
+    // lower right
+    float pos7[] = {pose->x+half_gap, pose->y-c_rad-thick, 0};
+    drawRectangle(pos7, size_horiz, color);
+    
+    float pos8[] = {pose->x+c_rad, pose->y-half_gap-length, 0};
+    drawRectangle(pos8, size_vert, color);
+    
+    glPopMatrix(); 
+  }  
+}
+
 // draws all poses at z_height with color clr
 void draw_poses(vector<POSE*>& poses, float* clr, float z_height)
 {
@@ -608,7 +681,42 @@ void draw_poses(vector<POSE*>& poses, float* clr, float z_height)
   {
     if(poses[i] != NULL)
       draw_pose(poses[i], clr, z_height);
+    
+    if(i == current_robot)
+      draw_crosshairs(poses[i], 1.5, .3, 1, .5, GREEN, z_height);
   } 
+}
+
+// returns the distance to the pose from point (x,y)
+float dist_to_pose(const POSE* pose, float world_x, float world_y)
+{
+  float x_diff = costmap->resolution*pose->x - world_x;
+  float y_diff = costmap->resolution*pose->y - world_y;
+    
+  return sqrt(x_diff*x_diff + y_diff*y_diff);  
+}
+
+// returns the index of the closest pose to the point (x,y) that is also within c_rad
+int closest_pose_to_point_within(const vector<POSE*>& poses, float world_x, float world_y, float c_rad) 
+{
+  float closest_dist = c_rad;
+  int closest_ind = -1;
+  float this_dist; 
+  
+  for(int i = 0; i < num_robots; i++)
+  { 
+    if(poses[i] == NULL)
+      continue;
+      
+    this_dist = dist_to_pose(poses[i], world_x, world_y);
+     
+    if(this_dist < closest_dist)
+    {
+      closest_dist = this_dist;  
+      closest_ind = i;
+    }
+  }
+  return closest_ind;
 }
 
 /*----------------------- POINT_LIST ------------------------------------*/
@@ -781,6 +889,20 @@ void draw_point_list_grids_binary(POINT_LIST* pl, float* color1, float* color2, 
   glPopMatrix();
 }
 
+void draw_global_paths(const vector<POINT_LIST*>& g_paths) // draws the global paths
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(g_paths[i] != NULL)
+    {
+      if(i == current_robot)
+        draw_point_list_2D_lines(g_paths[i], GREEN, .97);
+      else
+        draw_point_list_2D_lines(g_paths[i], BLACK, .97);   
+    }
+  }
+}
+
 /*----------------------- GRID_LIST ------------------------------------*/
 
 struct GRID_LIST
@@ -916,66 +1038,6 @@ void draw_robot(ROBOT* bot, float* color, float z_height)
   }
 }
 
-// draws crosshairs centered at pose, that are c_rad large, thick bold, with segments length long, and spaced half_gap*2 apart, where all of these are in terms of robot radius
-void draw_crosshairs(POSE* pose, float c_rad, float thick, float length, float half_gap, float* color, float z_height)
-{ 
-  if(pose == NULL) 
-    return;
-          
-    
-  // now draw pose circle and directional arrow 
-  if(costmap!= NULL)
-  { 
-    glPushMatrix(); 
-    glTranslatef(-1, -1, z_height);
-  
-    if(costmap != NULL)
-    {
-      float map_rad = 2/(float)max(costmap->height, costmap->width); 
-      glScaled(map_rad,map_rad,1);
-    }
-    
-    float scaled_robot_rad = robot_display_radius/costmap->resolution;
-    c_rad *= scaled_robot_rad;
-    thick *= scaled_robot_rad;
-    length *= scaled_robot_rad;
-    half_gap *= scaled_robot_rad;
-    
-    // upper right
-    float pos1[] = {pose->x+half_gap, pose->y+c_rad, 0};
-    float size_horiz[] = {length, thick, 0};
-    drawRectangle(pos1, size_horiz, color);
-    
-    float pos2[] = {pose->x+c_rad, pose->y+half_gap, 0};
-    float size_vert[] = {thick, length, 0};
-    drawRectangle(pos2, size_vert, color);
-    
-    
-    // upper left
-    float pos3[] = {pose->x-half_gap-length, pose->y+c_rad, 0};
-    drawRectangle(pos3, size_horiz, color);
-    
-    float pos4[] = {pose->x-c_rad-thick, pose->y+half_gap, 0};
-    drawRectangle(pos4, size_vert, color);
-    
-    // lower left
-    float pos5[] = {pose->x-half_gap-length, pose->y-c_rad-thick, 0};
-    drawRectangle(pos5, size_horiz, color);
-    
-    float pos6[] = {pose->x-c_rad-thick, pose->y-half_gap-length, 0};
-    drawRectangle(pos6, size_vert, color);
-    
-    // lower right
-    float pos7[] = {pose->x+half_gap, pose->y-c_rad-thick, 0};
-    drawRectangle(pos7, size_horiz, color);
-    
-    float pos8[] = {pose->x+c_rad, pose->y-half_gap-length, 0};
-    drawRectangle(pos8, size_vert, color);
-    
-    glPopMatrix(); 
-  }  
-}
-
 // draws the robots in the gui at buffer height z_height as quads
 void draw_robots(const vector<ROBOT*>& bots, float z_height)
 {
@@ -1012,10 +1074,7 @@ int closest_robot_to_point_within(const vector<ROBOT*>& bots, float world_x, flo
   
   for(int i = 0; i < num_robots; i++)
   { 
-    float x_diff = costmap->resolution*bots[i]->pose->x - world_x;
-    float y_diff = costmap->resolution*bots[i]->pose->y - world_y;
-    
-    this_dist = sqrt(x_diff*x_diff + y_diff*y_diff);
+    this_dist = dist_to_pose(bots[i]->pose, world_x, world_y);
      
     if(this_dist < closest_dist)
     {
@@ -1196,36 +1255,36 @@ void pose_multi_callback(const intercom_cu::PoseStamped_CU_ID::ConstPtr& msg)
   pose_callback_helper(msg->data, msg->id.data);
 }       
         
-void robot_footprint_callback(const geometry_msgs::PolygonStamped::ConstPtr& msg)
-{
-  if(costmap == NULL)
-    return;
-     
-  ROBOT* robot = robots[current_robot];
-  
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
-  float z_scl = 0;
-    
-  int size = msg->polygon.points.size();
-  destroy_point_list(robot->bound);
-  robot->bound = make_point_list(size);
+// void robot_footprint_callback(const geometry_msgs::PolygonStamped::ConstPtr& msg)
+// {
+//   if(costmap == NULL)
+//     return;
+//      
+//   ROBOT* robot = robots[current_robot];
+//   
+//   float x_scl = 1/costmap->resolution;
+//   float y_scl = 1/costmap->resolution;
+//   float z_scl = 0;
+//     
+//   int size = msg->polygon.points.size();
+//   destroy_point_list(robot->bound);
+//   robot->bound = make_point_list(size);
+// 
+//   for(int i = 0; i < size; i++)
+//   {
+//     robot->bound->points[i][0] = msg->polygon.points[i].x*x_scl;
+//     robot->bound->points[i][1] = msg->polygon.points[i].y*y_scl;
+//     robot->bound->points[i][2] = msg->polygon.points[i].z*z_scl; 
+//   }
+//  
+//   display_flag = 1;
+//   glutPostRedisplay(); 
+//  
+//   //ROS_INFO("New Robot Bound: \n");
+//   //print_point_list(robot->bound);
+// }
 
-  for(int i = 0; i < size; i++)
-  {
-    robot->bound->points[i][0] = msg->polygon.points[i].x*x_scl;
-    robot->bound->points[i][1] = msg->polygon.points[i].y*y_scl;
-    robot->bound->points[i][2] = msg->polygon.points[i].z*z_scl; 
-  }
- 
-  display_flag = 1;
-  glutPostRedisplay(); 
- 
-  //ROS_INFO("New Robot Bound: \n");
-  //print_point_list(robot->bound);
-}
-
-void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
+void global_plan_callback_helper(const nav_msgs::Path& msg, int robot_id) // helps with the next two functions
 {     
   if(costmap == NULL)
    return;
@@ -1234,117 +1293,132 @@ void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
   float y_scl = 1/costmap->resolution;
   float z_scl = 0; 
   
-  int length = msg->poses.size();
-  destroy_point_list(global_path);
-  global_path = make_point_list(length);
+  int length = msg.poses.size();
+  destroy_point_list(global_paths[robot_id]);
   
-  for(int i = 0; i < length; i++)
-  {
-    global_path->points[i][0] = x_scl*msg->poses[i].pose.position.x;
-    global_path->points[i][1] = y_scl*msg->poses[i].pose.position.y;
-    global_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
-  }
-
   if(length > 0)
-    safe_path_exists = 1;
+  {
+    global_paths[robot_id] = make_point_list(length);
+  
+    for(int i = 0; i < length; i++)
+    {
+      global_paths[robot_id]->points[i][0] = x_scl*msg.poses[i].pose.position.x;
+      global_paths[robot_id]->points[i][1] = y_scl*msg.poses[i].pose.position.y;
+      global_paths[robot_id]->points[i][2] = z_scl*msg.poses[i].pose.position.z;   
+    }
+  }
+  else 
+    global_paths[robot_id] = NULL;
   
   display_flag = 1;
   glutPostRedisplay(); 
   
   //ROS_INFO("New Global Path: \n");
-  //print_point_list(global_path); 
-}
-
-void local_plan_callback(const nav_msgs::Path::ConstPtr& msg)
-{     
-  if(costmap == NULL)
-    return;
-     
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
-  float z_scl = 0; 
-  
-  int length = msg->poses.size();
-  destroy_point_list(local_path);
-  local_path = make_point_list(length);
-  
-  for(int i = 0; i < length; i++)
-  {
-    local_path->points[i][0] = x_scl*msg->poses[i].pose.position.x;
-    local_path->points[i][1] = y_scl*msg->poses[i].pose.position.y;
-    local_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
-  }
-
-   display_flag = 1;
-   glutPostRedisplay(); 
-}
-
-void inflated_obs_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
-{     
-  if(costmap == NULL)
-    return;
-    
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
-  float z_scl = 0; 
-  
-  float width = x_scl*msg->cell_width;
-  float height = x_scl*msg->cell_height;        
-  int length = msg->cells.size();
-  
-  destroy_grid_list(inflated_obs_local);
-  inflated_obs_local = make_grid_list(length, height, width);
-  
-  for(int i = 0; i < length; i++)
-  {
-    inflated_obs_local->grids->points[i][0] = x_scl*msg->cells[i].x;
-    inflated_obs_local->grids->points[i][1] = y_scl*msg->cells[i].y;
-    inflated_obs_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
-  }
-
-   display_flag = 1;
-   glutPostRedisplay(); 
-  
-  //ROS_INFO("New Inflated Obstacle List: \n");
-  //print_point_list(inflated_obs_local->grids);
-  
+  //print_point_list(global_paths[robot_id]); 
 }
 
 
-void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
-{      
- if(costmap == NULL)
-   return;
-    
-  float x_scl = 1/costmap->resolution;
-  float y_scl = 1/costmap->resolution;
-  float z_scl = 0; 
-  
-  float width = x_scl*msg->cell_width;
-  float height = x_scl*msg->cell_height;        
-  int length = msg->cells.size();
-  
-  destroy_grid_list(obstacles_local);
-  obstacles_local = make_grid_list(length, height, width);
-  
-  for(int i = 0; i < length; i++)
-  {
-    obstacles_local->grids->points[i][0] = x_scl*msg->cells[i].x;
-    obstacles_local->grids->points[i][1] = y_scl*msg->cells[i].y;
-    obstacles_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
-  }
-
-   display_flag = 1;
-   glutPostRedisplay(); 
-  
-  //ROS_INFO("New Inflated Obstacle List: \n");
-  //print_point_list(inflated_obs_local->grids); 
+void global_plan_callback(const nav_msgs::Path::ConstPtr& msg)
+{
+   global_plan_callback_helper(*msg, current_robot); 
 }
+
+void global_plan_multi_callback(const intercom_cu::Path_CU_ID::ConstPtr& msg)
+{
+   global_plan_callback_helper(msg->data, msg->id.data); 
+}
+
+
+// void local_plan_callback(const nav_msgs::Path::ConstPtr& msg)
+// {     
+//   if(costmap == NULL)
+//     return;
+//      
+//   float x_scl = 1/costmap->resolution;
+//   float y_scl = 1/costmap->resolution;
+//   float z_scl = 0; 
+//   
+//   int length = msg->poses.size();
+//   destroy_point_list(local_path);
+//   local_path = make_point_list(length);
+//   
+//   for(int i = 0; i < length; i++)
+//   {
+//     local_path->points[i][0] = x_scl*msg->poses[i].pose.position.x;
+//     local_path->points[i][1] = y_scl*msg->poses[i].pose.position.y;
+//     local_path->points[i][2] = z_scl*msg->poses[i].pose.position.z;   
+//   }
+// 
+//    display_flag = 1;
+//    glutPostRedisplay(); 
+// }
+
+// void inflated_obs_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
+// {     
+//   if(costmap == NULL)
+//     return;
+//     
+//   float x_scl = 1/costmap->resolution;
+//   float y_scl = 1/costmap->resolution;
+//   float z_scl = 0; 
+//   
+//   float width = x_scl*msg->cell_width;
+//   float height = x_scl*msg->cell_height;        
+//   int length = msg->cells.size();
+//   
+//   destroy_grid_list(inflated_obs_local);
+//   inflated_obs_local = make_grid_list(length, height, width);
+//   
+//   for(int i = 0; i < length; i++)
+//   {
+//     inflated_obs_local->grids->points[i][0] = x_scl*msg->cells[i].x;
+//     inflated_obs_local->grids->points[i][1] = y_scl*msg->cells[i].y;
+//     inflated_obs_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
+//   }
+// 
+//    display_flag = 1;
+//    glutPostRedisplay(); 
+//   
+//   //ROS_INFO("New Inflated Obstacle List: \n");
+//   //print_point_list(inflated_obs_local->grids);
+//   
+// }
+
+
+// void obstacles_local_callback(const nav_msgs::GridCells::ConstPtr& msg)
+// {      
+//  if(costmap == NULL)
+//    return;
+//     
+//   float x_scl = 1/costmap->resolution;
+//   float y_scl = 1/costmap->resolution;
+//   float z_scl = 0; 
+//   
+//   float width = x_scl*msg->cell_width;
+//   float height = x_scl*msg->cell_height;        
+//   int length = msg->cells.size();
+//   
+//   destroy_grid_list(obstacles_local);
+//   obstacles_local = make_grid_list(length, height, width);
+//   
+//   for(int i = 0; i < length; i++)
+//   {
+//     obstacles_local->grids->points[i][0] = x_scl*msg->cells[i].x;
+//     obstacles_local->grids->points[i][1] = y_scl*msg->cells[i].y;
+//     obstacles_local->grids->points[i][2] = z_scl*msg->cells[i].z;   
+//   }
+// 
+//    display_flag = 1;
+//    glutPostRedisplay(); 
+//   
+//   //ROS_INFO("New Inflated Obstacle List: \n");
+//   //print_point_list(inflated_obs_local->grids); 
+// }
     
 void goal_callback_helper(const geometry_msgs::PoseStamped& msg, int robot_id)
-{    
+{     
   POSE* goal_pose = goal_poses[robot_id];  
-    
+  
   goal_pose->x = msg.pose.position.x/costmap->resolution;
   goal_pose->y = msg.pose.position.y/costmap->resolution;
   goal_pose->z = msg.pose.position.z;
@@ -1437,33 +1511,55 @@ void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
   glutPostRedisplay(); 
 }
 
-void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
+void system_state_callback_helper(const std_msgs::Int32& msg, int robot_id)
 {      
   
-  if(advertised_control_state[current_robot] != msg->data)
+  if(advertised_control_state[robot_id] != msg.data)
   {
-    advertised_control_state[current_robot] = msg->data;
-    if(advertised_control_state[current_robot] == 0 || advertised_control_state[current_robot] == 3)  
-      safe_path_exists = 0;
+    advertised_control_state[robot_id] = msg.data;
+    if(advertised_control_state[robot_id] == 0 || advertised_control_state[robot_id] == 3)
+    {
+      destroy_point_list(global_paths[robot_id]);  
+      global_paths[robot_id] = NULL;
+    }
     
     display_flag = 1;
     glutPostRedisplay(); 
   }
 }
 
-void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
+void system_state_callback(const std_msgs::Int32::ConstPtr& msg)
+{
+  system_state_callback_helper(*msg, current_robot);
+}
+
+void system_state_multi_callback(const intercom_cu::Int32_CU_ID::ConstPtr& msg)
+{
+  system_state_callback_helper(msg->data, msg->id.data);
+}
+
+void system_update_callback_helper(const std_msgs::Int32& msg, int robot_id)
 {      
-  int data = msg->data;
+  int data = msg.data;
  
   if(data == 1) // there is no safe path to the goal
   {
-    if(safe_path_exists == 1)
-    {
-      safe_path_exists = 0;
-      display_flag = 1;
-      glutPostRedisplay();
-    }
+    destroy_point_list(global_paths[robot_id]);  
+    global_paths[robot_id] =NULL;
+
+    display_flag = 1;
+    glutPostRedisplay();
   }
+}
+
+void system_update_callback(const std_msgs::Int32::ConstPtr& msg)
+{
+  system_update_callback_helper(*msg, current_robot);
+}
+
+void system_update_multi_callback(const intercom_cu::Int32_CU_ID::ConstPtr& msg)
+{
+  system_update_callback_helper(msg->data, msg->id.data);
 }
 
 /*----------------------- ROS Publisher Functions -----------------------*/
@@ -1556,11 +1652,9 @@ void display()
        #endif
      }
      
-     // draw the global path
-     if(global_path != NULL && safe_path_exists == 1)
-     {
-       draw_point_list_2D_lines(global_path, GREEN, .97);
-     }
+     // draw the global paths
+     draw_global_paths(global_paths); // draws the global paths
+
    
      // draw the local path
     // if(local_path != NULL)
@@ -1934,7 +2028,17 @@ void mouse(int button, int mouse_state, int x, int y)
   {
     float mouse_x_global = (mouse_x_world + 1)/map_rad*costmap->resolution; // in meters
     float mouse_y_global = (mouse_y_world + 1)/map_rad*costmap->resolution; // in meters
-    int closest_bot = closest_robot_to_point_within(robots, mouse_x_global, mouse_y_global, robot_display_radius*2);
+    float closest_dist = robot_display_radius*2;
+    int closest_bot = closest_robot_to_point_within(robots, mouse_x_global, mouse_y_global, closest_dist);
+
+    if(closest_bot != -1)
+      closest_dist = dist_to_pose(robots[closest_bot]->pose, mouse_x_global, mouse_y_global);
+  
+    int closest_goal = closest_pose_to_point_within(goal_poses, mouse_x_global, mouse_y_global, closest_dist); 
+
+    if(closest_goal != -1)
+      closest_bot = closest_goal;
+
     if(closest_bot != -1)
     {
       current_robot = closest_bot;
@@ -2306,17 +2410,27 @@ void cleanup()
 {
   pose_sub.shutdown();
   pose_multi_sub.shutdown();
-  robot_footprint_sub.shutdown();
+  
+  //robot_footprint_sub.shutdown();
+  
   global_path_sub.shutdown();
-  local_path_sub.shutdown();
-  inflated_obs_local_sub.shutdown();
-  obstacles_local_sub.shutdown();
+  global_path_multi_sub.shutdown();
+  
+  //local_path_sub.shutdown();
+  //inflated_obs_local_sub.shutdown();
+  //obstacles_local_sub.shutdown();
+  
   goal_sub.shutdown();
   goal_multi_sub.shutdown();
+  
   laser_scan_sub.shutdown();
   map_changes_sub.shutdown();
+  
   system_state_sub.shutdown();
+  system_state_multi_sub.shutdown();
+  
   system_update_sub.shutdown();
+  system_update_multi_sub.shutdown();
   
   goal_pub.shutdown();
   new_pose_pub.shutdown();
@@ -2327,12 +2441,17 @@ void cleanup()
   destroy_map(costmap);
   for(int i = 0; i < num_robots; i++)
     destroy_robot(robots[i]);
-  destroy_point_list(global_path);
+  
+  for(int i = 0; i < num_robots; i++)
+    destroy_point_list(global_paths[i]);
+  
   destroy_point_list(local_path);
   destroy_grid_list(inflated_obs_local);
   destroy_grid_list(obstacles_local);
+  
   for(int i = 0; i < num_robots; i++)
     destroy_pose(goal_poses[i]);
+  
   destroy_point_list(laser_scan_data);
   
   ROS_INFO("\nExit... \n");  
@@ -2389,23 +2508,34 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_robots; i++)
     goal_poses[i] = make_pose(0, 0, 0);
   
+  global_paths.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    global_paths[i] = NULL;
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   pose_multi_sub = nh.subscribe("/cu_multi/pose_cu", 1, pose_multi_callback);
   
-  robot_footprint_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/robot_footprint", 2, robot_footprint_callback);
+  //robot_footprint_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/robot_footprint", 2, robot_footprint_callback);
+  
   global_path_sub = nh.subscribe("/cu/global_path_cu", 2, global_plan_callback);
-  local_path_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
-  inflated_obs_local_sub = nh.subscribe("/move_base/local_costmap/inflated_obstacles", 2, inflated_obs_local_callback);
-  obstacles_local_sub = nh.subscribe("/move_base/local_costmap/obstacles", 2, obstacles_local_callback);
+  global_path_multi_sub = nh.subscribe("/cu_multi/global_path_cu", 2, global_plan_multi_callback);
+  
+  //local_path_sub = nh.subscribe("/move_base/TrajectoryPlannerROS/local_plan", 2, local_plan_callback);
+  //inflated_obs_local_sub = nh.subscribe("/move_base/local_costmap/inflated_obstacles", 2, inflated_obs_local_callback);
+  //obstacles_local_sub = nh.subscribe("/move_base/local_costmap/obstacles", 2, obstacles_local_callback);
   
   goal_sub = nh.subscribe("/cu/goal_cu", 1, goal_callback);
   goal_multi_sub = nh.subscribe("/cu_multi/goal_cu", 1, goal_multi_callback);
   
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
+  
   system_state_sub = nh.subscribe("/cu/system_state_cu", 10, system_state_callback);
+  system_state_multi_sub = nh.subscribe("/cu_multi/system_state_cu", 10, system_state_multi_callback);
+  
   system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
+  system_update_multi_sub = nh.subscribe("/cu_multi/system_update_cu", 10, system_update_multi_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
