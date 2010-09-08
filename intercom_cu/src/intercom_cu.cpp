@@ -1117,7 +1117,7 @@ void *Listner_UDP(void * inG)
           continue;
         }
         
-        printf("waiting for %u > %u \n", sent_message_counter_b, sent_message_counter + total_packets);
+        //printf("waiting for %u > %u \n", sent_message_counter_b, sent_message_counter + total_packets);
         
         // copy this into where it should go in the large message buffer 
         memcpy(large_message_buffer + header_size + (((size_t)packet_number_b)*adjusted_network_data_size), (void*)buffer_ptr, adjusted_network_data_size);
@@ -1343,7 +1343,7 @@ void pose_reset_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   size_t buffer_ptr = (size_t)buffer;
   size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
   
-  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 7,0,0,0, buffer_max); // add space for ethernet header 7
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 7,0,0,0, buffer_max); // add space for ethernet header
   buffer_ptr = add_to_buffer_PoseStamped(buffer_ptr, *msg, buffer_max);                      // add posestamped
 
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 7);                           // send 
