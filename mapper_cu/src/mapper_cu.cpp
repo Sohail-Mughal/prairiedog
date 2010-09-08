@@ -71,11 +71,13 @@ float global_map_x_offset = 0;     // the map is this far off of the world coord
 float global_map_y_offset = 0;     // the map is this far off of the world coordinate system in the y direction
 float global_map_theta_offset = 0; // the map is this far off of the world coordinate system rotationally
 std::string map_file = std::string("../blank.bmp"); // the map file
+bool vis_mode = false;             // when set to true goes into functionality good for visualization server
 
 // global ROS subscriber handles
 ros::Subscriber laser_scan_sub;
 ros::Subscriber pose_sub;
 ros::Subscriber bumper_pose_sub;
+ros::Subscriber map_changes_sub;
 
 // global ROS publisher handles
 ros::Publisher map_changes_pub;
@@ -730,8 +732,7 @@ void populateMapFromBitmap(MAP* Map, const char* filename, float thresh)
 
 /*---------------------------- ROS tf functions -------------------------*/
 void broadcast_map_tf()
-{
- 
+{ 
   static tf::TransformBroadcaster br;  
     
   tf::Transform transform;   
@@ -1264,6 +1265,23 @@ void bumper_pose_callback_using_tf(const geometry_msgs::PoseStamped::ConstPtr& m
   // printf("out tf bumper pose callback \n");
 }
 
+void incomming_map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
+{
+  // add to laser data
+  int i = 0;
+  
+  int length = msg->points.size();
+  
+  if(length > 0)
+  {
+    for(i = 0; i < length; i++)
+    {  
+      laser_map->cost[(int)msg->points[i].y][(int)msg->points[i].x] = (msg->points[i].z);
+    }
+  }  
+}
+
+
 bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &resp)
 {
   if(laser_map == NULL || bumper_map == NULL)
@@ -1301,7 +1319,8 @@ bool get_map_callback(nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response
   return true;
 }
 
-
+        
+        
 /*---------------------- ROS Publisher Functions ------------------------*/
 void publish_map_changes()
 {
@@ -1392,16 +1411,18 @@ int main(int argc, char** argv)
     BUMPER_COST = (float)param_input;                                      // the probability of obstacle associated with a bumper hit
   if(ros::param::get("mapper_cu/robot_radius", param_input)) 
     robot_radius = (float)param_input;                                     // (m)
-  if(ros::param::get("prairiedog/using_tf", bool_input)) 
-    using_tf = bool_input;                                                 // when set to true, use the tf package
   if(ros::param::get("mapper_cu/global_map_x_offset", param_input))
     global_map_x_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the x direction
   if(ros::param::get("mapper_cu/global_map_y_offset", param_input))
     global_map_y_offset = (float)param_input;                              // the map is this far off of the world coordinate system in the y direction
   if(ros::param::get("mapper_cu/global_map_theta_offset", param_input))
     global_map_theta_offset = (float)param_input;                          // the map is this far off of the world coordinate system in the rotationally
+  if(ros::param::get("mapper_cu/vis_mode", bool_input)) 
+    vis_mode = bool_input;                                                 // when set to true, has functionality that is good for running on a visualization server
   if(ros::param::get("mapper_cu/map_file", string_input))                       
     map_file = string_input;                                               // the map file
+  if(ros::param::get("prairiedog/using_tf", bool_input)) 
+    using_tf = bool_input;                                                 // when set to true, use the tf package
   
   HEIGHT = map_y_max/RESOLUTION + 1; //the height of the map in grids
   WIDTH = map_x_max/RESOLUTION + 1;  // the width of the map in grids
@@ -1418,7 +1439,8 @@ int main(int argc, char** argv)
   printf("loading map from: %s \n", map_file.c_str());
     
   // wait until localization service is provided (we need its tf /world_cu -> /robot_cu to be broadcast)
-  ros::service::waitForService("/cu/get_pose_cu", -1);
+  if(!vis_mode)
+    ros::service::waitForService("/cu/get_pose_cu", -1);
 
   destroy_map(laser_map);
   destroy_map(bumper_map);
@@ -1435,12 +1457,16 @@ int main(int argc, char** argv)
   else
     bumper_pose_sub = nh.subscribe("/cu/bumper_pose_cu", 10, bumper_pose_callback);
 
+  if(vis_mode)
+    map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, incomming_map_changes_callback);
+  
   // set up publishers
-  map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
+  if(!vis_mode)
+    map_changes_pub = nh.advertise<sensor_msgs::PointCloud>("/cu/map_changes_cu", 1);
     
   // set up service servers
   get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
-
+  
   while (ros::ok()) 
   {
     if(using_tf)
@@ -1455,6 +1481,7 @@ int main(int argc, char** argv)
   laser_scan_sub.shutdown();
   pose_sub.shutdown();
   bumper_pose_sub.shutdown();
+  map_changes_sub.shutdown();
   map_changes_pub.shutdown();
   get_map_srv.shutdown();
      
