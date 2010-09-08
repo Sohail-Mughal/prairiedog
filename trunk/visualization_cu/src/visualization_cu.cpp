@@ -147,11 +147,11 @@ MAP* costmap = NULL;
 POINT_LIST* local_path = NULL;
 GRID_LIST* inflated_obs_local = NULL;
 GRID_LIST* obstacles_local = NULL;
-POINT_LIST* laser_scan_data = NULL;
 
 vector< ROBOT*> robots;
 vector<POSE*> goal_poses;
 vector<POINT_LIST*> global_paths;
+vector<POINT_LIST*> laser_scan_data;
 
 int num_robots = 1;
 int current_robot = 0;
@@ -173,6 +173,8 @@ ros::Subscriber goal_sub;
 ros::Subscriber goal_multi_sub;
 
 ros::Subscriber laser_scan_sub;
+ros::Subscriber laser_scan_multi_sub;
+
 ros::Subscriber map_changes_sub;
 
 
@@ -903,6 +905,21 @@ void draw_global_paths(const vector<POINT_LIST*>& g_paths) // draws the global p
   }
 }
 
+void draw_laser_scan_data(const vector<POINT_LIST*>& scan_data) // draws the laser scans data
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(scan_data[i] != NULL)
+    {
+       #ifdef SCANNER_RANGE
+         draw_point_list_grids_binary(scan_data[i], LIGHTBLUE, RED, laser_hit_display_rad, -.95);
+       #else
+         draw_point_list_grids(scan_data[i], RED, laser_hit_display_rad, -.95);
+       #endif
+    }
+  }
+}
+
 /*----------------------- GRID_LIST ------------------------------------*/
 
 struct GRID_LIST
@@ -1449,43 +1466,53 @@ void goal_multi_callback(const intercom_cu::PoseStamped_CU_ID::ConstPtr& msg)
   goal_callback_helper(msg->data, msg->id.data);
 }  
 
-void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
+void laser_scan_callback_helper(const hokuyo_listener_cu::PointCloudWithOrigin& msg, int robot_id)
 { 
   float x_scl = 1/costmap->resolution;
   float y_scl = 1/costmap->resolution;
   float z_scl = 0; 
        
-  int length = msg->cloud.points.size();
+  int length = msg.cloud.points.size();
   
-  destroy_point_list(laser_scan_data);
-  laser_scan_data = make_point_list(length);
+  destroy_point_list(laser_scan_data[robot_id]);
+  laser_scan_data[robot_id] = make_point_list(length);
   
   for(int i = 0; i < length; i++)
   {  
     #ifdef SCANNER_RANGE  
       // differentiate between hits in range and hits out of range
-      float no_scale_dx = msg->cloud.points[i].x-msg->origin.x;
-      float no_scale_dy = msg->cloud.points[i].y-msg->origin.y;
+      float no_scale_dx = msg.cloud.points[i].x-msg.origin.x;
+      float no_scale_dy = msg.cloud.points[i].y-msg.origin.y;
       
-      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
-      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
+      laser_scan_data[robot_id]->points[i][0] = x_scl*msg.cloud.points[i].x;
+      laser_scan_data[robot_id]->points[i][1] = y_scl*msg.cloud.points[i].y;
       
       // this is a bit of a hack, but we'll use z to denote in/out of range because we know this is a 2D scan so z is essentially unused
       if(SCANNER_RANGE <= sqrt(no_scale_dx*no_scale_dx + no_scale_dy*no_scale_dy))
-        laser_scan_data->points[i][2] = 0; // point represents the limits of the scanner, not a hit
+        laser_scan_data[robot_id]->points[i][2] = 0; // point represents the limits of the scanner, not a hit
       else
-        laser_scan_data->points[i][2] = 1; // point represents a hit
+        laser_scan_data[robot_id]->points[i][2] = 1; // point represents a hit
       
     #else      
-      laser_scan_data->points[i][0] = x_scl*msg->cloud.points[i].x;
-      laser_scan_data->points[i][1] = y_scl*msg->cloud.points[i].y;
-      laser_scan_data->points[i][2] = z_scl*msg->cloud.points[i].z;  
+      laser_scan_data[robot_id]->points[i][0] = x_scl*msg.cloud.points[i].x;
+      laser_scan_data[robot_id]->points[i][1] = y_scl*msg.cloud.points[i].y;
+      laser_scan_data[robot_id]->points[i][2] = z_scl*msg.cloud.points[i].z;  
     #endif
   }
 
   
   display_flag = 1;
   glutPostRedisplay(); 
+}
+
+void laser_scan_callback(const hokuyo_listener_cu::PointCloudWithOrigin::ConstPtr& msg)
+{
+  laser_scan_callback_helper(*msg, current_robot); 
+}
+
+void laser_scan_multi_callback(const intercom_cu::PointCloudWithOrigin_CU_ID::ConstPtr& msg)
+{
+  laser_scan_callback_helper(msg->data, msg->id.data); 
 }
 
 void map_changes_callback(const sensor_msgs::PointCloud::ConstPtr& msg)
@@ -1643,14 +1670,7 @@ void display()
      }
    
      // draw current laser scan data
-     if(laser_scan_data != NULL)
-     {
-       #ifdef SCANNER_RANGE
-         draw_point_list_grids_binary(laser_scan_data, LIGHTBLUE, RED, laser_hit_display_rad, -.95);
-       #else
-         draw_point_list_grids(laser_scan_data, RED, laser_hit_display_rad, -.95);
-       #endif
-     }
+     draw_laser_scan_data(laser_scan_data);
      
      // draw the global paths
      draw_global_paths(global_paths); // draws the global paths
@@ -2424,6 +2444,8 @@ void cleanup()
   goal_multi_sub.shutdown();
   
   laser_scan_sub.shutdown();
+  laser_scan_multi_sub.shutdown();
+  
   map_changes_sub.shutdown();
   
   system_state_sub.shutdown();
@@ -2452,7 +2474,8 @@ void cleanup()
   for(int i = 0; i < num_robots; i++)
     destroy_pose(goal_poses[i]);
   
-  destroy_point_list(laser_scan_data);
+  for(int i = 0; i < num_robots; i++)
+    destroy_point_list(laser_scan_data[i]);
   
   ROS_INFO("\nExit... \n");  
   
@@ -2512,6 +2535,10 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_robots; i++)
     global_paths[i] = NULL;
   
+  laser_scan_data.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    laser_scan_data[i] = NULL;
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   pose_multi_sub = nh.subscribe("/cu_multi/pose_cu", 1, pose_multi_callback);
@@ -2529,6 +2556,8 @@ int main(int argc, char *argv[])
   goal_multi_sub = nh.subscribe("/cu_multi/goal_cu", 1, goal_multi_callback);
   
   laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
+  laser_scan_multi_sub = nh.subscribe("/cu_multi/laser_scan_cu", 1, laser_scan_multi_callback);
+  
   map_changes_sub = nh.subscribe("/cu/map_changes_cu", 10, map_changes_callback);
   
   system_state_sub = nh.subscribe("/cu/system_state_cu", 10, system_state_callback);
