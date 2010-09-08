@@ -334,7 +334,7 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
       TiXmlElement* message_el = 0;
         
       printf(" broadcast: \n");
-      while((message_el = (TiXmlElement *)(broadcast_el->IterateChildren(message_el))))
+      while((message_el = (TiXmlElement *)(broadcast_el->IterateChildren("message",message_el))))
       {
         int message_type = -1;
         if(message_el->Attribute("type"))
@@ -377,9 +377,10 @@ bool GlobalVariables::read_IPS_from_file(std::string& config_file)       // read
       message_el = 0;
         
       printf(" receive: \n");
-      while((message_el = (TiXmlElement *)(receive_el->IterateChildren(message_el))))
+      while((message_el = (TiXmlElement *)(receive_el->IterateChildren("message",message_el))))
       {
         int message_type = 0;
+        
         if(message_el->Attribute("type"))
         {
           message_type = atoi(message_el->Attribute("type"));
@@ -596,7 +597,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
     else // message must be split into multiple packets
     {
       size_t adjusted_data_size = max_network_message_size - header_size;
-      printf("must split message into multiple packets \n");
+      //printf("must split message into multiple packets \n");
     
       // replace buffer with current message counter and total packets we need to send
       message_counter++;
@@ -642,7 +643,7 @@ void GlobalVariables::send_to_agent(void* buffer, size_t buffer_size, int ag) //
       if(MyOutSocksTCP[ag] < 0)  
         Globals.set_up_single_OutgoingTCP(ag);
       
-      printf("sending message %d of size %d \n", message_type, (int)buffer_size);
+      //printf("sending message %d of size %d \n", message_type, (int)buffer_size);
       
       n = write(MyOutSocksTCP[ag],(const void*)buffer_ptr,buffer_size);
       if(n < 0)
@@ -1051,8 +1052,8 @@ void *Listner_UDP(void * inG)
     int senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct  
     memset(&network_message_buffer,'\0',sizeof(network_message_buffer)); 
     int message_length = recvfrom(G->MyInSockUDP, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
+    //if(message_length < 0) 
+    //  printf("had problems getting a message \n");
     
     buffer_max = (size_t)network_message_buffer + (size_t)max_network_message_size;
     
@@ -1082,8 +1083,8 @@ void *Listner_UDP(void * inG)
         int senders_address_length_b = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
         memset(&network_message_buffer,'\0',sizeof(network_message_buffer)); 
         int message_length = recvfrom(G->MyInSockUDP, network_message_buffer, sizeof(network_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length_b);  // blocks untill a message is recieved
-        if(message_length < 0) 
-          printf("had problems getting a message \n");
+        //if(message_length < 0) 
+        //  printf("had problems getting a message \n");
     
         buffer_max = (size_t)network_message_buffer + (size_t)max_network_message_size;
         
@@ -1106,7 +1107,7 @@ void *Listner_UDP(void * inG)
         //MAYBE CHANGE THE FOLLOWING TO A TIMEOUT
         if(sent_message_counter_b > sent_message_counter + total_packets*1.5+1) // then we conclude we failed to get all of the message 
         {
-          printf("failed to receive all packets \n");
+          //printf("failed to receive all packets \n");
           message_type = -1;  
           break;
         }        
