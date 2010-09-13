@@ -1,3 +1,29 @@
+/*  
+ *  Copyrights:
+ *  Erik Komendera.  August 2010.
+ *
+ *  This file is part of tagmapper_cu.
+ *
+ *  tagmapper_cu is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  tagmapper_cu is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with client_server_cu. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ *  If you require a different license, contact Michael Otte at
+ *  erik.komendera@colorado.edu
+ *
+ *
+ *  This adds new Pseudolite tags to the Pseudolite XML map file.
+ */
 #include "ros/ros.h"
 #include <std_msgs/Int8.h>
 #include "stargazer_cu/Pose2DTagged.h"
@@ -7,8 +33,8 @@
 #include <iostream>
 #include <fstream>
 
-#define SAMPLES 50
-#define DROP_SAMPLES 10
+#define SAMPLES 50 // Takes SAMPLES samples
+#define DROP_SAMPLES 10 // And drops the first DROP_SAMPLES and averages the rest.
 #define PSEUDO_FILE_LINE_WIDTH 256
 #define PSEUDO_FILE_LINES 100
 
@@ -17,14 +43,14 @@ ros::Subscriber pose_sub; // Uses the pose to determine position of Pseudolite t
 ros::Subscriber marker_sub; // Use the relative position to tag to modify the XML file.
 ros::Subscriber speeds_sub; // Determines when the bot is stopped so that sampling can commence.
 
-const char * pseudo_file = "../../stargazer_cu/pseudolites.xml";
-char pseudo_text[PSEUDO_FILE_LINES][PSEUDO_FILE_LINE_WIDTH];
+const char * pseudo_file = "../../stargazer_cu/pseudolites.xml"; // If the relative paths change, change this.
+char pseudo_text[PSEUDO_FILE_LINES][PSEUDO_FILE_LINE_WIDTH]; // This acts as storage of the XML file.
 
-int poseSampleCount;
+int poseSampleCount; // Keeps track of how many samples have been stored.
 int markerSampleCount;
-int lastTagLine;
+int lastTagLine; // For use in placing the next tag line in the XML file.
 unsigned int tagIDs[PSEUDO_FILE_LINES];
-int tagCount;
+int tagCount; // Index to tagIDs
 unsigned int currentTag;
 bool isStopped;
 bool restart;
@@ -57,6 +83,7 @@ struct Marker
 Pose poseSamples[SAMPLES];
 Marker markerSamples[SAMPLES];
 
+// Returns true if this is an old tag, false if this is a new one.
 bool isTagInFile(unsigned int tag)
 {
   for (int i = 0; i < tagCount; i++) {
@@ -65,6 +92,7 @@ bool isTagInFile(unsigned int tag)
   return false;
 }
 
+// Restarts the sampling process if something occurs.
 void newTagInterrupt()
 {
   currentTag = 0;
@@ -72,8 +100,10 @@ void newTagInterrupt()
   markerSampleCount = 0;
 }
 
+// Sample a new position.
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
+  // Only sample a new position if the robot is not moving and there is room for more samples.
   if (isStopped && poseSampleCount < SAMPLES) {
     poseSamples[poseSampleCount].x = msg->pose.position.x;
     poseSamples[poseSampleCount].y = msg->pose.position.y;
@@ -109,8 +139,11 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   }
 }
 
+// Sample a new marker.
 void marker_callback(const stargazer_cu::Pose2DTagged::ConstPtr& msg)
 {
+  // Get marker data if we are continuing with a tag that's not in the file.  If the tag changes, we have to start all over again.
+  // Also, only get data if stopped.
   if (isStopped && markerSampleCount < SAMPLES) {
     if (markerSampleCount == 0) {
       if (isTagInFile(msg->tag)) return;
@@ -130,6 +163,7 @@ void marker_callback(const stargazer_cu::Pose2DTagged::ConstPtr& msg)
   }
 }
 
+// Determine if the robot is stopped.  When the robot stops, restart the sampling process.  If the robot is moving, don't sample at all.
 void speeds_callback(const irobot_create_rustic::Speeds::ConstPtr& msg)
 {
   //ROS_INFO("Forward = %f, Rotate = %f\n", msg->forward, msg->rotate);
@@ -145,6 +179,7 @@ void speeds_callback(const irobot_create_rustic::Speeds::ConstPtr& msg)
   }
 }
 
+// When we have modified the XML file, we need to tell Stargazer to restart.
 void publish_kill()
 {
   ROS_INFO("Now kill");
@@ -153,6 +188,7 @@ void publish_kill()
   kill_pub.publish(msg);
 }
 
+// When all the samples have been retrieved, compute the average and add to the file.
 void saveTagInXml()
 {
   float pth, px, py;
@@ -162,6 +198,7 @@ void saveTagInXml()
   memset(&avPose, 0, sizeof(Pose));
   memset(&avMarker, 0, sizeof(Marker));
 
+  // Only average the final SAMPLES-DROP_SAMPLES samples.  This is done to let data readings settle.
   for (int i = DROP_SAMPLES; i < SAMPLES; i++) {
     avPose.x += poseSamples[i].x;
     avPose.y += poseSamples[i].y;
@@ -180,6 +217,7 @@ void saveTagInXml()
   avMarker.y /= (SAMPLES-DROP_SAMPLES);
   avMarker.theta /= (SAMPLES-DROP_SAMPLES);
 
+  // -2PI < Angle < 2PI
   pth = -avPose.alpha - avMarker.theta;
   while ( pth < 0 ) pth += 2*M_PI;
   while ( pth >= 2*M_PI ) pth -= 2*M_PI;
@@ -188,6 +226,7 @@ void saveTagInXml()
   py = avPose.y - avMarker.y*cos(pth) + avMarker.x*sin(pth);
   ROS_INFO("TagMapper is at: X = %f, Y = %f, TH = %f, ID = %d", px, py, pth, avMarker.ID);
 
+  // Insert the new tag line into the character array, and write it to the XML file.
   std::ofstream psout;
   psout.open(pseudo_file, std::ofstream::out);
   for (int i = 0; i < lastTagLine; i++) {
@@ -198,6 +237,7 @@ void saveTagInXml()
   psout.close();
 }
 
+// Main loop.
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "new_tagmapper_cu");
@@ -217,6 +257,7 @@ int main(int argc, char **argv)
   tagCount = 0;
   currentTag = 0;
 
+  // Open the file, read it in, extract the tag IDs, and determine the place to insert the new tag.
   int ifline = 0;
   std::ifstream psin;
   psin.open(pseudo_file, std::ifstream::in);
@@ -241,6 +282,7 @@ int main(int argc, char **argv)
     }
   }
 
+  // Run the main loop.  If the new tag samples have all been retrieved and the robot is stopped, save the tag, kill Stargazer, and then shut down.
   int count = 0;
   while (ros::ok())
   {
