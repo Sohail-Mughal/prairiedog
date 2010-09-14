@@ -1,0 +1,70 @@
+/*
+\mainpage
+\htmlinclude manifest.html
+
+\b visualization_cu is a graphical interface that displays information about the CU prairiedog platform
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b visualization_cu
+
+<hr>
+
+\subsection visualization_cu
+
+visualization_cu is a graphical interface that displays information about the CU prairiedog platform. It is a light-weight command center, giving users the ability to set robot and goal pose, visualize autonomous behavior by displaying obstacles/robot/goal/paths, and manually control and/or stop the robot.
+
+\subsubsection Usage
+\verbatim
+$ visualization_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ visualization_cu
+\endverbatim
+
+\subsubsection parameters ROS parameters 
+
+Reads the following parameters from the parameter server
+
+- \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true].
+- \b "mapper_cu/global_map_x_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the x direction [default: 0].
+- \b "mapper_cu/global_map_y_offset": [double] (m) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) in the y direction [default: 0].
+- \b "mapper_cu/global_map_theta_offset": [double] (rad) the map (/map_cu) coordinate system is this far off of the world coordinate system (/world_cu) rotationally [default: 0].
+- \b "base_planner_cu/robot_radius": [double] (m) the radius of the robot [default: 0.2]. 
+
+\subsubsection topics ROS topics
+
+Publishes to:
+- \b "/cu/reset_goal_cu": [geometry_msgs::PoseStamped] a new robot goal in map coordinates (/map_cu in tf).
+- \b "/cu/user_pose_cu": [geometry_msgs::PoseStamped] a user defined pose, used to manually define the robots starting position with a GUI in map coordinates (/map_cu in tf).
+- \b "/cu/user_control_cu": [geometry_msgs::Pose2D] this is a simple control message for the robot base, x is forward speed and theta is turn in robot coordinates (/robot_cu in tf).
+- \b "/cu/user_state_cu": [std_msgs::Int32] a flag indicating what the user is doing via the visualization_cu node: 0 = passive, doing nothing, 1 = manual stop, 2 = manual control.
+
+Subscribes to:
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in map coordinates (/map_cu in tf).
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
+- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the map coordiante system (/map_cu in tf).
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates scaled to resolution) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
+- \b "/cu/system_state_cu": [std_msgs::Int32] a flag indicating what state irobot_create_cu is in: 0 = initial state (havn't recieved enough info to start moving), 1 = planning and moving normally, 2 = bumper hit, backing up, 3 = no path to goal exists, 4 = manual stop, 5 = manual control.
+- \b "/cu/system_update_cu": [std_msgs::Int32] a flag containing information from the base_planner_cu node: 1 = no path to goal exists.
+
+\subsubsection services ROS services
+
+Requires (i.e. waits for on boot):
+- \b "/cu/get_map_cu" so that hokuyo_listener_cu knows mapper_cu is up and running before attempting interaction with it.
+
+Requests:
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map in map coordinates scaled by resolution.
+
+\subsubsection tfinteraction tf interaction
+
+Requires:
+- \b transform between "/map_cu" and "/world_cu".
+
+*/

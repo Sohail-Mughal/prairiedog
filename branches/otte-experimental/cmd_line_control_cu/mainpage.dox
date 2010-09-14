@@ -1,0 +1,37 @@
+/*
+\mainpage
+\htmlinclude manifest.html
+
+\b cmd_line_control_cu provides minimalistic functionality for robot interaction via the command line
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b cmd_line_control_cu
+
+<hr>
+
+\subsection cmd_line_control_cu
+
+Allows simple control of the robot
+
+\subsubsection Usage
+\verbatim
+$ cmd_line_control_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ cmd_line_control_cu
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Publishes to:
+- \b "/cu/user_control_cu": [geometry_msgs::Pose2D] this is a simple control message for the robot base, x is forward speed and theta is turn in robot coordinates (/robot_cu in tf).
+- \b "/cu/user_state_cu": [std_msgs::Int32] a flag indicating what the user is doing: 0 = passive, doing nothing, 1 = manual stop, 2 = manual control.
+
+*/

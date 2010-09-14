@@ -1,0 +1,25 @@
+<package>
+  <description brief="tagmapper_cu">
+
+     tagmapper_cu
+
+  </description>
+  <author>common</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/tagmapper_cu</url>
+  <depend package="std_msgs"/>
+  <depend package="rospy"/>
+  <depend package="roscpp"/>
+  <depend package="stargazer_cu"/>
+  <depend package="localization_cu"/>
+  <depend package="geometry_msgs"/>
+  <depend package="irobot_create_rustic"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/msg/cpp"/>
+  </export>
+
+</package>
+
+

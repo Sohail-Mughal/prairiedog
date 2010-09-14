@@ -1,0 +1,4 @@
+This script creates UDEV rules in /etc/udev/rules.d. These rules tell the kernel to look for certain attributes in USB devices that are connected to your computer, spefically the Manufacturer and Product strings, and assign a name other than ttyUSBx. If you are connecting devices with an FTDI chipset, you can change these two fields using the software MProg (on Windows).
+
+This has been done for the iRobot Create and the Hagisonic Stargazer that can be accessed via /dev/create and /dev/stargazer, respectively.
+

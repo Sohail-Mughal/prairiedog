@@ -1,0 +1,19 @@
+<package>
+  <description>A graphical interface for the CU nodes.</description>
+  <author>Michael Otte</author>
+  <license>GNU GPL V3</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/Visualization</url>
+  <depend package="roscpp"/>
+  <depend package="nav_msgs"/>
+  <depend package="std_msgs"/>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="tf"/>
+  <depend package="message_filters"/>
+  <depend package="move_base_msgs"/>
+  <depend package="hokuyo_listener_cu"/>
+  <depend package="intercom_cu"/>
+  
+  <cpp cflags="-I${prefix}/src/" lflags="-lglut"/>
+</package>

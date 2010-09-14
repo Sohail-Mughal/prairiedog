@@ -1,0 +1,5 @@
+<launch>
+  <param name="irobot_create_driver/serial_port" type="str" value="/dev/tty.usbserial-FTE2VF80"/>
+  <param name="irobot_create_driver/freq" type="int" value="10"/>
+  <node pkg="irobot_create" type="driver" output="screen"/>
+</launch>

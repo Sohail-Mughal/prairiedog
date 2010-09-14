@@ -1,0 +1,61 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b base_planner_cu is a 2D path planning system. It is based on the Field D* algorithm but uses gradient interpolation when possible to extract shorter paths. It is a re-planner---that is, it is specially designed to update an existing path with a minimum of effort, given new map data. In typical rover applications this translates into 1-2 orders of magnitude speed-up vs. algorithms such as A* that must plan from scratch each time the map changes. It is based on the IROS 09 paper "Extracting Paths from Fields Built With Linear Interpolation" by Michael Otte and Greg Grudic.
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b base_planner_cu
+
+<hr>
+
+\subsection base_planner_cu
+
+base_planner_cu requests the initial map from a service and then updates the map using messages sent over a topic. It can also request an entire updated map via the service. Robot pose is also requested via a service at critical times. goal and robot pose updates are available from topics. base_planner_cu publishes a path from robot to goal in map coordinates (/map_cu). 
+
+\subsubsection Usage
+\verbatim
+$ base_planner_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ base_planner_cu
+\endverbatim
+
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
+- \b "base_planner_cu/obstacle_cost": [double] the cost of an obstacle (of probability 1) note: this should be greater than the max path length [default: 10000]. 
+- \b "base_planner_cu/robot_radius": [double] (m) the radius of the robot [default: 0.2]. 
+- \b "base_planner_cu/safety_distance": [double] (m) extra clearance required between robot and obstacles, (this) + robot_radius = dilation radius [default: 0.1]. 
+- \b "base_planner_cu/better_path_ratio": [double] if ((this) <= (new path length)/(old path length) <= 1/(this)) then use the old path (helps keep paths stable) [default: .95]. 
+- \b "base_planner_cu/replan_jump": [double] (map grids) if the robot jumps this much or more since the last re-plan, then just rebuild search tree from scratch, instead of adjusting search tree. [default: 25]. 
+- \b "base_planner_cu/using_extra_safety_distance": [bool] when true, use a linear filter to increase cost within extra_safety_distance of obstacles [default: true]. 
+- \b "base_planner_cu/extra_safety_distance": [double] (m) if using_extra_safety_distance = true, then if cost at grid G_1 is C_1 (after map dilation), and another grid G_2 exists within extra_safety_distance of G_1, then cost C_2 at G_2 is increased to C_1*|G_1 - G_2|/extra_safety_distance. [default: 0.2]. 
+
+\subsubsection topics ROS topics
+
+Publishes to:
+- \b "/cu/global_path_cu": [nav_msgs::Path] This is a global path between robot and goal in map coordinates (/map_cu in tf).
+
+Subscribes to:
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+- \b "/cu/goal_cu": [geometry_msgs::PoseStamped] pose of the goal in map coordinates (/map_cu in tf).
+- \b "/cu/map_changes_cu": [sensor_msgs::PointCloud] where each point in the cloud is a triple (x,y,z). x and y are used to denote which map grid is changed (in map coordinates scaled to resolution) and z is the new cost value of that grid. Note: map updates must be positive and non-zero.
+
+\subsubsection services ROS services
+
+Requires (i.e. waits for on boot):
+- \b "/cu/get_map_cu" so that hokuyo_listener_cu knows mapper_cu is up and running before attempting interaction with it.
+
+Requests:
+- \b "/cu/get_map_cu": [nav_msgs::GetMap::Response] provides a map in map coordinates scaled by resolution.
+- \b "/cu/get_pose_cu": [localization_cu::GetPose::Response] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+
+*/

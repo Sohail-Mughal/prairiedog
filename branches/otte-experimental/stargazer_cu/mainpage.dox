@@ -1,0 +1,41 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b stargazer_cu is a node for interacting with the Stargazer indoor positioning system. It has the ability to read an XML file containing data about where psudolites are placed relative to a global coordinate system. It reads the file using the tinyxml package.
+
+
+
+\section codeapi Code API
+
+see http://correll.cs.colorado.edu/pmwiki/index.php/Main/PositioningSystemBase for information aboutcreating the psudolite XML file.
+
+\section rosapi ROS API
+
+- \b stargazer_cu
+
+<hr>
+
+\subsection stargazer_cu
+
+stargazer_cu reads in an xml file containing psudolite positions and orientations, then interacts with the stargazer sensor to obtain global pose data. It publishes the pose data for other nodes to use.
+
+\subsubsection Usage
+\verbatim
+$ stargazer_cu [-n] ros_service [-f] psudolite_file.xml [-c] init_file.xml [-p] serial_port
+\endverbatim
+
+\par Example
+
+\verbatim
+$ stargazer_cu -f ../pseudolites.xml
+\endverbatim
+
+
+\subsubsection topics ROS topics
+
+Publishes to:
+- \b "/cu/stargazer_pose_cu": [geometry_msgs::Pose2D] pose from (indoor) global positioning system in world coordinates (/world_cu in tf).
+
+
+*/

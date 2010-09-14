@@ -1,0 +1,37 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b irobot_create_rustic is a modified version of [[http://code.google.com/p/brown-ros-pkg/|Brown's iRobot Create package]]. We initially had users obtain irobot_create by installing version 104 of the Brown ROS package, but depreciated functionality has made it incompatible with ROS V1.0, and Brown has depreciated their old irobot_create in-favor of a newer and significantly different node. Therefore, we have modified version 104 of Brown's irobot_create to make it compatible with ROS V1.0, and explicitly included the modified version of irobot_create as irobot_create_rustic in prairiedog.
+
+
+\section rosapi ROS API
+
+
+List of nodes:
+- \b irobot_create_rustic
+
+
+<hr>
+
+\subsection irobot_create_rustic irobot_create_rustic
+
+This node talks to the irobot create.
+
+\subsubsection Usage
+\verbatim
+$ irobot_create_rustic
+\endverbatim
+
+\par Example
+
+\verbatim
+$ node_type1
+\endverbatim
+
+
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
+- \b "serial_port" : \b [string]the port to which the create is attached, default: /dev/create

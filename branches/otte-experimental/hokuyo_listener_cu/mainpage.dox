@@ -1,0 +1,60 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b hokuyo_listener_cu a node that listens to the hokuyo laser scanner node provided with ros and also the localization_cu system. It then cleans and transforms the raw laser scan data before sending it out for other nodes to use, along with the origin of the laser scanner.
+
+\section rosapi ROS API
+
+- \b hokuyo_listener_cu
+
+<hr>
+
+\subsection hokuyo_listener_cu
+
+hokuyo_listener_cu listens to the hokuyo laser scanner node provided with ros and also the localization_cu system. It then cleans and transforms the raw laser scan data before sending it out for other nodes to use, along with the origin of the laser scanner.
+
+\subsubsection Usage
+\verbatim
+$ hokuyo_listener_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ hokuyo_listener_cu
+\endverbatim
+
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
+- \b "hokuyo_listener_cu/laser_scanner_x": [double] (m) x displacement between the scanner coordiante system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: 0.15].
+- \b "hokuyo_listener_cu/laser_scanner_y": [double] (m) y displacement between the scanner coordinate system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: 0.0].
+- \b "hokuyo_listener_cu/laser_scanner_theta": [double] (rad) radial displacement between the scanner coordinate system and the world coordinate system (/scanner_cu and /world_cu, respectively, in tf) [default: PI/6].
+- \b "prairiedog/using_tf": [bool] when true, the tf ROS package is used to facilitate coordinate transformations [default: true]. 
+
+\subsubsection topics ROS topics
+
+Publishes to:
+- \b "/cu/laser_scan_cu": [hokuyo_listener_cu::PointCloudWithOrigin] this is a list of laser scan hits, along with the pose of the laser scanner when it captured them. Coordinates are in the map coordiante system (/map_cu in tf).
+
+Subscribes to:
+- \b "scan": [sensor_msgs::LaserScan] this is a laser scan from the hokuyo laser scanner node it contains coordinates in local angle-distance format.
+- \b "/cu/pose_cu": [geometry_msgs::PoseStamped] the robot's best estimate of where it is, given all pose data, in map coordinates (/map_cu in tf).
+
+\subsubsection services ROS services
+
+Requires (i.e. waits for on boot):
+- \b "/cu/get_map_cu" so that hokuyo_listener_cu knows mapper_cu is up and running before attempting interaction with it.
+- \b "/cu/get_pose_cu" so that listener knows localization_cu is up and running before using data provided by it.
+
+\subsubsection tfinteraction tf interaction
+
+Broadcasts:
+- \b transform between "/robot_cu" and "/scanner_cu".
+
+Requires:
+- \b transform between "/scanner_cu" and "/map_cu".
+
+*/

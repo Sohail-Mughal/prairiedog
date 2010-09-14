@@ -1,0 +1,12 @@
+<launch>
+
+  <group ns="visualization_cu">
+    <param name="no_user_control_pub" type="bool" value="true" />
+  </group>
+  <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+  <node name="cmd_line_control_cu" pkg="cmd_line_control_cu" type="cmd_line_control_cu" output="screen" />
+
+  <node name="image_view" pkg="image_view" type="image_view" output="screen" args="image:=image_raw compressed" />
+
+</launch>
