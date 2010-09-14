@@ -23,7 +23,7 @@
  *
  *
  *  This listens to data from the client computer, then broadcasts on the approperiate topics 
- *  server computer.
+ *  server computer. 
  */
 
 #include <ros/ros.h>
