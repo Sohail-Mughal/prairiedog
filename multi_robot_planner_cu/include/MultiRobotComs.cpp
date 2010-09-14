@@ -21,8 +21,8 @@ GlobalVariables::GlobalVariables(int num_of_agents)
     min_port ++;
   }
 
-  MasterInPort = 57001;
-  MasterOutPort = 57002;
+  MasterInPort = 56001;
+  MasterOutPort = 56002;
 
   have_info.resize(number_of_agents, 0);   // gets set to 1 when we get an agent's info
   agent_ready.resize(number_of_agents, 0); // gets set to 1 when we get an agent's info

@@ -100,7 +100,7 @@ bool using_tf = true;              // when set to true, use the tf package
 int max_message_size = 500000;
 size_t max_network_message_size = 15000; // messages larger than this are split into multiple messages to be sent
 
-int NUM_MESSAGE_TYPES = 14;
+int NUM_MESSAGE_TYPES = 15;
   
 // global ROS subscriber handles
 ros::Subscriber selected_robot_sub;
@@ -118,6 +118,8 @@ ros::Subscriber map_changes_sub;
 ros::Subscriber system_state_sub;
 ros::Subscriber system_update_sub;
 
+ros::Subscriber target_pose_sub;
+
 // global ROS publisher handles
 ros::Publisher pose_pub;
 ros::Publisher global_path_pub;
@@ -131,6 +133,8 @@ ros::Publisher new_goal_pub;
 ros::Publisher new_pose_pub;
 ros::Publisher user_control_pub;
 ros::Publisher user_state_pub;
+
+ros::Publisher target_pose_pub;
 
 // global ROS provide service server handles
 ros::ServiceServer get_map_srv;
@@ -1025,7 +1029,29 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
           
       }
     }
-  }   
+  }
+  else if(message_type == 14 && G->listen_list[14]) // it is a target pose
+  {
+    if(G->listen_mode_list[14] == 0)
+    {
+      geometry_msgs::Pose2D msg;
+      buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
+      target_pose_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[14] == 1)
+    {
+      intercom_cu::Pose2D_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
+      target_pose_pub.publish(msg);   
+    }
+  }
 }  
     
     
@@ -1433,6 +1459,19 @@ void transform_sender(const tf::StampedTransform& t)
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 13);                           // send 
 }
 
+void target_pose_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
+{    
+  uint this_msg_size = 500; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 14,0,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_Pose2D(buffer_ptr, *msg, buffer_max);                           // add posestamped
+
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 14);                           // send 
+}
+
 int main(int argc, char * argv[]) 
 {    
   // init ROS
@@ -1498,7 +1537,9 @@ int main(int argc, char * argv[])
     user_state_sub = nh.subscribe("/cu/user_state_cu", 1, user_state_callback); 
   if(Globals.send_list[10])
     laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
-
+  if(Globals.send_list[14])
+    target_pose_sub = nh.subscribe("/cu/target_pose_cu", 1, laser_scan_callback);
+  
   // set up ROS topic publishers
   if(Globals.listen_list[0])
   { 
@@ -1576,6 +1617,13 @@ int main(int argc, char * argv[])
       laser_scan_pub = nh.advertise<hokuyo_listener_cu::PointCloudWithOrigin>("/cu/laser_scan_cu", 1);
     else if(Globals.listen_mode_list[10] == 1) 
       laser_scan_pub = nh.advertise<intercom_cu::PointCloudWithOrigin_CU_ID>("/cu_multi/laser_scan_cu", 1);
+  }
+  if(Globals.listen_list[14])
+  {
+    if(Globals.listen_mode_list[14] == 0) 
+      user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
+    else if(Globals.listen_mode_list[14] == 1) 
+      user_control_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/target_pose_cu", 1);
   }
   
   // set up service servers
@@ -1675,6 +1723,8 @@ int main(int argc, char * argv[])
   system_state_sub.shutdown();
   system_update_sub.shutdown();
   
+  target_pose_sub.shutdown();
+  
   // destroy publishers
   pose_pub.shutdown();
   global_path_pub.shutdown();
@@ -1688,6 +1738,8 @@ int main(int argc, char * argv[])
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
   user_state_pub.shutdown();
+  
+  target_pose_pub.shutdown();
   
   // destroy service providers
   get_map_srv.shutdown();

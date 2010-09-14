@@ -24,8 +24,8 @@
     <param name="odometer_pose_x_init" type="double" value="0" />
     <param name="odometer_pose_y_init" type="double" value="0" />
     <param name="odometer_pose_theta_init" type="double" value="0" />
-    <param name="posterior_pose_x_init" type="double" value="9" />
-    <param name="posterior_pose_y_init" type="double" value="9" />
+    <param name="posterior_pose_x_init" type="double" value="0" />
+    <param name="posterior_pose_y_init" type="double" value="0" />
     <param name="posterior_pose_theta_init" type="double" value="0" />
   </group>
   <node name="localization_cu" pkg="localization_cu" type="localization_cu" respawn="true" output="screen" />
