@@ -161,8 +161,13 @@ void reset_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 void publish_goal()
 { 
   if(goal == NULL)
+  {
+    printf("goal_server: goal is null \n");
     return;
+  }
   
+  //printf("goal_server: publishing goal \n");
+      
   geometry_msgs::PoseStamped msg;
   msg.header.frame_id = "/map_cu";
   msg.pose.position.x = goal->x;
@@ -178,7 +183,7 @@ void publish_goal()
   //print_pose(posterior_pose);
 }
 
-// service that provides pose
+// service that provides goal
 bool get_goal_callback(localization_cu::GetPose::Request &req, localization_cu::GetPose::Response &resp)
 {  
   if(goal == NULL)
@@ -194,7 +199,7 @@ bool get_goal_callback(localization_cu::GetPose::Request &req, localization_cu::
   resp.pose.pose.orientation.y = goal->qy;
   resp.pose.pose.orientation.z = goal->qz; 
   
-  //printf(" published goal via service %d\n",num_its++);
+  //printf(" published goal via service\n");
   //print_pose(goal);
   
   return true;
