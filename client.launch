@@ -1,0 +1,13 @@
+<launch>
+  <group ns="prairiedog">
+    <param name="using_tf" type="bool" value="true" />
+  </group>
+
+    <group ns="intercom_cu">
+    <param name="my_id" type="int" value="1" />
+    <param name="num_agents" type="int" value="2" />
+    <param name="config_file" type="string" value="../config.xml" />
+  </group>
+  <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
+
+</launch>

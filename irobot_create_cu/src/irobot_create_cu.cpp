@@ -575,11 +575,16 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
         this_path_point[0] = p[i-1][0] + (p[i][0] - p[i-1][0])*percentage_through;  // x
         this_path_point[1] = p[i-1][1] + (p[i][1] - p[i-1][1])*percentage_through;  // y
         
-        this_path_point[2] = p[i-1][2] + (p[i][2] - p[i-1][2])*percentage_through;  // alpha
-        while(this_path_point[2] < -PI)
-          this_path_point[2] += 2*PI;
-        while(this_path_point[2] > PI)
-          this_path_point[2] -= 2*PI;
+        if(this_path_point[0] != t[t.size()-1][0] || this_path_point[1] != t[t.size()-1][1]) // location has changed
+          this_path_point[2] = p[i-1][2];  // assuming that alpha of point i points the correct direction along segment {i,i+1}
+        else // location has not changed, so need to worry about alpha     
+        {
+          this_path_point[2] = p[i-1][2] + (p[i][2] - p[i-1][2])*percentage_through;  // alpha
+          while(this_path_point[2] < -PI)
+            this_path_point[2] += 2*PI;
+          while(this_path_point[2] > PI)
+            this_path_point[2] -= 2*PI;
+        }
         
         this_path_point[3] = this_time;  // time
         
@@ -991,6 +996,9 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   }   
   else
     printf("whaaaaa???? \n");
+  
+  
+  
   // calculate which point is the closest to the robot, starting with previous_current_place_index
       
   // start with 2D location
@@ -1128,16 +1136,22 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       printf("%f secs behind schedule \n", time_behind-time_look_ahead);
 
     TARGET_SPEED = DEFAULT_SPEED + speed_increase;
-    TARGET_TURN = DEFAULT_TURN + turn_increase;
-    
-    
+    TARGET_TURN = DEFAULT_TURN + turn_increase; 
   }
   
-   printf("%d %d %f %f \n", current_time_index, current_place_index, T[current_time_index][3], T[current_place_index][3]);
   
-  // if there is a location difference between current_place_index and carrot_index we need to turn at the new place we want to go
+  if(carrot_index == (int)T.size()-1) // the carrot is at the goal
+  {
+    TARGET_SPEED = 0; 
+    printf("near to goal \n");
+  } 
+  
+  printf("%d %d %f %f \n", current_time_index, current_place_index, T[current_time_index][3], T[current_place_index][3]);
+  
   if(carrot_index > current_place_index && (T[carrot_index][0] != T[current_place_index][0] || T[carrot_index][1] != T[current_place_index][1]))
   {
+     // if there is a location difference between current_place_index and carrot_index we need to turn at the new place we want to go
+      
     move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
 printf("case 1 \n");
   }
@@ -1299,7 +1313,7 @@ int main(int argc, char * argv[])
       printf("didn't count on this case \n");
     }
     
-    
+    // printf("user state: %d \n", user_state);
     
     if(system_state == 0) // initial state (havn't recieved enough info to start moving)    
     {

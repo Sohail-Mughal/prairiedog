@@ -1,0 +1,48 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b multi_robot_planner_cu is an experimental multi robot planning system
+
+
+\section rosapi ROS API
+
+List of nodes:
+- \b multi_robot_planner_cu
+
+<hr>
+
+\subsection multi_robot_planner_cu
+
+multi_robot_planner_cu description goes here. 
+
+\subsubsection Usage
+\verbatim
+$ multi_robot_planner_cu
+\endverbatim
+
+\par Example
+
+\verbatim
+$ multi_robot_planner_cu
+\endverbatim
+
+\subsubsection parameters ROS parameters
+
+Reads the following parameters from the parameter server
+
+
+
+\subsubsection topics ROS topics
+
+Publishes to:
+
+
+Subscribes to:
+
+
+\subsubsection services ROS services
+
+
+
+*/
