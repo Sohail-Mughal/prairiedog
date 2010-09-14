@@ -80,7 +80,7 @@ float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
 bool using_tf = true;              // when set to true, use the tf package
 
 bool path_has_orientation = false; //true;  // if path contains orientation, set this to true
-bool multi_robot_mode = false; //true;      // set to true if doing multi_robot mode
+bool multi_robot_mode = true;      // set to true if doing multi_robot mode
 ros::Time move_start_time;         // holds the time that we started moving, used for multi_robot_mode
 
 
@@ -91,6 +91,7 @@ IRobotCreateController * controller = (IRobotCreateController*) NULL;
 ros::Publisher odometer_pose_pub;
 ros::Publisher bumper_pose_pub;
 ros::Publisher system_state_pub;
+ros::Publisher target_pose_pub;
 
 // subscriber handles
 ros::Subscriber user_control_sub;
@@ -142,6 +143,7 @@ vector<POSE> global_path;
 
 vector<vector<float> > first_path; // used in multi robot mode
 vector<vector<float> > trajectory; // used in multi robot mode
+int t_target_ind = -1;             // used in multi robot mode
 
 float TARGET_SPEED = DEFAULT_SPEED;
 float TARGET_TURN = DEFAULT_TURN;
@@ -539,6 +541,16 @@ void publish_system_state(int state)
   
   msg.data = state;
   system_state_pub.publish(msg); 
+}
+
+void publish_target_pose(float x, float y)
+{  
+  geometry_msgs::Pose2D msg;
+  msg.x = x;
+  msg.y = y;
+  msg.theta = 0;
+  
+  target_pose_pub.publish(msg);       
 }
 
 /* ---------------------- navigation functions --------------------------*/
@@ -1023,7 +1035,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   // now take orientation into account if there are multiple trajectory points for this location
   float min_orientation_diff = T[current_place_index][2] - robot_pose->alpha;
   float this_orientation_diff;
-  while(min_orientation_diff < -PI)
+  while(min_orientation_diff < -PI) 
     min_orientation_diff += 2*PI;
     
   while(min_orientation_diff > PI)
@@ -1170,6 +1182,9 @@ printf("case 2 \n");
     turn_toward_heading(T[carrot_index],  PI/24);
   }
   
+  // set the target location so we can broadcast it for visualization
+  t_target_ind = current_time_index;
+  
   if(current_place_index == length)
     return 1;
   
@@ -1237,7 +1252,9 @@ int main(int argc, char * argv[])
   else
     bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
   system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 10);
-     
+  if(multi_robot_mode)   
+    target_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
+          
   // set up subscribers
   user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -1388,6 +1405,10 @@ int main(int argc, char * argv[])
     // broadcast system state
     publish_system_state(system_state);
        
+    // broadcast target pose
+    if(multi_robot_mode && t_target_ind != -1)
+      publish_target_pose(trajectory[t_target_ind][0],trajectory[t_target_ind][1]);      
+    
     ros::spinOnce();
     loop_rate.sleep();
   } // end main control loop
@@ -1397,6 +1418,7 @@ int main(int argc, char * argv[])
   bumper_pose_pub.shutdown();
   system_state_pub.shutdown();
   user_control_sub.shutdown();  
+  target_pose_pub.shutdown();
   pose_sub.shutdown();
   goal_sub.shutdown();
   global_path_sub.shutdown();
