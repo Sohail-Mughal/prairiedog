@@ -1048,7 +1048,7 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       buffer_ptr = extract_from_buffer_Pose2D(buffer_ptr, msg.data, buffer_max); 
       if(buffer_ptr == 0)
          return;
-      
+
       target_pose_pub.publish(msg);   
     }
   }
@@ -1621,9 +1621,9 @@ int main(int argc, char * argv[])
   if(Globals.listen_list[14])
   {
     if(Globals.listen_mode_list[14] == 0) 
-      user_control_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
+      target_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
     else if(Globals.listen_mode_list[14] == 1) 
-      user_control_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/target_pose_cu", 1);
+      target_pose_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/target_pose_cu", 1);
   }
   
   // set up service servers

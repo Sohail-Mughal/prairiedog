@@ -36,3 +36,5 @@ void remove_unnecessary_rotation(vector<vector<float> >& MultiSolution); // remo
 void calculate_rotation(vector<vector<float> >& MultiSolution); // calculates the rotation at each point based on the position of the next point
 
 void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution, float mps_target, float rps_target); // calculates the time parametery of the MultiSolution, where mps_target is the target meters per second of the fastest moving robot and rps is the target radians per second of fastest moving robot, note that these should be slightly slower than the max possible values to allow a behind robot to catch up, assumes 2D workspace and orientation for each robot
+
+void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& start_config);  // makes sure start angles are correct

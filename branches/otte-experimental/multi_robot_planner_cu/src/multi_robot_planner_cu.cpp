@@ -655,6 +655,8 @@ int main(int argc, char** argv)
   float resolution = .01;
   float angular_resolution = .3;
   float planning_border_width = 1;
+  float target_mps = .2 ; // target speed m/s
+  float target_rps = PI/8; // target turn rad/s
   
   if(argc > 8) // then there is an agent number associated with this (and we are running in multi agent mode), and a min time for planning, and may want display mode, and experiment name, and 1/(message rate), and we have a base ip
   {
@@ -736,6 +738,10 @@ int main(int argc, char** argv)
     angular_resolution = (float)double_input;                                        // angular resolution of rrt 
   if(ros::param::get("multi_robot_planner_cu/planning_border_width", double_input))
     planning_border_width = (float)double_input;                                     // this much more space provided around robots for planning
+  if(ros::param::get("multi_robot_planner_cu/target_speed", double_input))
+    target_mps = (float)double_input;                                                // target speed m/s
+  if(ros::param::get("multi_robot_planner_cu/target_turn", double_input))
+    target_rps = (float)double_input;                                                // target turn speed rad/s
   
   printf("I am agent #%d of %d, and can plan for %f seconds\nmessages sent with probability %f\nmessage_wait_time: %f, sync_message_wait_time: %f\n", agent_number, total_agents, min_clock_to_plan, prob_success, message_wait_time, sync_message_wait_time);
   
@@ -1102,10 +1108,18 @@ int main(int argc, char** argv)
     
     calculate_rotation(MultAgSln.BestSolution);
     
+    verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
+    
     extract_and_translate_solution(ThisAgentsPath, MultAgSln.BestSolution, Scene.translation, agent_number, world_dims);
     
-    calculate_times(Parametric_Times, MultAgSln.BestSolution, 0.2, PI/2);
+    calculate_times(Parametric_Times, MultAgSln.BestSolution, target_mps, target_rps);
 
+    for(int i = 0; i < Parametric_Times.size(); i++)
+    {
+      printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
+    }
+    getchar();
+    
     publish_global_path(ThisAgentsPath, Parametric_Times); 
 
     printf("moving\n");

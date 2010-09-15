@@ -1097,10 +1097,24 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   {
     carrot_index = current_time_index;  
       
-    // stop and wait, maybe change this to just a slow down if faster speeds are used
-    setSpeed(0); 
-    setTurn(0); 
+    // calcuklate how far we are from carrot
+    float d_x = T[carrot_index][0] - robot_pose->x;
+    float d_y = T[carrot_index][1] - robot_pose->y;
+    float d_dist = sqrt(d_x*d_x + d_y*d_y); 
     
+    if(d_dist > .2)
+    {
+      // stop and wait, maybe change this to just a slow down if faster speeds are used
+      setSpeed(0); 
+      setTurn(0); 
+    }
+    else
+    {
+      // stop but keep turning toward the orientation we want, maybe change this to just a slow down if faster speeds are used
+      setSpeed(0); 
+      TARGET_TURN = DEFAULT_TURN;  
+    }
+        
     float time_ahead = T[current_place_index][3] - T[current_time_index][3];
     
     printf("%f secs ahead of schedule \n", time_ahead-time_look_ahead);
