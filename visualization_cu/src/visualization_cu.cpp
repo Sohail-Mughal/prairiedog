@@ -150,6 +150,7 @@ GRID_LIST* obstacles_local = NULL;
 
 vector< ROBOT*> robots;
 vector<POSE*> goal_poses;
+vector<POSE*> target_poses;
 vector<POINT_LIST*> global_paths;
 vector<POINT_LIST*> laser_scan_data;
 
@@ -183,6 +184,9 @@ ros::Subscriber system_state_multi_sub;
 
 ros::Subscriber system_update_sub;
 ros::Subscriber system_update_multi_sub;
+
+ros::Subscriber target_sub;
+ros::Subscriber target_multi_sub;
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
@@ -613,7 +617,29 @@ void draw_pose(POSE* pose, float* clr, float z_height)
     
     glPopMatrix(); 
   }
+}
+
+// draws the target at z_height with color clr
+void draw_target(POSE* pose, float* clr, float z_height)
+{
+  // now draw pose circle and directional arrow 
+  if((pose != NULL) & (costmap!= NULL))
+  { 
+    glPushMatrix(); 
+    glTranslatef(-1, -1, z_height);
   
+    if(costmap != NULL)
+    {
+      float map_rad = 2/(float)max(costmap->height, costmap->width); 
+      glScaled(map_rad,map_rad,1);
+    }
+    
+    float scaled_rad = robot_display_radius/costmap->resolution;
+    float pos[] = {pose->x, pose->y, 0};
+    draw_circle(pos, scaled_rad/3, clr);
+    
+    glPopMatrix(); 
+  }
 }
 
 // draws crosshairs centered at pose, that are c_rad large, thick bold, with segments length long, and spaced half_gap*2 apart, where all of these are in terms of robot radius
@@ -686,6 +712,16 @@ void draw_poses(vector<POSE*>& poses, float* clr, float z_height)
     
     if(i == current_robot)
       draw_crosshairs(poses[i], 1.5, .3, 1, .5, GREEN, z_height);
+  } 
+}
+
+// draws all poses at z_height with color clr
+void draw_targets(vector<POSE*>& poses, float* clr, float z_height)
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(poses[i] != NULL)
+      draw_target(poses[i], clr, z_height);
   } 
 }
 
@@ -1589,6 +1625,31 @@ void system_update_multi_callback(const intercom_cu::Int32_CU_ID::ConstPtr& msg)
   system_update_callback_helper(msg->data, msg->id.data);
 }
 
+
+void target_callback_helper(const geometry_msgs::Pose2D msg, int robot_id)
+{
+  POSE* target_pose = target_poses[robot_id];  
+  
+  target_pose->x = msg.x/costmap->resolution;
+  target_pose->y = msg.y/costmap->resolution;
+  
+  target_pose->cos_alpha = cos(msg.theta);
+  target_pose->sin_alpha = sin(msg.theta);
+  
+  display_flag = 1;
+  glutPostRedisplay(); 
+}
+
+void target_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
+{
+  target_callback_helper(*msg, current_robot);
+}
+
+void target_multi_callback(const intercom_cu::Pose2D_CU_ID::ConstPtr& msg)
+{
+  target_callback_helper(msg->data, msg->id.data);
+}  
+
 /*----------------------- ROS Publisher Functions -----------------------*/
 void publish_user_control(int x, int theta)
 {
@@ -1683,10 +1744,13 @@ void display()
     // }
    
 
+     // draw the goals
      draw_poses(goal_poses, GREEN, .9775); 
      
-     // draw the robot
-
+     // draw the targets
+     draw_targets(target_poses, RED, .9778); 
+     
+     // draw the robots
      draw_robots(robots, .98);
 
    
@@ -2454,6 +2518,9 @@ void cleanup()
   system_update_sub.shutdown();
   system_update_multi_sub.shutdown();
   
+  target_sub.shutdown();
+  target_multi_sub.shutdown();
+  
   goal_pub.shutdown();
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
@@ -2473,6 +2540,9 @@ void cleanup()
   
   for(int i = 0; i < num_robots; i++)
     destroy_pose(goal_poses[i]);
+  
+  for(int i = 0; i < num_robots; i++)
+    destroy_pose(target_poses[i]);
   
   for(int i = 0; i < num_robots; i++)
     destroy_point_list(laser_scan_data[i]);
@@ -2535,6 +2605,10 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_robots; i++)
     global_paths[i] = NULL;
   
+  target_poses.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    target_poses[i] = make_pose(0, 0, 0);
+  
   laser_scan_data.resize(num_robots, NULL);
   for(int i = 0; i < num_robots; i++)
     laser_scan_data[i] = NULL;
@@ -2565,6 +2639,9 @@ int main(int argc, char *argv[])
   
   system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
   system_update_multi_sub = nh.subscribe("/cu_multi/system_update_cu", 10, system_update_multi_callback);
+  
+  target_sub = nh.subscribe("/cu/target_pose_cu", 1, target_callback);
+  target_multi_sub = nh.subscribe("/cu_multi/target_pose_cu", 1, target_multi_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);

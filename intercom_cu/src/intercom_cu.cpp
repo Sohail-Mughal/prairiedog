@@ -1538,7 +1538,7 @@ int main(int argc, char * argv[])
   if(Globals.send_list[10])
     laser_scan_sub = nh.subscribe("/cu/laser_scan_cu", 1, laser_scan_callback);
   if(Globals.send_list[14])
-    target_pose_sub = nh.subscribe("/cu/target_pose_cu", 1, laser_scan_callback);
+    target_pose_sub = nh.subscribe("/cu/target_pose_cu", 1, target_pose_callback);
   
   // set up ROS topic publishers
   if(Globals.listen_list[0])
