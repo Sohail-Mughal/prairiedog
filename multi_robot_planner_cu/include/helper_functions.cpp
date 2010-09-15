@@ -287,7 +287,7 @@ void calculate_rotation(vector<vector<float> >& MultiSolution) // calculates the
   
   float theta;
   
-  for(int j =  (int)MultiSolution.size()-2; j >= 0; j--)
+  for(int j =  (int)MultiSolution.size()-2; j > 0; j--) //note: leave start pose alone by j>0
   {
     for(int i = 0; i < (int)MultiSolution[0].size(); i += 3)
     { 
@@ -351,7 +351,16 @@ void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution
         this_max = this_val;  
     }
     Times[i] = Times[i-1] + this_max;
-    //printf(", %f", Times[i]);
+    //printf("%f \n", Times[i]);
   }
   //printf(".\n");
+}
+
+void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& start_config)  // makes sure start angles are correct
+{
+  for(int i = 0; i < (int)MultiSolution[0].size(); i += 3)
+  {  
+    printf("robot %d solution start: %f, %f, %f \n", i/3, MultiSolution[0][i], MultiSolution[0][i+1], MultiSolution[0][i+2]); 
+    printf("robot %d actual start:   %f, %f, %f \n\n", i/3, start_config[i], start_config[i+1], start_config[i+2]);
+  }
 }
