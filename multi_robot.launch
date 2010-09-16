@@ -20,7 +20,7 @@
 
   <group ns="localization_cu">
     <param name="max_pose_jump_ratio" type="double" value="2.0" />
-    <param name="using_gps" type="bool" value="false" />
+    <param name="using_gps" type="bool" value="true" />
     <param name="odometer_pose_x_init" type="double" value="0" />
     <param name="odometer_pose_y_init" type="double" value="0" />
     <param name="odometer_pose_theta_init" type="double" value="0" />
@@ -55,7 +55,7 @@
 
   <group ns="multi_robot_planner_cu">
     <param name="agent_id" type="int" value="0" />
-    <param name="total_agents" type="int" value="1" />
+    <param name="total_agents" type="int" value="2" />
     <param name="min_clock_to_plan" type="double" value="10" />
     <param name="prob_message_success" type="double" value="1" />
     <param name="experiment_name" type="string" value="test" />
@@ -78,7 +78,7 @@
   <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
 
   <group ns="intercom_cu">
-    <param name="my_id" type="int" value="1" />
+    <param name="my_id" type="int" value="0" />
     <param name="num_agents" type="int" value="3" />
     <param name="config_file" type="string" value="../config.xml" />
   </group>
