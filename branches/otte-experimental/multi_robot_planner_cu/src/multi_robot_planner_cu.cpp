@@ -798,7 +798,7 @@ int main(int argc, char** argv)
     {
       if(goal_pose == NULL)
       {
-        printf("waiting for goal\n");
+        //printf("waiting for goal\n");
       
         //load_goal();
         if(goal_pose != NULL)
@@ -810,7 +810,7 @@ int main(int argc, char** argv)
       
       if(robot_pose == NULL)
       {
-        printf("waiting for pose\n"); 
+        //printf("waiting for pose\n"); 
       
         //load_pose();
         if(robot_pose != NULL)
