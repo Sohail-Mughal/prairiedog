@@ -948,6 +948,8 @@ int main(int argc, char** argv)
   if(!Scene.LoadFromGlobals(Globals))  ////////////////////////////////////////still need to ad functionality that reads in map file (and correct sub-piece of it)
     return 0;
   Scene.PrintScenceInfo(); 
+  publish_planning_area(Scene);
+  ros::spinOnce();
   
   int num_robots = Scene.num_robots;
   int world_dims = Scene.world_dims;
@@ -1021,6 +1023,10 @@ int main(int argc, char** argv)
       } 
     }
     now_time = clock();
+    
+    publish_planning_area(Scene);
+    ros::spinOnce();
+    
   }
   float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
   
@@ -1067,6 +1073,9 @@ int main(int argc, char** argv)
         MultAgSln.SendMessageUDP(prob_success);
       }
       now_time = clock(); 
+      
+      publish_planning_area(Scene);
+      ros::spinOnce();
     }
     now_time = clock(); 
   }
@@ -1104,6 +1113,9 @@ int main(int argc, char** argv)
     MultAgSln.SendMessageUDP(prob_success);
    
     printf(" waiting, not moving\n");
+    
+    publish_planning_area(Scene);
+    ros::spinOnce();
   }
   now_time = clock();
       
@@ -1155,7 +1167,8 @@ int main(int argc, char** argv)
     getchar();
     
     publish_global_path(ThisAgentsPath, Parametric_Times); 
-
+    publish_planning_area(Scene);
+ 
     printf("moving\n");
   }
 

@@ -939,7 +939,7 @@ void draw_global_paths(const vector<POINT_LIST*>& g_paths) // draws the global p
     if(g_paths[i] != NULL)
     {
       if(i == current_robot)
-        draw_point_list_2D_lines(g_paths[i], GREEN, .97);
+        draw_point_list_2D_lines(g_paths[i], BLUE, .97);
       else
         draw_point_list_2D_lines(g_paths[i], BLACK, .97);   
     }
@@ -1678,15 +1678,20 @@ void planning_area_callback_helper(const geometry_msgs::Polygon msg, int robot_i
   int length = msg.points.size();
   
   destroy_point_list(planning_areas[robot_id]);
-  planning_areas[robot_id] = make_point_list(length);
+  planning_areas[robot_id] = make_point_list(length+1);
   
-  for(int i = 0; i < length; i++)
+  int i = 0;
+  for(; i < length; i++)
   {  
     planning_areas[robot_id]->points[i][0] = x_scl*msg.points[i].x;
     planning_areas[robot_id]->points[i][1] = y_scl*msg.points[i].y;
     planning_areas[robot_id]->points[i][2] = z_scl*msg.points[i].z;  
   }
 
+  planning_areas[robot_id]->points[i][0] = x_scl*msg.points[0].x;
+  planning_areas[robot_id]->points[i][1] = y_scl*msg.points[0].y;
+  planning_areas[robot_id]->points[i][2] = z_scl*msg.points[0].z; 
+  
   display_flag = 1;
   glutPostRedisplay(); 
 }
