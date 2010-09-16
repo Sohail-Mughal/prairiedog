@@ -62,6 +62,8 @@
 
 #include "localization_cu/GetPose.h"
 
+#include "geometry_msgs/Polygon.h"
+
 using namespace std;
 
 #define LARGE 100000000
@@ -217,7 +219,8 @@ ros::Subscriber goal_sub;
 // global ROS publisher handles
 ros::Publisher global_path_pub;
 ros::Publisher system_update_pub;
-        
+ros::Publisher planning_area_pub;   
+
 // globals for robot and goal
 POSE* robot_pose = NULL;
 POSE* goal_pose = NULL;
@@ -451,6 +454,36 @@ void publish_system_update(int data)
   system_update_pub.publish(msg); 
 }
 
+void publish_planning_area(const NavScene& S)
+{
+  geometry_msgs::Polygon msg;
+  
+  float x_min = -S.translation[0];
+  float y_min = -S.translation[1];
+  float x_max = x_min + S.dim_max[0];
+  float y_max = y_min + S.dim_max[1];        
+  
+  msg.points.resize(4);
+  
+  msg.points[0].x = x_min;
+  msg.points[0].y = y_min;
+  msg.points[0].z = 0;
+  
+  msg.points[1].x = x_max;
+  msg.points[1].y = y_min;
+  msg.points[1].z = 0;
+  
+  msg.points[2].x = x_max;
+  msg.points[2].y = y_max;
+  msg.points[2].z = 0;
+  
+  msg.points[3].x = x_min;
+  msg.points[3].y = y_max;
+  msg.points[3].z = 0;
+  
+  
+  planning_area_pub.publish(msg); 
+}
 
 /*----------------------- ROS service functions -------------------------*/
 
@@ -616,6 +649,7 @@ int main(int argc, char** argv)
   // set up ROS topic publishers
   global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
   system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 10);
+  planning_area_pub = nh.advertise<geometry_msgs::Polygon>("/cu/planning_area_cu", 10);
   
   // spin ros once
   ros::spinOnce();
@@ -1138,6 +1172,7 @@ int main(int argc, char** argv)
   goal_sub.shutdown();
   global_path_pub.shutdown();
   system_update_pub.shutdown();
+  planning_area_pub.shutdown();
     
   destroy_pose(robot_pose);
   destroy_pose(goal_pose);

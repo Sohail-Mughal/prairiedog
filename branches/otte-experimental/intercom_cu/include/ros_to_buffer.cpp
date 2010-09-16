@@ -336,6 +336,17 @@ size_t add_to_buffer_ethernetheader(size_t buffer_ptr, int id, uint messagetype,
   return buffer_ptr;
 }
 
+size_t add_to_buffer_Polygon(size_t buffer_ptr, const geometry_msgs::Polygon& poly, size_t buffer_max) // adds the Polygon at the buffer pointed to by (void*)buffer_ptr, returns the next free location in the buffer, errors if try to insert past buffer_max
+{
+  // add number of points
+  uint num_points = poly.points.size();
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, num_points, buffer_max);
+  
+  // add each point
+  for(uint i = 0; i < num_points; i++)
+    buffer_ptr = add_to_buffer_Point32(buffer_ptr, poly.points[i], buffer_max);
+}
+
 /*------------ functions for extracting ros data to a buffer ------------*/
 size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
@@ -779,6 +790,30 @@ size_t extract_from_buffer_ethernetheader(size_t buffer_ptr, int& id, uint& mess
   buffer_ptr = extract_from_buffer_uint(buffer_ptr, packet_number, buffer_max); // extracts packet number
   if(buffer_ptr == 0)
     return 0;
+  
+  return buffer_ptr;
+}
+
+size_t extract_from_buffer_Polygon(size_t buffer_ptr, geometry_msgs::Polygon& poly, size_t buffer_max) // extracts Polygon from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
+{
+  // extract number of points
+  uint num_points;
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_points, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
+  // extract each point
+  poly.points.resize(num_points);
+  
+  for(uint i = 0; i < num_points; i++)
+  {
+    geometry_msgs::Point32 point;
+    buffer_ptr = extract_from_buffer_Point32(buffer_ptr, point, buffer_max);
+    if(buffer_ptr == 0)
+      return 0;
+    
+    poly.points[i] = point;
+  }
   
   return buffer_ptr;
 }

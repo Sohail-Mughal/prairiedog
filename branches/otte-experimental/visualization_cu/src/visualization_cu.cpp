@@ -61,6 +61,7 @@
 #include "intercom_cu/Path_CU_ID.h"
 #include "intercom_cu/Pose2D_CU_ID.h"
 #include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
+#include "intercom_cu/Polygon_CU_ID.h"
 
 #ifndef PI
   #define PI 3.1415926535897
@@ -153,6 +154,7 @@ vector<POSE*> goal_poses;
 vector<POSE*> target_poses;
 vector<POINT_LIST*> global_paths;
 vector<POINT_LIST*> laser_scan_data;
+vector<POINT_LIST*> planning_areas;
 
 int num_robots = 1;
 int current_robot = 0;
@@ -187,6 +189,9 @@ ros::Subscriber system_update_multi_sub;
 
 ros::Subscriber target_sub;
 ros::Subscriber target_multi_sub;
+
+ros::Subscriber planning_area_sub;
+ros::Subscriber planning_area_multi_sub;
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
@@ -956,6 +961,20 @@ void draw_laser_scan_data(const vector<POINT_LIST*>& scan_data) // draws the las
   }
 }
 
+void draw_planning_areas(const vector<POINT_LIST*>& p_areas) // draws the planning areas
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(p_areas[i] != NULL)
+    {
+      if(i == current_robot)
+        draw_point_list_2D_lines(p_areas[i], ORANGE, .99);
+      else
+        draw_point_list_2D_lines(p_areas[i], BLACK, .99);   
+    }
+  }
+}
+
 /*----------------------- GRID_LIST ------------------------------------*/
 
 struct GRID_LIST
@@ -1650,6 +1669,38 @@ void target_multi_callback(const intercom_cu::Pose2D_CU_ID::ConstPtr& msg)
   target_callback_helper(msg->data, msg->id.data);
 }  
 
+void planning_area_callback_helper(const geometry_msgs::Polygon msg, int robot_id)
+{
+  float x_scl = 1/costmap->resolution;
+  float y_scl = 1/costmap->resolution;
+  float z_scl = 0; 
+       
+  int length = msg.points.size();
+  
+  destroy_point_list(planning_areas[robot_id]);
+  planning_areas[robot_id] = make_point_list(length);
+  
+  for(int i = 0; i < length; i++)
+  {  
+    planning_areas[robot_id]->points[i][0] = x_scl*msg.points[i].x;
+    planning_areas[robot_id]->points[i][1] = y_scl*msg.points[i].y;
+    planning_areas[robot_id]->points[i][2] = z_scl*msg.points[i].z;  
+  }
+
+  display_flag = 1;
+  glutPostRedisplay(); 
+}
+
+void planning_area_callback(const geometry_msgs::Polygon::ConstPtr& msg)
+{
+  planning_area_callback_helper(*msg, current_robot);
+}
+
+void planning_area_multi_callback(const intercom_cu::Polygon_CU_ID::ConstPtr& msg)
+{
+  planning_area_callback_helper(msg->data, msg->id.data);
+}  
+
 /*----------------------- ROS Publisher Functions -----------------------*/
 void publish_user_control(int x, int theta)
 {
@@ -1736,7 +1787,9 @@ void display()
      // draw the global paths
      draw_global_paths(global_paths); // draws the global paths
 
-   
+     // draw planning areas
+     draw_planning_areas(planning_areas);
+     
      // draw the local path
     // if(local_path != NULL)
     // {
@@ -2521,6 +2574,9 @@ void cleanup()
   target_sub.shutdown();
   target_multi_sub.shutdown();
   
+  planning_area_sub.shutdown();
+  planning_area_multi_sub.shutdown();
+  
   goal_pub.shutdown();
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
@@ -2546,6 +2602,9 @@ void cleanup()
   
   for(int i = 0; i < num_robots; i++)
     destroy_point_list(laser_scan_data[i]);
+  
+  for(int i = 0; i < num_robots; i++)
+    destroy_point_list(planning_areas[i]);
   
   ROS_INFO("\nExit... \n");  
   
@@ -2613,6 +2672,10 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_robots; i++)
     laser_scan_data[i] = NULL;
   
+  planning_areas.resize(num_robots, NULL);
+  for(int i = 0; i < num_robots; i++)
+    planning_areas[i] = NULL;
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   pose_multi_sub = nh.subscribe("/cu_multi/pose_cu", 1, pose_multi_callback);
@@ -2642,6 +2705,9 @@ int main(int argc, char *argv[])
   
   target_sub = nh.subscribe("/cu/target_pose_cu", 1, target_callback);
   target_multi_sub = nh.subscribe("/cu_multi/target_pose_cu", 1, target_multi_callback);
+  
+  planning_area_sub = nh.subscribe("/cu/planning_area_cu", 1, planning_area_callback);
+  planning_area_multi_sub = nh.subscribe("/cu_multi/planning_area_cu", 1, planning_area_multi_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
