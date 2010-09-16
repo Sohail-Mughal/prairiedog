@@ -30,10 +30,10 @@
   </group>
   <node name="localization_cu" pkg="localization_cu" type="localization_cu" respawn="true" output="screen" />
 
-  <group ns="goal_server_cu">
-    <param name="goal_pose_x_init" type="double" value="10" />
-    <param name="goal_pose_y_init" type="double" value="10" />
-    <param name="goal_pose_theta_init" type="double" value="1" />
+  <group ns="_goal_server_cu">
+    <param name="goal_pose_x_init" type="double" value="0" />
+    <param name="goal_pose_y_init" type="double" value="0" />
+    <param name="goal_pose_theta_init" type="double" value="0" />
   </group>
   <node name="goal_server_cu" pkg="goal_server_cu" type="goal_server_cu" output="screen" />
 
@@ -75,13 +75,13 @@
   </group>
   <node name="multi_robot_planner_cu" pkg="multi_robot_planner_cu" type="multi_robot_planner_cu" cwd="node" respawn="false" output="screen" />
 
-  <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+  <inode name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
 
   <group ns="intercom_cu">
     <param name="my_id" type="int" value="0" />
     <param name="num_agents" type="int" value="3" />
     <param name="config_file" type="string" value="../config.xml" />
   </group>
-  <inode name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
+  <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
 
 </launch>

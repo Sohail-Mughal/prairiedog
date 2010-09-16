@@ -162,7 +162,7 @@ void publish_goal()
 { 
   if(goal == NULL)
   {
-    printf("goal_server: goal is null \n");
+    //printf("goal_server: goal is null \n");
     return;
   }
   
