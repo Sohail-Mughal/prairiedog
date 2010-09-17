@@ -436,9 +436,12 @@ void publish_global_path(vector<vector<float> > path, vector<float> times_p)
     else
       msg.poses[i].pose.orientation.w = sin(path[i][2])/r; 
   
+    
     msg.poses[i].pose.orientation.x = 0;
     msg.poses[i].pose.orientation.y = 0;
     msg.poses[i].pose.orientation.z = r/2;  
+    
+    //printf("planner theta: %f (%f, %f, %f, %f)\n", path[i][2],  msg.poses[i].pose.orientation.w, msg.poses[i].pose.orientation.x, msg.poses[i].pose.orientation.y, msg.poses[i].pose.orientation.z);
   } 
   global_path_pub.publish(msg); 
 

@@ -79,7 +79,7 @@ float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
 float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
 bool using_tf = true;              // when set to true, use the tf package
 
-bool path_has_orientation = false; //true;  // if path contains orientation, set this to true
+bool path_has_orientation = true;  // if path contains orientation, set this to true
 bool multi_robot_mode = true;      // set to true if doing multi_robot mode
 ros::Time move_start_time;         // holds the time that we started moving, used for multi_robot_mode
 
@@ -364,6 +364,8 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       global_path[i].cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
       global_path[i].sin_alpha = 2*qw*qz + 2*qx*qy;
       global_path[i].alpha = atan2(global_path[i].sin_alpha, global_path[i].cos_alpha);
+      
+      //printf("path theta: %f (%f, %f, %f, %f)\n", global_path[i].alpha, qw, qx, qy, qz);
     }
   } 
   
@@ -543,12 +545,12 @@ void publish_system_state(int state)
   system_state_pub.publish(msg); 
 }
 
-void publish_target_pose(float x, float y)
+void publish_target_pose(float x, float y, float theta)
 {  
   geometry_msgs::Pose2D msg;
   msg.x = x;
   msg.y = y;
-  msg.theta = 0;
+  msg.theta = theta;
   
   target_pose_pub.publish(msg);       
 }
@@ -598,13 +600,15 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
             this_path_point[2] -= 2*PI;
         }
         
+        //printf("alpha %f \n", this_path_point[2]);
+        
         this_path_point[3] = this_time;  // time
         
         t.push_back(this_path_point);
       }
       t.push_back(p[i]);  
     }
-  } 
+  }
 }
 
 
@@ -1000,14 +1004,14 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   int previous_current_time_index = 0;
   
   
-  if(new_path_flag != 1) // if a new path has not been recieved
-  {   
-    previous_current_place_index = current_place_index;
-    previous_current_time_index = current_time_index;
-      
-  }   
-  else
-    printf("whaaaaa???? \n");
+//   if(new_path_flag != 1) // if a new path has not been recieved
+//   {   
+//     previous_current_place_index = current_place_index;
+//     previous_current_time_index = current_time_index;
+//       
+//   }   
+//   else
+//     printf("whaaaaa???? \n");
   
   
   
@@ -1082,7 +1086,75 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       break;
   }    
   
-  int carrot_index;
+  
+  int carrot_index; // point we actually steer at
+  
+  #ifndef old_controller //////////////////// think about doing this most of the time, then doing the old controller to bring into the goal when close
+  
+  // while carrot_index is within 0.2, look further down the path
+  carrot_index = current_place_index;  
+  this_dist = min_dist; 
+  
+  float this_rad = 0;
+  float th;
+  
+  while(this_dist <= 0.2 && this_rad <= 3.14/6)
+  { 
+    if(carrot_index >= length - 1)  
+      break;
+            
+    carrot_index++;
+
+    x = T[carrot_index][0] - robot_pose->x;
+    y = T[carrot_index][1] - robot_pose->y;
+    this_dist = sqrt(x*x + y*y);  
+    
+    th = T[carrot_index][2] - robot_pose->alpha;
+    
+    // find th on range -PI to PI
+    while(th > PI)
+      th -= 2*PI;
+    while(th < -PI)
+      th += 2*PI;
+    
+    // now take abs(th)
+    if(th < 0)
+      th = -1;
+    
+    this_rad = th;
+  }    
+
+  float time_ahead = T[current_place_index][3] - T[current_time_index][3];
+  printf("%f secs ahead of schedule \n", time_ahead);
+  
+  float time_ahead_rad = 2; // sec, for control if we are further away then this in time, then we want behaviour to be the same as if we were this far away in time
+  
+  if(time_ahead > time_ahead_rad)
+    time_ahead = time_ahead_rad; 
+  
+  if(time_ahead < -time_ahead_rad)
+    time_ahead = -time_ahead_rad;
+  
+  float time_ahead_factor = time_ahead/time_ahead_rad; // gives number between -1 and 1
+  
+  TARGET_SPEED = DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2);
+  TARGET_TURN = DEFAULT_TURN - DEFAULT_TURN*sin(time_ahead_factor*PI/2);
+        
+  if(carrot_index == length)
+    move_toward_pose_fast(T[carrot_index], .2, PI/6, PI/6);
+  else if(this_dist <= .1 && carrot_index != length) // we want to rotate to the orientation of the carrot
+    turn_toward_heading(T[carrot_index], PI/6);
+  else
+    move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
+  
+
+  
+  
+  
+  
+  
+  #else
+  
   if(current_time_index == current_place_index) // we are on schedual
   {   
     carrot_index = current_time_index;
@@ -1196,11 +1268,12 @@ printf("case 2 \n");
     turn_toward_heading(T[carrot_index],  PI/24);
   }
   
+  #endif
   // set the target location so we can broadcast it for visualization
   t_target_ind = current_time_index;
   
-  if(current_place_index == length)
-    return 1;
+  if(current_place_index == length-1)
+    return turn_toward_heading(T[carrot_index],  PI/24);
   
   return 0;
 }
@@ -1421,7 +1494,7 @@ int main(int argc, char * argv[])
        
     // broadcast target pose
     if(multi_robot_mode && t_target_ind != -1)
-      publish_target_pose(trajectory[t_target_ind][0],trajectory[t_target_ind][1]);      
+      publish_target_pose(trajectory[t_target_ind][0],trajectory[t_target_ind][1], trajectory[t_target_ind][2]);      
     
     ros::spinOnce();
     loop_rate.sleep();

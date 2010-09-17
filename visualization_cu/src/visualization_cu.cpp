@@ -643,6 +643,9 @@ void draw_target(POSE* pose, float* clr, float z_height)
     float pos[] = {pose->x, pose->y, 0};
     draw_circle(pos, scaled_rad/3, clr);
     
+    float pos2[] = {pose->x + scaled_rad*pose->cos_alpha, pose->y + scaled_rad*pose->sin_alpha, 0};
+    draw_arrow(pos, pos2, clr);
+    
     glPopMatrix(); 
   }
 }
