@@ -5,6 +5,8 @@ void populate_int_vector(vector<int>& V, int* A, int s); // populates V with A o
 
 void populate_float_vector(vector<float>& V, float* A, int s); // populates V with A of size s
 
+bool equal_float_vector(const vector<float>& A, const vector<float>& B, float tol); // returns true if the vectors are the same size and contain the same elements to within tolerance tol
+
 void draw_circle(float* pos, float rad, float* color); // draws a circle
 
 void draw_x(float* pos, float rad, float* color); // draws an X with rad rad

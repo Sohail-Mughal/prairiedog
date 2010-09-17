@@ -517,6 +517,9 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
     j++; 
   }
    
+  printf("adjusted start: \n");
+  print_float_vector(startC);
+  
   // get goal configuration
   goalC.resize(num_robots*world_dims);
   j = 0;
@@ -531,6 +534,9 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
     goalC[i*world_dims+2] = G.goal_coords[j][2]; 
     j++; 
   }
+  
+  printf("adjusted goal: \n");
+  print_float_vector(startC);
   
   // get prob_at_goal
   prob_at_goal = G.prob_at_goal;

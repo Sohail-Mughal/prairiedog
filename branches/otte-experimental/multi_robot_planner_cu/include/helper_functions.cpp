@@ -26,6 +26,25 @@ void populate_float_vector(vector<float>& V, float* A, int s) // populates V wit
     V[i] = A[i];
 }
 
+bool equal_float_vector(const vector<float>& A, const vector<float>& B, float tol) // returns true if the vectors are the same size and contain the same elements to within tolerance tol
+{
+  if(A.size() != B.size())
+    return false;
+  
+  int size = A.size();
+  
+  for(int i = 0; i < size; i++)
+  {
+    if(A[i] != B[i])
+    {
+      if(fabs(A[i] - B[i]) > tol)  
+        return false;
+    }
+  }
+  return true;
+}
+
+
 void draw_circle(float* pos, float rad, float* color)
 {
   glPushMatrix();
