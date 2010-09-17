@@ -836,8 +836,8 @@ int main(int argc, char** argv)
   }  
   
   printf("have pose and goal: \n");
-  //print_pose(robot_pose);
-  //print_pose(goal_pose);
+  print_pose(robot_pose);
+  print_pose(goal_pose);
   
   // spin ros one more time to check callbacks
   if(ros::ok())
@@ -1003,7 +1003,7 @@ int main(int argc, char** argv)
       
       if(mode == 0) // share partial solutions
       {
-        if(MultAgSln.GetMessages())
+        if(MultAgSln.GetMessages(startc, goalc))
         {
           MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
           found_path = true;
@@ -1016,7 +1016,7 @@ int main(int argc, char** argv)
       if(difftime_clock(now_time,start_time) <= min_clock_to_plan)  
         phase_two_start_t = clock();
       
-      if(MultAgSln.GetMessages())
+      if(MultAgSln.GetMessages(startc, goalc))
       {
         MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
         found_path = true;
@@ -1065,7 +1065,7 @@ int main(int argc, char** argv)
     
       if(mode == 0) // share partial solutions
       {
-        if(MultAgSln.GetMessages())
+        if(MultAgSln.GetMessages(startc, goalc))
         {  
           MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
           found_path = true;
@@ -1109,7 +1109,7 @@ int main(int argc, char** argv)
         break;
     
     // while we cannot move, we broadcaset the best solution to everybody, and recieve thier best solutions
-    MultAgSln.GetMessages();  
+    MultAgSln.GetMessages(startc, goalc);  
     MultAgSln.SendMessageUDP(prob_success);
    
     printf(" waiting, not moving\n");
@@ -1130,6 +1130,8 @@ int main(int argc, char** argv)
   
   // now we just broadcast the final solution, in case other robots didn't get it
   
+  destroy_pose(robot_pose);
+  //destroy_pose(goal_pose);
   
   while(!display_path) // if we want to display the path then we ignore this part
   {       
@@ -1147,7 +1149,7 @@ int main(int argc, char** argv)
     if(mode == 2 && agent_number != 0)
       continue; 
 
-    MultAgSln.GetMessages();
+    MultAgSln.GetMessages(startc, goalc);
     MultAgSln.SendMessageUDP(prob_success);
 
     // now extract this robot's path and send on to the controller
@@ -1186,7 +1188,4 @@ int main(int argc, char** argv)
   global_path_pub.shutdown();
   system_update_pub.shutdown();
   planning_area_pub.shutdown();
-    
-  destroy_pose(robot_pose);
-  destroy_pose(goal_pose);
 }

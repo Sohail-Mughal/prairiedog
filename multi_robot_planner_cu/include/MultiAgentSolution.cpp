@@ -309,7 +309,7 @@ void MultiAgentSolution::AddSolution(Cspace& C)  // this adds the best solution 
     C.start_ind = last_added_ind; // holds the index of the start (goal index is 0)   
     C.best_total_path_length = C.DistToGoal[last_added_ind];
     
-    if(C.best_total_path_length < 1)
+    if(C.best_total_path_length < 0)
     {
       // the stuff in this if statement is mostly for error checking and debugging  
       printf("attampting to add a bogus path %f !!!!!!!!!!!!!!!!!!!!!!!!! \n", C.best_total_path_length);
@@ -400,7 +400,7 @@ void MultiAgentSolution::RoughAnimate(Workspace& W, bool draw_paths)  // animate
   next_ind_animate++;  
 }
 
-bool MultiAgentSolution::GetMessages()  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message
+bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const vector<float>& goal_config)  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message, also makes sure that they use start and goal configs
 {   
   bool found_path_in_file = false;
     
@@ -445,8 +445,10 @@ bool MultiAgentSolution::GetMessages()  // checks for incomming messages, and up
           fclose(ifp);
           
           in_msg_ctr[i]++;
-          messages_sent_to_us[i] = (float)message_num;
-          messages_recieved_by_us[i] = (float)(in_msg_ctr[i]);
+          
+          // NOT sure what I was doing here: wierd...
+          //messages_sent_to_us[i] = (float)message_num;
+          //messages_recieved_by_us[i] = (float)(in_msg_ctr[i]);
           
           // get rid of message file
           remove(this_file);
@@ -570,6 +572,34 @@ bool MultiAgentSolution::GetMessages()  // checks for incomming messages, and up
       if(!successfull_path_get)
         break;
     
+    
+      
+      // make sure that this message is for this problem  
+      // check start
+      if(! equal_float_vector(file_path[0], start_config, .0001f))
+      {
+        printf("---ignoring message for a different problem (the start is different)\n");   
+        
+        print_float_vector(file_path[0]);
+        print_float_vector(start_config);
+        
+        fclose(ifp);
+        break;
+      }
+      
+      // check goal
+      if(! equal_float_vector(file_path[file_path.size()-1], goal_config, .0001f))
+      {
+        printf("---ignoring message for a different problem (the goal is different)\n");   
+        
+        print_float_vector(file_path[file_path.size()-1]);
+        print_float_vector(goal_config);
+        
+        fclose(ifp);
+        break;
+      }
+      
+      
       // get file move flag from file
       if(fscanf(ifp, "m:%d\n", &file_move_flag) <= 0)
       {      
