@@ -312,7 +312,7 @@ void MultiAgentSolution::AddSolution(Cspace& C)  // this adds the best solution 
     if(C.best_total_path_length < 0)
     {
       // the stuff in this if statement is mostly for error checking and debugging  
-      printf("attampting to add a bogus path %f !!!!!!!!!!!!!!!!!!!!!!!!! \n", C.best_total_path_length);
+      printf("attampting to add a bogus path with length %f !!!!!!!!!!!!!!!!!!!!!!!!! \n", C.best_total_path_length);
       float this_sum = 0;
       for(uint ii = 0; ii < BestSolution.size(); ii++)
       {
@@ -599,6 +599,23 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         break;
       }
       
+      #ifndef not_using_globals
+      // get remaining planning time from file
+      float remaining_planning_time;
+      if(fscanf(ifp, "r:%f\n", &remaining_planning_time) <= 0)
+      {      
+        // problems reading data
+        fclose(ifp);
+        printf("could not get planning time reamaining \n");
+        break;
+      }     
+      
+      if(remaining_planning_time < Gbls->planning_time_remaining[i])
+      {
+        Gbls->planning_time_remaining[i] = remaining_planning_time;
+        Gbls->last_update_time[i] = clock();
+      }
+      #endif
       
       // get file move flag from file
       if(fscanf(ifp, "m:%d\n", &file_move_flag) <= 0)
@@ -1203,6 +1220,9 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     }      
     
+    // time left for planning
+    sprintf(temp_buffer, "r:%f\n", Gbls->calculate_time_left_for_planning());
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
     // move flag
     if(moving)
