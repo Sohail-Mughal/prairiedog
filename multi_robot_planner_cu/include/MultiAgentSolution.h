@@ -19,20 +19,22 @@ class MultiAgentSolution
     void RoughAnimate(Workspace& W, bool draw_paths);          // animates the movement along best solution from start to goal, if draw_paths == true, then it draws the paths
         
     bool GetMessages(const vector<float>& start_config, const vector<float>& goal_config);  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message, also makes sure that they use start and goal configs
-
     void SendMessage(float send_prob);                         // sends a message containing the current best solution with probability send_prob
     #ifndef not_using_globals
-    void SendMessageUDP(float send_prob);                      // while above function just uses a filt, this uses UDP
+    void SendMessageUDP(float send_prob);                      // while above function just uses a file, this uses UDP
     #endif
+            
     bool StartMoving();                                        // returns true if this agent can start moving
     
     bool ConfirmExistanceGlobalIdNode(int node_key_a, int node_key_b, const vector<float> the_coords); // checks the existance of NodeId[node_key_a][node_key_b] and adds it with the_coords if it does not exist (only of relivance when uni_tree_build == 1), returns true if nede already existed before this was called
     void LinkGlobalIdNodes(int node_key_a, int node_key_b, int parent_key_a, int parent_key_b);  // assuming that NodeId[node_key_a][node_key_b] and NodeId[parent_key_a][parent_key_b] exist, this links them as you would expect (only of relivance when uni_tree_build == 1)
     void UpdateDistanceInfoGlobalIdNode(int node_key_a, int node_key_b); // updates distance info about NodeId[node_key_a][node_key_b]
     
-    bool GreedyPathSmooth();              // greedily smooths BestSolution
+    bool GreedyPathSmooth();                                   // greedily smooths BestSolution
     
-    float OverallMessageStats();          // returns the probability this robot recieved a message that was sent by another robot
+    float OverallMessageStats();                               // returns the probability this robot recieved a message that was sent by another robot
+    
+    
     
     int num_agents;                       // the number of agents
     int agent_id;                         // the id of this agent (between 0 and num_agents-1, inclusive)

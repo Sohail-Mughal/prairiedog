@@ -45,6 +45,9 @@ GlobalVariables::GlobalVariables(int num_of_agents)
   start_coords.resize(number_of_agents);
   goal_coords.resize(number_of_agents);
   
+  last_update_time.resize(number_of_agents);
+  planning_time_remaining.resize(number_of_agents, LARGE);
+  
   sync_message_wait_time = 1;
   message_wait_time = 1;
   
@@ -115,6 +118,9 @@ void GlobalVariables::Populate(int num_of_agents)
   start_coords.resize(number_of_agents);
   goal_coords.resize(number_of_agents);
   
+  planning_time_remaining.resize(number_of_agents, LARGE);
+  last_update_time.resize(number_of_agents);
+  
   sync_message_wait_time = 1;
   message_wait_time = 1;
   
@@ -167,7 +173,7 @@ bool GlobalVariables::have_all_agent_addresses()
 }
 
 // returns true if we have min number of agent's address data
-bool GlobalVariables::have_min_agent_addresses()
+bool GlobalVariables::have_min_agent_data()
 {
   int num = 1;
   for(int i = 0; i < number_of_agents; i++)
@@ -412,6 +418,31 @@ void GlobalVariables::tell_master_we_are_moving(void * inG) // tells the master 
 
   if(message_size < 0) 
     error("Problems sending data");
+}
+
+
+float GlobalVariables::calculate_time_left_for_planning()  // based on info from all agents, this returns the time that remains for planning
+{
+  float min_time_for_planning = LARGE;   
+  
+  // find minimum planning time left considering all agents
+  for(int i = 0; i < number_of_agents; i++)
+  {
+    if(planning_time_remaining[i] == LARGE) // no planning time data from this agent yet
+      continue;
+      
+    clock_t time_now = clock(); 
+    planning_time_remaining[i] -= difftime_clock(time_now, last_update_time[i]);
+    last_update_time[i] = time_now;
+    
+    if(planning_time_remaining[i] < min_time_for_planning)
+      min_time_for_planning = planning_time_remaining[i];
+  }
+  
+  // reset this agent's time left for planning to be equal to the minimum ammount of time left for planning
+  planning_time_remaining[agent_number] = min_time_for_planning;
+  
+  return min_time_for_planning;
 }
 
 /* ------------------------- the actual threads ------------------------ */
@@ -925,7 +956,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 }
 
 // this thread sends this robot's data to other robots durring the start up sync phase, then terminates
-void *Robot_Sender_Ad_Hoc(void * inG)
+void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 {
   GlobalVariables* G = (GlobalVariables*)inG;  
   char buffer[max_message_size];    
@@ -940,7 +971,7 @@ void *Robot_Sender_Ad_Hoc(void * inG)
   clock_t start_wait_t, now_time;
 
   printf("waiting for agent start and goal coords (sending data) \n");  
-  while(!G->have_min_agent_addresses()) // until we have the min number of the other robot's data, the function is a bit of a misnomer
+  while(!G->have_min_agent_data()) // until we have the min number of the other robot's data
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
@@ -955,26 +986,16 @@ void *Robot_Sender_Ad_Hoc(void * inG)
   G->non_planning_yet = false;
   
   // now we start path planning, but this thread still keeps broadcasting the data to agents who are not yet ready to plan
-  //printf("here a \n");
   while(!G->min_agents_ready_to_plan()) // until we have the min number of the other robot's data
-  {     
-      
-   // printf("here b \n");
-      
+  {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
-    
-   // printf("here c \n");
     
     start_wait_t = clock();
     now_time = clock();
     
-   // printf("here d \n");
-    
     while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time)
       now_time = clock(); 
-
-   // printf("here e \n");
   }
   
   // now we know the min number of agents are all planning, so we exit this thread

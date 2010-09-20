@@ -925,8 +925,8 @@ int main(int argc, char** argv)
   
   // kick off communication threads
   pthread_t Listener_thread, Sender_thread;
-  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals); // gets incomming messages, is also used in startup
-  pthread_create( &Sender_thread, NULL, Robot_Sender_Ad_Hoc, &Globals);    // this is used for startup
+  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
+  pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
   
   // start-up phase loop (wait until we have min number of agents start and goal locations)
   clock_t start_wait_t;
@@ -1033,33 +1033,50 @@ int main(int argc, char** argv)
   }
   float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
   
+  // record how much time left there is for planning (on this agent)
+  Globals.planning_time_remaining[agent_number] = min_clock_to_plan - actual_solution_time;
+  Globals.last_update_time[agent_number] = now_time;
+  
   if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))   // a planning agent
   {
     // do anytime until a better solution is found, or we run out of time, also does one round of message passing per loop
-    now_time = clock();
-    while(difftime_clock(now_time,start_time) < min_clock_to_plan)
-    {   
-      // broadcast tf
-      //broadcast_map_tf();  
+      
+    float time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+    
+    // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
+    float this_time_to_plan = message_wait_time;
+    if(time_left_to_plan < message_wait_time)
+      this_time_to_plan = time_left_to_plan;
+    
+    while(this_time_to_plan > 0)
+    {       
+        
+      printf("\ntime left to plan: %f\n", Globals.planning_time_remaining[agent_number]);
+      //for(int k = 0; k < Globals.number_of_agents; k++)
+      //  printf("agent %d: %f \n", k, Globals.planning_time_remaining[k]);
+      //printf("\n");
+        
+        
+      now_time = clock();
      
       #ifdef treev2
-      if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+      if(Cspc.BuildTreeV2(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
       #elif defined(treev3)
-      if(Cspc.BuildTreeV3(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+      if(Cspc.BuildTreeV3(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
       #elif defined(treev4)
-      if(Cspc.BuildTreeV4(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+      if(Cspc.BuildTreeV4(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
       #elif defined(treev2rho)
-      if(Cspc.BuildTreeV2rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+      if(Cspc.BuildTreeV2rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
       #elif defined(treev3rho)
-      if(Cspc.BuildTreeV3rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+      if(Cspc.BuildTreeV3rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
       #elif defined(rrt)
-      if(Cspc.BuildRRT(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+      if(Cspc.BuildRRT(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
       #elif defined(rrtrho)
-      if(Cspc.BuildRRTRho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+      if(Cspc.BuildRRTRho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
       #elif defined(rrtfast)
-      if(Cspc.BuildRRTFast(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+      if(Cspc.BuildRRTFast(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
       #else
-      if(Cspc.BuildTree(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+      if(Cspc.BuildTree(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
       #endif
       {
         found_path = true;
@@ -1075,10 +1092,18 @@ int main(int argc, char** argv)
         }
         MultAgSln.SendMessageUDP(prob_success);
       }
-      now_time = clock(); 
-      
+
+      // ROS stuff
       publish_planning_area(Scene);
       ros::spinOnce();
+      
+      
+      time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+    
+      // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
+      this_time_to_plan = message_wait_time;
+      if(time_left_to_plan < message_wait_time)
+        this_time_to_plan = time_left_to_plan;
     }
     now_time = clock(); 
   }
@@ -1095,12 +1120,7 @@ int main(int argc, char** argv)
     phase_two_start_t = clock();
 
   while(!MultAgSln.StartMoving())
-  {
-    // while we cannot move, we could refine our own solution, in case everybody votes to use our solution
-      
-    // broadcast tf
-    //broadcast_map_tf();  
-      
+  {      
     start_wait_t = clock();
     now_time = clock();
     while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time)
@@ -1169,7 +1189,7 @@ int main(int argc, char** argv)
     {
       printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
     }
-    getchar();
+    //getchar();
     
     publish_global_path(ThisAgentsPath, Parametric_Times); 
     publish_planning_area(Scene);
