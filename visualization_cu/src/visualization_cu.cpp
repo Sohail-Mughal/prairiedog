@@ -155,7 +155,7 @@ vector<POSE*> target_poses;
 vector<POINT_LIST*> global_paths;
 vector<POINT_LIST*> laser_scan_data;
 vector<POINT_LIST*> planning_areas;
-
+vector<vector<float> > turn_circles; // each is [x, y, rad]
 int num_robots = 1;
 int current_robot = 0;
 
@@ -293,6 +293,19 @@ void draw_circle(float* pos, float rad, float* color)
   } 
   glEnd();
   glPopMatrix();
+}
+
+// draws all turn_circles at z_height with color clr
+void draw_turn_circles(const vector<vector<float> >& turn_cs, float* clr, float z_height)
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(turn_cs[i][2] != 0)
+    {
+      float pos[] = {turn_cs[i][0], turn_cs[i][1], z_height};  
+      draw_circle(pos, turn_cs[i][2], clr);
+    }
+  } 
 }
 
 // outputs the text
@@ -1709,6 +1722,26 @@ void planning_area_multi_callback(const intercom_cu::Polygon_CU_ID::ConstPtr& ms
   planning_area_callback_helper(msg->data, msg->id.data);
 }  
 
+void turn_circle_callback_helper(const geometry_msgs::Pose2D msg, int robot_id)
+{
+  turn_circles[robot_id][0] = msg.x/costmap->resolution;
+  turn_circles[robot_id][1] = msg.y/costmap->resolution;
+  turn_circles[robot_id][2] = msg.theta; // (radius)
+          
+  display_flag = 1;
+  glutPostRedisplay(); 
+}
+
+void turn_circle_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
+{
+  turn_circle_callback_helper(*msg, current_robot);
+}
+
+void turn_circle_multi_callback(const intercom_cu::Pose2D_CU_ID::ConstPtr& msg)
+{
+  turn_circle_callback_helper(msg->data, msg->id.data);
+}  
+
 /*----------------------- ROS Publisher Functions -----------------------*/
 void publish_user_control(int x, int theta)
 {
@@ -1805,6 +1838,9 @@ void display()
     // }
    
 
+     // draw the turn_circles
+     draw_turn_circles(turn_circles, RED, .977);
+     
      // draw the goals
      draw_poses(goal_poses, GREEN, .9775); 
      
@@ -2683,6 +2719,10 @@ int main(int argc, char *argv[])
   planning_areas.resize(num_robots, NULL);
   for(int i = 0; i < num_robots; i++)
     planning_areas[i] = NULL;
+  
+  turn_circles.resize(num_robots);
+  for(int i = 0; i < num_robots; i++)
+    turn_circles[i].resize(3,0);
   
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
