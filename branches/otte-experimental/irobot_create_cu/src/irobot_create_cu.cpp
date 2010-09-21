@@ -64,6 +64,10 @@
 #ifndef SQRT2
   #define SQRT2 1.414213562373095
 #endif
+ 
+#ifndef LARGE
+  #define LARGE 1000000000
+#endif
         
 using namespace std;
 
@@ -92,6 +96,7 @@ ros::Publisher odometer_pose_pub;
 ros::Publisher bumper_pose_pub;
 ros::Publisher system_state_pub;
 ros::Publisher target_pose_pub;
+ros::Publisher turn_circle_pub;
 
 // subscriber handles
 ros::Subscriber user_control_sub;
@@ -169,6 +174,33 @@ float setTurn(float x);
 // given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
 void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, float time_granularity);
 void print_2d_float_vector(vector<vector<float> >& V);
+
+
+/* ------------------- Misc functions -----------------------------------*/
+float determinant(float a, float b, float c, float d)    // calculates the determinant of [a b; c d]
+{
+  return (a*d) - (c*b);
+}
+
+bool find_intersect(float a1x, float a1y, float a2x, float a2y, float b1x, float b1y, float b2x, float b2y, float& cx, float& cy) // given lines a and b defined by the 4 points, finds their intersection and puts the point in c
+{
+  float a = determinant(a1x, a1y, a2x, a2y);
+  float b = a1x - a2x;
+  float c = a1y - a2y;
+
+  float d = determinant(b1x, b1y, b2x, b2y);
+  float e = b1x - b2x;
+  float f = b1y - b2y;
+
+  float h = determinant(b, c, e, f);
+
+  cx = determinant(a, b, d, e)/h;
+  cy = determinant(a, c, d, f)/h;    
+  
+  if(-LARGE < cx && cx < LARGE && -LARGE < cy && cy < LARGE)
+    return true;
+  return false;
+}
 
 
 /* ----------------------- POSE -----------------------------------------*/
@@ -555,6 +587,15 @@ void publish_target_pose(float x, float y, float theta)
   target_pose_pub.publish(msg);       
 }
 
+void publish_turn_circle(float x, float y, float theta)
+{  
+  geometry_msgs::Pose2D msg;
+  msg.x = x;
+  msg.y = y;
+  msg.theta = theta;
+  
+  turn_circle_pub.publish(msg);       
+}
 /* ---------------------- navigation functions --------------------------*/
 
 // given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
@@ -909,6 +950,116 @@ int move_toward_pose_fast(vector<float>& target_pose, float tolerance_distance, 
   return 0;
 }
 
+// calculates the radius and center of the circle that is tangent to the robot_pose and the trajectory segment [s1 s2], populates the approperiate values with the center of the circle and its radius
+// returns 0 if circle cannot be calulated, 1 if the circle is calculate, and 2 if the robot must move forward more before turning
+int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vector<float>& s2, float& center_x, float& center_y, float& radius)
+{
+  float robot_x1 = robot_pose->x;
+  float robot_y1 = robot_pose->y;
+  float robot_theta = robot_pose->alpha;
+
+  float segment_x1 = s1[0];
+  float segment_y1 = s1[1];
+
+  float segment_x2 = s2[0];
+  float segment_y2 = s2[1];
+
+  float robot_x2 = robot_x1+sin(robot_theta);
+  float robot_y2 = robot_y1+cos(robot_theta);
+
+  // find where the robot's current direction intersects the line that the segment is on
+  float intersect_x, intersect_y;
+  if(!find_intersect(robot_x1, robot_y1, robot_x2, robot_y2, segment_x1, segment_y1, segment_x2, segment_y2, intersect_x, intersect_y))
+    return 0;
+
+  // figure out if the circle will intersect the segment before it ends
+  float dist_RI = sqrt(((robot_x1-intersect_x)*(robot_x1-intersect_x)) + ((robot_y1-intersect_y)*(robot_y1-intersect_y)));
+  float dist_IS2 = sqrt(((segment_x2-intersect_x)*(segment_x2-intersect_x)) + ((segment_y2-intersect_y)*(segment_y2-intersect_y)));
+  if(dist_RI > dist_IS2)
+    return 2; // must drive forward more before turning
+  
+  // find the point on the segment's line where the circle is tangent
+  float dist_S = sqrt(((segment_x2-segment_x1)*(segment_x2-segment_x1)) + ((segment_y2-segment_y1)*(segment_y2-segment_y1)));
+  float rise_S = segment_y2-segment_y1;
+  float run_S = segment_x2-segment_x1;
+  float px = intersect_x + (run_S/dist_S)*dist_RI;
+  float py = intersect_y + (rise_S/dist_S)*dist_RI;
+
+  // calculate a point that is on robot's local y axis
+  float robot_x3 = robot_x1+sin(robot_theta+PI/2);
+  float robot_y3 = robot_y1+cos(robot_theta+PI/2);
+
+  // calculate point that is on line perpindicular to segment that goes through p
+  float pp_theta = atan2(segment_y2-segment_y1, segment_x2-segment_x1) + PI/2;
+  float ppx = px + cos(pp_theta);
+  float ppy = py + sin(pp_theta);
+
+  // find the center of the circle
+  if(!find_intersect(robot_x1, robot_y1, robot_x3, robot_y3, px, py, ppx, ppy, center_x, center_y))
+    return 0;
+
+  // calculate the radius of the circle
+  radius = sqrt(((center_x - robot_x1)*(center_x - robot_x1)) + ((center_y - robot_y1)*(center_y - robot_y1)));
+  //radius = sqrt( (center_x - px)^2 + (center_y - py)^2)  // another way to calculate the radius
+
+  return 1;
+    
+}
+
+
+// finds the best turn circle given the robots current pose and the trajectory (considering only path segments b to c-1)
+// returns 0 if none can be found
+int find_best_turn_circle(POSE* r_pose, const vector<vector<float> >& traj, int b, int c, float& center_x, float& center_y, float& radius)
+{
+  float best_center_x;
+  float best_center_y;
+  float best_radius = LARGE;
+  bool found_a_circle = false;
+  int seg_num = traj.size() - 2;
+  if(c < seg_num)
+    seg_num = c;    
+  
+  if(r_pose == NULL)
+    return 0;
+  
+  float this_center_x;
+  float this_center_y;
+  float this_radius;
+  int ret_value;      
+  
+  // currently "best" means the one that gets us to the path in the smallest radius without pivoting on the spot, ties broken by the furtherest point
+  for(int i = b; i < seg_num; i++)
+  {
+    if(traj[i][0] != traj[i+1][0] || traj[i][1] != traj[i+1][1])  // if the points are different
+    {
+      ret_value = calculate_turn_circle(r_pose, traj[i], traj[i+1], this_center_x, this_center_y, this_radius);
+    
+      if(ret_value == 1) // found a turn circle for this segment
+      {
+        if(this_radius <= best_radius)
+        {
+          best_center_x = this_center_x;  
+          best_center_y = this_center_y;    
+          best_radius = this_radius;  
+          found_a_circle = true; 
+        }  
+      }
+    }
+  }
+  
+  if(found_a_circle)
+    return 1;
+  
+  return 0;
+}
+
+
+
+
+
+
+
+
 // this will cause the robot to follow a path, where the path is given in tems of list<POSE>
 // it returns 1 when the robot reaches the end of the path. Note that it will attempt to drive 
 // toward the nearest point on the path, and considers a point reached whenver it gets within
@@ -1137,6 +1288,16 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   
   float time_ahead_factor = time_ahead/time_ahead_rad; // gives number between -1 and 1
   
+  
+  
+  float center_x = 0;
+  float center_y = 0;
+  float radius = 0;
+  find_best_turn_circle(robot_pose, T, current_place_index, current_time_index+1, center_x, center_y, radius);
+  publish_turn_circle(center_x, center_y, radius);
+  
+  
+  
   TARGET_SPEED = DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2);
   TARGET_TURN = DEFAULT_TURN - DEFAULT_TURN*sin(time_ahead_factor*PI/2);
         
@@ -1339,9 +1500,11 @@ int main(int argc, char * argv[])
   else
     bumper_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/bumper_pose_cu", 10);
   system_state_pub = nh.advertise<std_msgs::Int32>("/cu/system_state_cu", 10);
-  if(multi_robot_mode)   
+  if(multi_robot_mode)  
+  {
     target_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
-          
+    turn_circle_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/turn_circle_cu", 1);
+  }
   // set up subscribers
   user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -1506,6 +1669,7 @@ int main(int argc, char * argv[])
   system_state_pub.shutdown();
   user_control_sub.shutdown();  
   target_pose_pub.shutdown();
+  turn_circle_pub.shutdown();
   pose_sub.shutdown();
   goal_sub.shutdown();
   global_path_sub.shutdown();
