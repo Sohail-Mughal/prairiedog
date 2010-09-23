@@ -956,7 +956,7 @@ int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vecto
 {
   float robot_x1 = robot_pose->x;
   float robot_y1 = robot_pose->y;
-  float robot_theta = robot_pose->alpha;
+  float robot_theta = PI/2-robot_pose->alpha;
 
   float segment_x1 = s1[0];
   float segment_y1 = s1[1];
@@ -970,13 +970,19 @@ int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vecto
   // find where the robot's current direction intersects the line that the segment is on
   float intersect_x, intersect_y;
   if(!find_intersect(robot_x1, robot_y1, robot_x2, robot_y2, segment_x1, segment_y1, segment_x2, segment_y2, intersect_x, intersect_y))
+  {
+    //printf("cannot find intersection 1 \n");
     return 0;
+  }
 
   // figure out if the circle will intersect the segment before it ends
   float dist_RI = sqrt(((robot_x1-intersect_x)*(robot_x1-intersect_x)) + ((robot_y1-intersect_y)*(robot_y1-intersect_y)));
   float dist_IS2 = sqrt(((segment_x2-intersect_x)*(segment_x2-intersect_x)) + ((segment_y2-intersect_y)*(segment_y2-intersect_y)));
   if(dist_RI > dist_IS2)
+  {
+    //printf("dist_RI > dist_IS2 \n");
     return 2; // must drive forward more before turning
+  }
   
   // find the point on the segment's line where the circle is tangent
   float dist_S = sqrt(((segment_x2-segment_x1)*(segment_x2-segment_x1)) + ((segment_y2-segment_y1)*(segment_y2-segment_y1)));
@@ -986,8 +992,8 @@ int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vecto
   float py = intersect_y + (rise_S/dist_S)*dist_RI;
 
   // calculate a point that is on robot's local y axis
-  float robot_x3 = robot_x1+sin(robot_theta+PI/2);
-  float robot_y3 = robot_y1+cos(robot_theta+PI/2);
+  float robot_x3 = robot_x1+sin(robot_theta+(PI/2));
+  float robot_y3 = robot_y1+cos(robot_theta+(PI/2));
 
   // calculate point that is on line perpindicular to segment that goes through p
   float pp_theta = atan2(segment_y2-segment_y1, segment_x2-segment_x1) + PI/2;
@@ -996,12 +1002,15 @@ int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vecto
 
   // find the center of the circle
   if(!find_intersect(robot_x1, robot_y1, robot_x3, robot_y3, px, py, ppx, ppy, center_x, center_y))
+  {
+    //printf("cannot find intersection 2 \n");
     return 0;
-
+  }
   // calculate the radius of the circle
   radius = sqrt(((center_x - robot_x1)*(center_x - robot_x1)) + ((center_y - robot_y1)*(center_y - robot_y1)));
   //radius = sqrt( (center_x - px)^2 + (center_y - py)^2)  // another way to calculate the radius
 
+  //printf("found a circle of radius %f \n", radius);
   return 1;
     
 }
@@ -1011,9 +1020,7 @@ int calculate_turn_circle(POSE* robot_pose, const vector<float>& s1, const vecto
 // returns 0 if none can be found
 int find_best_turn_circle(POSE* r_pose, const vector<vector<float> >& traj, int b, int c, float& center_x, float& center_y, float& radius)
 {
-  float best_center_x;
-  float best_center_y;
-  float best_radius = LARGE;
+  radius = LARGE;
   bool found_a_circle = false;
   int seg_num = traj.size() - 2;
   if(c < seg_num)
@@ -1034,20 +1041,23 @@ int find_best_turn_circle(POSE* r_pose, const vector<vector<float> >& traj, int 
     {
       ret_value = calculate_turn_circle(r_pose, traj[i], traj[i+1], this_center_x, this_center_y, this_radius);
     
+      //printf("ret value: %d \n", ret_value);
+      
       if(ret_value == 1) // found a turn circle for this segment
       {
-        if(this_radius <= best_radius)
+        if(this_radius <= radius)
         {
-          best_center_x = this_center_x;  
-          best_center_y = this_center_y;    
-          best_radius = this_radius;  
+          center_x = this_center_x;  
+          center_y = this_center_y;    
+          radius = this_radius;  
           found_a_circle = true; 
+          //getchar();
         }  
       }
     }
   }
   
-  if(found_a_circle)
+  if(found_a_circle)      
     return 1;
   
   return 0;
@@ -1276,7 +1286,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   }    
 
   float time_ahead = T[current_place_index][3] - T[current_time_index][3];
-  printf("%f secs ahead of schedule \n", time_ahead);
+  //printf("%f secs ahead of schedule \n", time_ahead);
   
   float time_ahead_rad = 2; // sec, for control if we are further away then this in time, then we want behaviour to be the same as if we were this far away in time
   
@@ -1295,8 +1305,6 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float radius = 0;
   find_best_turn_circle(robot_pose, T, current_place_index, current_time_index+1, center_x, center_y, radius);
   publish_turn_circle(center_x, center_y, radius);
-  
-  
   
   TARGET_SPEED = DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2);
   TARGET_TURN = DEFAULT_TURN - DEFAULT_TURN*sin(time_ahead_factor*PI/2);
@@ -1578,6 +1586,17 @@ int main(int argc, char * argv[])
     else
     {
       printf("didn't count on this case \n");
+    }
+    
+    
+    
+    if(trajectory.size() > 1 && robot_pose!= NULL)
+    {
+      float center_x = 0;
+      float center_y = 0;
+      float radius = 0;
+      find_best_turn_circle(robot_pose, trajectory, 0, current_time_index+1, center_x, center_y, radius);
+      publish_turn_circle(center_x, center_y, radius);
     }
     
     // printf("user state: %d \n", user_state);

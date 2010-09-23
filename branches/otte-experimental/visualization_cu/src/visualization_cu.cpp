@@ -193,6 +193,9 @@ ros::Subscriber target_multi_sub;
 ros::Subscriber planning_area_sub;
 ros::Subscriber planning_area_multi_sub;
 
+ros::Subscriber turn_circle_sub;
+ros::Subscriber turn_circle_multi_sub;
+
 // global ROS publisher handles
 ros::Publisher goal_pub;
 ros::Publisher new_pose_pub;
@@ -293,19 +296,6 @@ void draw_circle(float* pos, float rad, float* color)
   } 
   glEnd();
   glPopMatrix();
-}
-
-// draws all turn_circles at z_height with color clr
-void draw_turn_circles(const vector<vector<float> >& turn_cs, float* clr, float z_height)
-{
-  for(int i = 0; i < num_robots; i++)
-  {
-    if(turn_cs[i][2] != 0)
-    {
-      float pos[] = {turn_cs[i][0], turn_cs[i][1], z_height};  
-      draw_circle(pos, turn_cs[i][2], clr);
-    }
-  } 
 }
 
 // outputs the text
@@ -554,6 +544,33 @@ void draw_coarse_map(MAP* map, float z_height, float grids_per_rad)
     glEnd(); 
   } 
   glPopMatrix();
+}
+
+// draws all turn_circles at z_height with color clr
+void draw_turn_circles(const vector<vector<float> >& turn_cs, float* clr, float z_height)
+{
+  glPushMatrix(); 
+  glTranslatef(-1, -1, z_height);
+  
+  if(costmap != NULL)
+  {
+    float map_rad = 2/(float)max(costmap->height, costmap->width); 
+    glScaled(map_rad,map_rad,1);
+  }
+    
+  for(int i = 0; i < num_robots; i++)
+  {
+    if(turn_cs[i][2] != 0)
+    {
+      float pos[] = {turn_cs[i][0], turn_cs[i][1], 0}; 
+      //printf("drawing turn circle %d (%f %f %f)\n", i, pos[0], pos[1], turn_cs[i][2]);
+      draw_circle(pos, turn_cs[i][2], clr);
+    }
+    //else
+    //  printf("turn circle %d has radius 0 \n", i);
+  }
+    
+  glPopMatrix(); 
 }
 
 /* ----------------------- POSE -----------------------------------------*/
@@ -1726,8 +1743,8 @@ void turn_circle_callback_helper(const geometry_msgs::Pose2D msg, int robot_id)
 {
   turn_circles[robot_id][0] = msg.x/costmap->resolution;
   turn_circles[robot_id][1] = msg.y/costmap->resolution;
-  turn_circles[robot_id][2] = msg.theta; // (radius)
-          
+  turn_circles[robot_id][2] = msg.theta/costmap->resolution; // (radius)
+    
   display_flag = 1;
   glutPostRedisplay(); 
 }
@@ -1839,7 +1856,7 @@ void display()
    
 
      // draw the turn_circles
-     draw_turn_circles(turn_circles, RED, .977);
+     draw_turn_circles(turn_circles, PURPLE, .977);
      
      // draw the goals
      draw_poses(goal_poses, GREEN, .9775); 
@@ -2756,6 +2773,9 @@ int main(int argc, char *argv[])
   
   planning_area_sub = nh.subscribe("/cu/planning_area_cu", 1, planning_area_callback);
   planning_area_multi_sub = nh.subscribe("/cu_multi/planning_area_cu", 1, planning_area_multi_callback);
+  
+  turn_circle_sub = nh.subscribe("/cu/turn_circle_cu", 1, turn_circle_callback);
+  turn_circle_multi_sub = nh.subscribe("/cu_multi/turn_circle_cu", 1, turn_circle_multi_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);

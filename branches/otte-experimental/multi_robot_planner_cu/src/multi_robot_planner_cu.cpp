@@ -1179,22 +1179,22 @@ int main(int argc, char** argv)
     
     calculate_rotation(MultAgSln.BestSolution);
     
-    verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
+    //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
     
     extract_and_translate_solution(ThisAgentsPath, MultAgSln.BestSolution, Scene.translation, agent_number, world_dims);
     
     calculate_times(Parametric_Times, MultAgSln.BestSolution, target_mps, target_rps);
 
-    for(int i = 0; i < Parametric_Times.size(); i++)
-    {
-      printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
-    }
+    //for(int i = 0; i < Parametric_Times.size(); i++)
+    //{
+    //  printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
+    //}
     //getchar();
     
     publish_global_path(ThisAgentsPath, Parametric_Times); 
     publish_planning_area(Scene);
  
-    printf("moving\n");
+    //printf("moving\n");
   }
 
   #ifdef using_glut

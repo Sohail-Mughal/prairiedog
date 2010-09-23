@@ -345,6 +345,8 @@ size_t add_to_buffer_Polygon(size_t buffer_ptr, const geometry_msgs::Polygon& po
   // add each point
   for(uint i = 0; i < num_points; i++)
     buffer_ptr = add_to_buffer_Point32(buffer_ptr, poly.points[i], buffer_max);
+  
+  return buffer_ptr;
 }
 
 /*------------ functions for extracting ros data to a buffer ------------*/
