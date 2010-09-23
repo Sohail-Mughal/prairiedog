@@ -1089,7 +1089,7 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       if(buffer_ptr == 0)
          return;
       
-      target_pose_pub.publish(msg);
+      turn_circle_pub.publish(msg);
     }
     else if(G->listen_mode_list[16] == 1)
     {
@@ -1099,7 +1099,7 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       if(buffer_ptr == 0)
          return;
 
-      target_pose_pub.publish(msg);   
+      turn_circle_pub.publish(msg);   
     }
   }
 }  
@@ -1715,9 +1715,9 @@ int main(int argc, char * argv[])
   if(Globals.listen_list[16])
   {
     if(Globals.listen_mode_list[16] == 0) 
-      target_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/turn_circle_cu", 1);
+      turn_circle_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/turn_circle_cu", 1);
     else if(Globals.listen_mode_list[16] == 1) 
-      target_pose_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/turn_circle_cu", 1);
+      turn_circle_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/turn_circle_cu", 1);
   }
   
   // set up service servers
