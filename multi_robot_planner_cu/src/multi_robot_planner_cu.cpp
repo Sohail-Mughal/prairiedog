@@ -1177,13 +1177,17 @@ int main(int argc, char** argv)
 
     // now extract this robot's path and send on to the controller
     
-    calculate_rotation(MultAgSln.BestSolution);
+    vector<vector<float> > mult_agent_bst_sln_doubled;
+    
+    double_up_points(MultAgSln.BestSolution, mult_agent_bst_sln_doubled);
+    
+    calculate_rotation(mult_agent_bst_sln_doubled);
     
     //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
     
-    extract_and_translate_solution(ThisAgentsPath, MultAgSln.BestSolution, Scene.translation, agent_number, world_dims);
+    extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, agent_number, world_dims);
     
-    calculate_times(Parametric_Times, MultAgSln.BestSolution, target_mps, target_rps);
+    calculate_times(Parametric_Times, mult_agent_bst_sln_doubled, target_mps, target_rps);
 
     //for(int i = 0; i < Parametric_Times.size(); i++)
     //{

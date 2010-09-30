@@ -31,6 +31,8 @@ float difftime_clock(const clock_t& clock_time_1, const clock_t& clock_time_2); 
 
 bool string_printf_s(int &sp, char* buffer, char* buffer2, int buffer_len); // this takes the string in buffer 2 and puts it into buffer starting at buffer[sp], it then resets sp to be the new end of the string, returns false if there is not enfough space in buffer
 
+void double_up_points(const vector<vector<float> >& V1, vector<vector<float> >& V2); // this doubles each point from V1 and puts it in V2 (1,2,3 becomes 1,1,2,2,3,3)
+
 void extract_and_translate_solution(vector<vector<float> >& AgentSolution, vector<vector<float> >& MultiSolution, vector<float>& Translation, int agent_id, int dims); // extracts the agent solution if agent_id where dims is the workspace dimensions and Translate holds the inverse ammount to translate along each
 
 void remove_unnecessary_rotation(vector<vector<float> >& MultiSolution); // removes unnecessary rotation, assumes 2D workspace and orientation for each robot

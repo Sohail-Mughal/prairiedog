@@ -237,7 +237,7 @@ void MultiAgentSolution::ExtractSolution(Cspace& C)  // this extracts a solution
       i++; 
     }
     
-    BestSolution.resize(i+1); // plus one becaue we add extra start configuration at begining to account for first rotation
+    BestSolution.resize(i);
     
     // now we actually put the solution in 
     ind = C.start_ind;
@@ -245,8 +245,6 @@ void MultiAgentSolution::ExtractSolution(Cspace& C)  // this extracts a solution
     
     i = 0;
     BestSolution[i] = C.ValidConfigs[ind];
-    i++;
-    BestSolution[i] = C.ValidConfigs[ind]; // extra start configuration at begining to account for first rotation
     i++;
     BestSolution[i] = C.ValidConfigs[neighbor_ind];
     i++;

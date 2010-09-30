@@ -269,6 +269,23 @@ bool string_printf_s(int &sp, char* buffer, char* buffer2, int buffer_len) // th
   return true;
 }
 
+void double_up_points(const vector<vector<float> >& V1, vector<vector<float> >& V2) // this doubles each point from V1 and puts it in V2 (1,2,3 becomes 1,1,2,2,3,3)
+{
+  int size_v1 = V1.size();
+  int size_v2 = size_v1*2;
+  V2.resize(size_v2);
+  
+  
+  int i = 0;
+  for(int j = 0; j < size_v1; j++)
+  {
+    V2[i] = V1[j];
+    i++;
+    V2[i] = V1[j];
+    i++;
+  } 
+}
+
 void extract_and_translate_solution(vector<vector<float> >& AgentSolution, vector<vector<float> >& MultiSolution, vector<float>& Translation, int agent_id, int dims) // extracts the agent solution if agent_id where dims is the workspace dimensions and Translate holds the inverse ammount to translate along each
 {
   // make sure solution lengths are the same
@@ -306,25 +323,39 @@ void calculate_rotation(vector<vector<float> >& MultiSolution) // calculates the
   
   float theta;
   
-  for(int j =  (int)MultiSolution.size()-2; j > 0; j--) //note: leave start pose alone by j>0
-  {
+  for(uint j = 0; j < MultiSolution.size()-1; j++) //note: leave start pose alone by j>0
+  { 
+    //printf("%d: \n", (int)j);
     for(int i = 0; i < (int)MultiSolution[0].size(); i += 3)
-    { 
-      if(MultiSolution[j][i] == MultiSolution[j+1][i] && MultiSolution[j][i+1] == MultiSolution[j+1][i+1])  // no movement, so use angle of next time step
-        MultiSolution[j][i+2] = MultiSolution[j+1][i+2];
+    {   
+      if(MultiSolution[j][i] == MultiSolution[j+1][i] && MultiSolution[j][i+1] == MultiSolution[j+1][i+1])  // no movement
+      {
+        if(j+1 != MultiSolution.size()-1)  // not goal (want goal theta to remain the same)
+          MultiSolution[j+1][i+2] = MultiSolution[j][i+2];  // use this theta at the next point (will be overwritten if it needs to be on next pass) 
+      }
       else  // there is movement, so calculate the angle based on the relative angle of this time-step location vs next time-step location
       {
-         theta = atan2(MultiSolution[j+1][i+1] - MultiSolution[j][i+1], MultiSolution[j+1][i] - MultiSolution[j][i]); 
+        theta = atan2(MultiSolution[j+1][i+1] - MultiSolution[j][i+1], MultiSolution[j+1][i] - MultiSolution[j][i]); 
           
-         while(theta < -PI)
-          theta += 2*PI;
-         while(theta > PI)
-          theta -= 2*PI;
+        while(theta < -PI)
+         theta += 2*PI;
+        while(theta > PI)
+         theta -= 2*PI;
          
-         MultiSolution[j][i+2] = theta;
+        MultiSolution[j][i+2] = theta;
+        if(j+1 != MultiSolution.size()-1)  // not goal (want goal theta to remain the same)
+          MultiSolution[j+1][i+2] = theta; // assuming two point where there is rotation
       }
-    }    
-  }    
+      //printf("%f, %f, %f --- ", MultiSolution[j][i], MultiSolution[j][i+1], MultiSolution[j][i+2]);
+    }
+    //printf("\n");
+  }
+  
+  //printf("%d (g): \n", (int)MultiSolution.size()-1);
+  //for(int i = 0; i < (int)MultiSolution[MultiSolution.size()-1].size(); i += 3)
+  //  printf("%f, %f, %f --- ", MultiSolution[MultiSolution.size()-1][i], MultiSolution[MultiSolution.size()-1][i+1], MultiSolution[MultiSolution.size()-1][i+2]);
+  //printf("\n");
+  //getchar();
 }
 
 void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution, float mps_target, float rps_target) // calculates the time parametery of the MultiSolution, where mps_target is the target meters per second of the fastest moving robot and rps is the target radians per second of fastest moving robot, note that these should be slightly slower than the max possible values to allow a behind robot to catch up, assumes 2D workspace and orientation for each robot
