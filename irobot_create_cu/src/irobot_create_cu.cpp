@@ -1064,10 +1064,48 @@ int find_best_turn_circle(POSE* r_pose, const vector<vector<float> >& traj, int 
 }
 
 
+// returns true if the robot is going away from the segment sq->s2
+bool is_diverging(POSE* robot_pose, const vector<float>& s1, const vector<float>& s2)
+{
+  double robot_x1 = robot_pose->x;
+  double robot_y1 = robot_pose->y;
+  double robot_theta = PI/2-robot_pose->alpha;
 
+  double segment_x1 = s1[0];
+  double segment_y1 = s1[1];
 
+  double segment_x2 = s2[0];
+  double segment_y2 = s2[1];
 
+  double robot_x2 = robot_x1+(.2*sin(robot_theta)); // for robot radius approx .2
+  double robot_y2 = robot_y1+(.2*cos(robot_theta)); // for robot radius approx .2
 
+  // find where the robot's current direction intersects the line that the segment is on
+  float intersect_x, intersect_y;
+  if(!find_intersect(robot_x1, robot_y1, robot_x2, robot_y2, segment_x1, segment_y1, segment_x2, segment_y2, intersect_x, intersect_y))
+  {
+    //printf("cannot find intersection 1 \n");
+    return false;
+  }
+  
+  // find distance between robot and the intersection point
+  double t_x = robot_x1 - (double)intersect_x;
+  double t_y = robot_y1 - (double)intersect_y;
+  double d1_intersect = sqrt((t_x*t_x) + (t_y*t_y));
+  
+  // find distance between robot ray end and intersect
+  t_x = robot_x2 - (double)intersect_x;
+  t_y = robot_y2 - (double)intersect_y;
+  double d2_intersect = sqrt((t_x*t_x) + (t_y*t_y)); 
+  
+  if(d1_intersect < d2_intersect) // the center of the robot is closer to the intersect point then the leading edge of the robot, so diverging
+  {
+    printf("diverging\n");
+    return true;
+  }
+  printf("converging\n");
+  return false;
+}
 
 
 // this will cause the robot to follow a path, where the path is given in tems of list<POSE>
@@ -1271,8 +1309,17 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   if(min_dist > 0.2) // we are significantly off the path
     too_far_away = true;
   
-  bool on_a_point = false; // this is set later depending on circumstance  
- 
+  bool on_a_point = false;  // this is set later depending on circumstance  
+  bool on_the_goal = false; // this is set later depending on circumstance  
+  
+  bool near_the_goal = false;
+  float t_x = robot_pose->x - T[length-1][0];
+  float t_y = robot_pose->y - T[length-1][1];
+  float d_diff = sqrt(t_x*t_x + t_y*t_y);
+  if(d_diff < 0.2)
+    near_the_goal = true;
+  
+  bool diverging = false; // this is set later depending on circumstance
   
   // calculate a factor for how far we are ahead or behind schedual
   float time_ahead_rad = 2; // sec, for control if we are further away then this in time, then we want behaviour to be the same as if we were this far away in time
@@ -1283,29 +1330,55 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float time_ahead_factor = time_ahead/time_ahead_rad; // gives number between -1 and 1
   
   
+  
+  
+  
   if(too_far_away)
   {
-    printf("too far away from path\n");   
+    printf("too far away from target\n");   
+    setSpeed(0);
+    setTurn(0); 
     return 0; 
   }
-  else // not too far away
+  else // not too far away from thr target
   {
     // set carrot as the current time index because we are close enough to where we should be
-    carrot_index = current_time_index;  
-    if(carrot_index >= length-1)  // on a point (the goal)
-      on_a_point = true;   
-    if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // on a point
+    carrot_index = current_time_index; 
+    
+    if(T[carrot_index][0] == T[length-1][0] && T[carrot_index][1] == T[length-1][1])  // on the goal (not considering orientation)
+    {
+      on_the_goal = true;
+      on_a_point = true; 
+    }
+    else if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // on a point
       on_a_point = true; 
     
     
-    if(on_a_point) // going toward a point
+    if(near_the_goal)
+    {
+      // use point navigation to get us the last little but of the way there
+          
+      printf("moving toward goal \n");  
+        
+      float temp_x = robot_pose->x - T[carrot_index][0];
+      float temp_y = robot_pose->y - T[carrot_index][1];
+      float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
+            
+      float dist_factor = dist_diff/0.2;
+      if(dist_factor > 1)
+        dist_factor = 1;
+        
+      TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2));
+      TARGET_TURN = DEFAULT_TURN;
+        
+      return move_toward_pose_fast(T[carrot_index], .05, PI/24, PI/24);
+    }
+    else if(on_a_point) // going toward a point
     {
       TARGET_SPEED = 0;
     }
     else // going toward a segment
     {
-      //TARGET_SPEED = DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2); 
-      
       float delta_time = T[carrot_index+1][3] -  T[carrot_index][3];
       
       float temp_x = T[carrot_index+1][0] - T[carrot_index][0];
@@ -1313,6 +1386,8 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
             
       TARGET_SPEED = (dist_diff/delta_time)*(1-sin(time_ahead_factor*PI/2));   // first factor is expected speed, second factor adjusts based on if we are ahead or behind schedual
+  
+      diverging = is_diverging(robot_pose, T[carrot_index], T[carrot_index+1]); 
     }
     
     
@@ -1328,10 +1403,32 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     
     diff_direction = .5*atan(diff_direction); // scale a bit
     
-    TARGET_TURN = diff_direction; 
+    if(diverging)  // we want to add add aditional turning based on how far the robot is away from the segment
+    {
+      float lateral_dist = min_dist;  // not exactly lateral, but sideways from the segment
+      if(lateral_dist > 0.1)        
+        lateral_dist = 0.1;
+      
+      // get on range 0 to 1
+      lateral_dist = (lateral_dist)/.1;
+        
+      float diff_lateral = 1-sin(lateral_dist*PI/2+(PI/2));       
+              
+      printf("diff_direction: %f, diff_lateral: %f \n", diff_direction, diff_lateral);
+      
+      if(diff_direction < 0)
+        TARGET_TURN = diff_direction - diff_lateral;
+      else
+        TARGET_TURN = diff_direction + diff_lateral;
+      
+    }
+    else
+    {
+      TARGET_TURN = diff_direction; 
+    }
     
     setSpeed(TARGET_SPEED);
-    setTurn(TARGET_TURN);  
+    setTurn(TARGET_TURN);   
     return 0;  
   }
   
@@ -1691,14 +1788,14 @@ int main(int argc, char * argv[])
     
     
     
-    if(trajectory.size() > 1 && robot_pose!= NULL)
-    {
-      float center_x = 0;
-      float center_y = 0;
-      float radius = 0;
-      find_best_turn_circle(robot_pose, trajectory, 0, current_time_index+1, center_x, center_y, radius);
-      publish_turn_circle(center_x, center_y, radius);
-    }
+//     if(trajectory.size() > 1 && robot_pose!= NULL)
+//     {
+//       float center_x = 0;
+//       float center_y = 0;
+//       float radius = 0;
+//       find_best_turn_circle(robot_pose, trajectory, 0, current_time_index+1, center_x, center_y, radius);
+//       publish_turn_circle(center_x, center_y, radius);
+//     }
     
     // printf("user state: %d \n", user_state);
     
@@ -1711,14 +1808,14 @@ int main(int argc, char * argv[])
     {
       if(multi_robot_mode)
       {
-        if(within_dist_of_goal(.2) == 0)
+        //if(within_dist_of_goal(.2) == 0)
           follow_trajectory(trajectory, 0, new_global_path); // last argument should be changed to 1 the first time and 0 after that for speed
-        else
-        {
-          move_toward_pose(global_goal_pose, .3, PI/12);
+        //else
+        //{
+        //  move_toward_pose(global_goal_pose, .3, PI/12);
           ///printf("here ---\n");
 
-        }
+        //}
       }
       else
       { 
