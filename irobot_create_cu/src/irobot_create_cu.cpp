@@ -1240,10 +1240,8 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float this_orientation_diff;
   while(min_orientation_diff < -PI) 
     min_orientation_diff += 2*PI;
-    
   while(min_orientation_diff > PI)
-    min_orientation_diff -= 2*PI;
-    
+    min_orientation_diff -= 2*PI; 
   if(min_orientation_diff < 0)
     min_orientation_diff *= -1;
     
@@ -1256,10 +1254,8 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       
     while(this_orientation_diff < -PI)
       this_orientation_diff += 2*PI;
-    
     while(this_orientation_diff > PI)
       this_orientation_diff -= 2*PI;
-    
     if(this_orientation_diff < 0)
       this_orientation_diff *= -1;
         
@@ -1275,9 +1271,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   // find "now" in terms of the time path coordinate
   ros::Duration elapsed_time = ros::Time::now() - move_start_time;
   float time_now = elapsed_time.toSec() + time_look_ahead;
-    
   current_time_index = 0;
-    
   for(int i = 0; i < length; i++)
   {
     current_time_index = i;
@@ -1287,7 +1281,6 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   
   // set the target location so we can broadcast it for visualization
   t_target_ind = current_time_index;
-  
   //printf("t_target_ind = %d of %d \n", t_target_ind, length);
   
   int carrot_index; // point we actually steer at
@@ -1297,7 +1290,6 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float time_ahead = T[current_place_index][3] - T[current_time_index][3];
   //printf("%f secs ahead of schedule \n", time_ahead);
    
-  
   // calculate flags to use later for figuring out what to do based on different situations
   bool ahead_of_schedual = false;
   if(time_ahead > 0) // we are ahead of schedual
@@ -1327,152 +1319,136 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     time_ahead = -time_ahead_rad;
   float time_ahead_factor = time_ahead/time_ahead_rad; // gives number between -1 and 1
   
-  
-  
-  
-  
-  if(false) // too_far_away)
+
+  // different control modalities start here
+  if(ahead_of_schedual && !too_far_away)
   {
-    printf("too far away from target\n");   
-    setSpeed(0);
-    setTurn(0); 
-    return 0; 
+    carrot_index = current_time_index;  // set carrot as the current time index because we are close enough to where we should be in both time and distance
   }
-  else // not too far away from thr target
+  else // behind schedual or too far away
+  {   
+    // set carrot point based on a little ahead of where we are now
+    float time_ahead = .5;
+    carrot_index = current_place_index;
+    while(carrot_index < length - 1)
+    {    
+      if(T[carrot_index][3] - T[current_place_index][3] >= time_ahead)
+        break;
+        
+      carrot_index++;
+    }
+    while(carrot_index < length - 1)  // ignore rest of pivots
+    {
+      if(T[carrot_index][1] != T[carrot_index+1][1] || T[carrot_index][0] != T[carrot_index+1][0])
+        break;
+        
+      carrot_index++;
+    }
+    if(carrot_index >= current_time_index)  // don't want to end up going too ahead of where we should be
+        carrot_index = current_time_index;  
+  }
+    
+  publish_turn_circle(T[carrot_index][0], T[carrot_index][1], .1); // publish for visualization
+    
+  if(T[carrot_index][0] == T[length-1][0] && T[carrot_index][1] == T[length-1][1])  // steering at the goal (not considering orientation)
   {
-    if(ahead_of_schedual || !too_far_away)
-    {
-      carrot_index = current_time_index;  // set carrot as the current time index because we are close enough to where we should be
-    }
-    else // behind schedual and too far away
-    {
-     
-      // set carrot point based on a little ahead of where we are now
-      float time_ahead = .5;
-      carrot_index = current_place_index;
-      while(carrot_index < length - 1)
-      {    
-        if(T[carrot_index][3] - T[current_place_index][3] >= time_ahead)
-          break;
-        
-        carrot_index++;
-      }
-      while(carrot_index < length - 1)  // ignore rest of pivots
-      {
-        if(T[carrot_index][1] != T[carrot_index+1][1] || T[carrot_index][0] != T[carrot_index+1][0])
-          break;
-        
-        carrot_index++;
-      }
-      if(carrot_index >= current_time_index)
-          carrot_index = current_time_index;  
-    }
+    //printf("goal -- %d:[%f, %f], %d:[%f, %f], %d \n", carrot_index, T[carrot_index][0], T[carrot_index][1], length-1, T[length-1][0], T[length-1][1], current_place_index);
+    near_the_goal = true;
+    on_the_goal = true;
+    on_a_point = true; 
+  }
+  else if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // steering at a point
+    on_a_point = true; 
     
-    publish_turn_circle(T[current_place_index][0], T[current_place_index][1], .1);
+  if(near_the_goal)
+  {
+    // use point navigation to get us the last little bit of the way there    
     
+    // find distance to goal from robot
+    float temp_x = robot_pose->x - T[length-1][0];
+    float temp_y = robot_pose->y - T[length-1][1];
+    float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
     
-    if(T[carrot_index][0] == T[length-1][0] && T[carrot_index][1] == T[length-1][1])  // on the goal (not considering orientation)
-    {
-      on_the_goal = true;
-      on_a_point = true; 
-    }
-    else if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // on a point
-      on_a_point = true; 
-    
-    
-    if(near_the_goal)
-    {
-      // use point navigation to get us the last little bit of the way there
-          
-      printf("moving toward goal \n");  
+    // get a factor between 0 and 1 for how far away we are
+    float dist_factor = dist_diff/0.2;
+    if(dist_factor > 1)
+      dist_factor = 1;
         
-      float temp_x = robot_pose->x - T[length-1][0];
-      float temp_y = robot_pose->y - T[length-1][1];
-      float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
-            
-      float dist_factor = dist_diff/0.2;
-      if(dist_factor > 1)
-        dist_factor = 1;
+    //printf("moving toward goal, %f \n", dist_factor);  
+    
+    TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2));
+    TARGET_TURN = DEFAULT_TURN;
         
-      TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2));
-      TARGET_TURN = DEFAULT_TURN;
-        
-      return move_toward_pose_fast(T[length-1], .05, PI/24, PI/24);
-    }
-    else if(on_a_point) // going toward a point
-    {
-      TARGET_SPEED = 0;
-    }
-    else // going toward a segment
-    {
-      float delta_time = T[carrot_index+1][3] -  T[carrot_index][3];
+    return move_toward_pose_fast(T[length-1], .05, PI/24, PI/24);
+  }
+  else if(on_a_point) // going toward a point
+  {
+    TARGET_SPEED = 0;
+  }
+  else // going toward a segment
+  {
+    float delta_time = T[carrot_index+1][3] -  T[carrot_index][3];
       
-      float temp_x = T[carrot_index+1][0] - T[carrot_index][0];
-      float temp_y = T[carrot_index+1][1] - T[carrot_index][1];
-      float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
+    float temp_x = T[carrot_index+1][0] - T[carrot_index][0];
+    float temp_y = T[carrot_index+1][1] - T[carrot_index][1];
+    float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
             
-      TARGET_SPEED = (dist_diff/delta_time)*(1-sin(time_ahead_factor*PI/2));   // first factor is expected speed, second factor adjusts based on if we are ahead or behind schedual
+    TARGET_SPEED = (dist_diff/delta_time)*(1-sin(time_ahead_factor*PI/2));   // first factor is expected speed, second factor adjusts based on if we are ahead or behind schedual
   
-      diverging = is_diverging(robot_pose, T[carrot_index], T[carrot_index+1]); 
-    }
+    diverging = is_diverging(robot_pose, T[carrot_index], T[carrot_index+1]); 
+  }
     
+  // try to match approperiate heading
+  float desired_direction = T[carrot_index][2];
+  float current_direction = robot_pose->alpha;
+  float diff_direction = desired_direction - current_direction;  
+  // find diff_direction on range -PI to PI
+  while(diff_direction > PI)
+    diff_direction -= 2*PI;
+  while(diff_direction < -PI)
+    diff_direction += 2*PI;
     
-    // try to match approperiate heading
-    float desired_direction = T[carrot_index][2];
-    float current_direction = robot_pose->alpha;
-    float diff_direction = desired_direction - current_direction;  
-    // find diff_direction on range -PI to PI
-    while(diff_direction > PI)
-      diff_direction -= 2*PI;
-    while(diff_direction < -PI)
-      diff_direction += 2*PI;
+  diff_direction = .5*atan(diff_direction); // scale a bit
     
-    diff_direction = .5*atan(diff_direction); // scale a bit
-    
-    if(diverging)  // we want to add add aditional turning based on how far the robot is away from the segment
-    {
-      float lateral_dist = min_dist;  // not exactly lateral, but sideways from the segment
-      if(lateral_dist > 0.1)        
-        lateral_dist = 0.1;
+  if(diverging)  // we want to add add aditional turning based on how far the robot is away from the segment
+  {
+    float lateral_dist = min_dist;  // not exactly lateral, but sideways from the segment
+    if(lateral_dist > 0.1)        
+      lateral_dist = 0.1;
       
-      // get on range 0 to 1
-      lateral_dist = (lateral_dist)/.1;
+    // get on range 0 to 1
+    lateral_dist = (lateral_dist)/.1;
         
-      float diff_lateral = 1-sin(lateral_dist*PI/2+(PI/2));       
+    float diff_lateral = 1-sin(lateral_dist*PI/2+(PI/2));       
               
-      //printf("diff_direction: %f, diff_lateral: %f \n", diff_direction, diff_lateral);
+    //printf("diff_direction: %f, diff_lateral: %f \n", diff_direction, diff_lateral);
       
-      if(diff_direction < 0)
-        TARGET_TURN = diff_direction - diff_lateral;
-      else
-        TARGET_TURN = diff_direction + diff_lateral;
-      
-    }
+    if(diff_direction < 0)
+      TARGET_TURN = diff_direction - diff_lateral;
     else
-    {
-      TARGET_TURN = diff_direction; 
-    }
-    
-    setSpeed(TARGET_SPEED);
-    setTurn(TARGET_TURN);   
-    return 0;  
+      TARGET_TURN = diff_direction + diff_lateral; 
   }
+  else
+  {
+    TARGET_TURN = diff_direction; 
+  }
+    
+  setSpeed(TARGET_SPEED);
+  setTurn(TARGET_TURN);   
+  return 0;  
+
   
   
   
   
   
-  
-  
-  
-  
-  // while carrot_index is within 0.2, look further down the path
-  carrot_index = current_place_index;
- 
-  
-  
-  
-   this_dist = min_dist; 
+//   // while carrot_index is within 0.2, look further down the path
+//   carrot_index = current_place_index;
+//  
+//   
+//   
+//   
+//    this_dist = min_dist; 
 //   
 //   float this_rad = 0;
 //   float th;
@@ -1505,45 +1481,45 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
 //     if(T[carrot_index][0] == T[carrot_index-1][0] && T[carrot_index][1] == T[carrot_index-1][1])
 //       break;
 //   }    
-  
-  
-  
-  //float center_x = 0;
-  //float center_y = 0;
-  //float radius = 0;
-  //find_best_turn_circle(robot_pose, T, current_place_index, current_time_index+1, center_x, center_y, radius);
-  //publish_turn_circle(center_x, center_y, radius);
-  
-  if(carrot_index >= length-1)  // on a point (the goal)
-  {
-    TARGET_SPEED = 0;
-  }
-  if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // on a point
-  {
-    TARGET_SPEED = 0;  
-  }
-  else // going along a path segment
-  {
-    DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2); 
-    
-    // think about setting speed to 0 here if abs(T[carrot_index+1][2] - T[carrot_index][2]) > pi/6
-  }
-  
-  TARGET_TURN = 0 ; //DEFAULT_TURN - DEFAULT_TURN*sin(time_ahead_factor*PI/2);
-      
- 
-  
- // else if(this_dist <= .2 || on_a_point) // we want to rotate to the orientation of the carrot
- // {
-      
-    
-  
- // }
-  //else
-  //  move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
-  
-
-  
+//   
+//   
+//   
+//   //float center_x = 0;
+//   //float center_y = 0;
+//   //float radius = 0;
+//   //find_best_turn_circle(robot_pose, T, current_place_index, current_time_index+1, center_x, center_y, radius);
+//   //publish_turn_circle(center_x, center_y, radius);
+//   
+//   if(carrot_index >= length-1)  // on a point (the goal)
+//   {
+//     TARGET_SPEED = 0;
+//   }
+//   if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // on a point
+//   {
+//     TARGET_SPEED = 0;  
+//   }
+//   else // going along a path segment
+//   {
+//     DEFAULT_SPEED - DEFAULT_SPEED*sin(time_ahead_factor*PI/2); 
+//     
+//     // think about setting speed to 0 here if abs(T[carrot_index+1][2] - T[carrot_index][2]) > pi/6
+//   }
+//   
+//   TARGET_TURN = 0 ; //DEFAULT_TURN - DEFAULT_TURN*sin(time_ahead_factor*PI/2);
+//       
+//  
+//   
+//  // else if(this_dist <= .2 || on_a_point) // we want to rotate to the orientation of the carrot
+//  // {
+//       
+//     
+//   
+//  // }
+//   //else
+//   //  move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
+//   
+// 
+//   
   
   
   
