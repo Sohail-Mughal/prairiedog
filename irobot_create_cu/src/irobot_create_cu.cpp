@@ -1383,7 +1383,26 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   }
   else if(on_a_point) // going toward a point
   {
-    TARGET_SPEED = 0;
+    if(!too_far_away) // basically at point
+    {
+      TARGET_SPEED = 0;
+    }
+    else // not at point yet
+    {
+      // find distance to carrot from robot
+      float temp_x = robot_pose->x - T[carrot_index][0];
+      float temp_y = robot_pose->y - T[carrot_index][1];
+      float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
+    
+      // get a factor between 0 and 1 for how far away we are
+      float dist_factor = dist_diff/0.2;
+      if(dist_factor > 1)
+        dist_factor = 1;
+        
+      printf("moving toward point, %f \n", dist_factor);  
+    
+      TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2)); 
+    }
   }
   else // going toward a segment
   {
@@ -1398,8 +1417,13 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     diverging = is_diverging(robot_pose, T[carrot_index], T[carrot_index+1]); 
   }
     
-  // try to match approperiate heading
-  float desired_direction = T[carrot_index][2];
+  // find approperiate heading
+  float desired_direction;
+  if(too_far_away) // desired dirction is directly at carrot
+    desired_direction = atan2(T[carrot_index][1] - robot_pose->y, T[carrot_index][0] - robot_pose->x);
+  else // desired direction is along carrot
+    desired_direction = T[carrot_index][2];
+   
   float current_direction = robot_pose->alpha;
   float diff_direction = desired_direction - current_direction;  
   // find diff_direction on range -PI to PI
@@ -1408,9 +1432,12 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   while(diff_direction < -PI)
     diff_direction += 2*PI;
     
+  if(diff_direction < -PI/3 || diff_direction > PI/3) // if not facing kind of in the correct direction, just rotate
+    TARGET_SPEED = 0;
+  
   diff_direction = .5*atan(diff_direction); // scale a bit
     
-  if(diverging)  // we want to add add aditional turning based on how far the robot is away from the segment
+  if(diverging && !too_far_away)  // we want to add add aditional turning based on how far the robot is away from the segment
   {
     float lateral_dist = min_dist;  // not exactly lateral, but sideways from the segment
     if(lateral_dist > 0.1)        
