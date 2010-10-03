@@ -1105,6 +1105,9 @@ void MultiAgentSolution::SendMessage(float send_prob) // sends a message contain
 #ifndef not_using_globals
 void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above function just uses a file, this uses UDP
 {    
+  if(BestSolution.size() < 1)
+    return;
+    
   //printf("%d %d, %d %d\n", pctr, ectr, pctr_all, ectr_all);  
   pctr = 0;
   ectr = 0;
@@ -1199,7 +1202,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
     // best path
-    int num_points = BestSolution.size();
+    int num_points = BestSolution.size();       
     int num_dims = BestSolution[0].size();
     sprintf(temp_buffer, "p:%d\n", num_points);\
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
