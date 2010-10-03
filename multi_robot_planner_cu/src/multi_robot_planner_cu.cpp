@@ -34,6 +34,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <time.h>
+
 #include <math.h>
 #include <list>
 #include <sstream>
@@ -282,6 +283,7 @@ void destroy_pose(POSE* pose)
 {
   if(pose != NULL)
     free(pose);
+    pose = NULL;
 }
 
 // prints pose on command line
@@ -300,6 +302,8 @@ void print_pose(POSE* pose)
 /*--------------------------- ROS callbacks -----------------------------*/
 void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {    
+  //printf("--- 1 \n");  
+    
   /*
   if((msg->pose.position.x/map_resolution) < 1.)
     return;
@@ -341,7 +345,9 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 }
 
 void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
-{    
+{  
+   //printf("--- 2 \n");   
+    
   /*
   if((msg->pose.position.x/map_resolution) < 1.)
     return;
@@ -399,6 +405,8 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 /*---------------------- ROS Publisher Functions ------------------------*/
 void publish_global_path(vector<vector<float> > path, vector<float> times_p)
 {   
+   //printf("--- 3 \n");   
+    
   while(change_token_used)
     {printf("change token used, publish path \n");}
   change_token_used = true;
@@ -451,6 +459,8 @@ void publish_global_path(vector<vector<float> > path, vector<float> times_p)
 
 void publish_system_update(int data)
 {
+   //printf("--- 4 \n");   
+    
   std_msgs::Int32 msg;  
   
   msg.data = data;
@@ -460,31 +470,30 @@ void publish_system_update(int data)
 void publish_planning_area(const NavScene& S)
 {
   geometry_msgs::Polygon msg;
-  
+
   float x_min = -S.translation[0];
   float y_min = -S.translation[1];
   float x_max = x_min + S.dim_max[0];
   float y_max = y_min + S.dim_max[1];        
-  
+
   msg.points.resize(4);
-  
+
   msg.points[0].x = x_min;
   msg.points[0].y = y_min;
   msg.points[0].z = 0;
-  
+
   msg.points[1].x = x_max;
   msg.points[1].y = y_min;
   msg.points[1].z = 0;
-  
+
   msg.points[2].x = x_max;
   msg.points[2].y = y_max;
   msg.points[2].z = 0;
-  
+
   msg.points[3].x = x_min;
   msg.points[3].y = y_max;
   msg.points[3].z = 0;
-  
-  
+
   planning_area_pub.publish(msg); 
 }
 
@@ -492,6 +501,9 @@ void publish_planning_area(const NavScene& S)
 
 bool load_pose()
 {
+    
+  //printf("--- 6 \n"); 
+   
   localization_cu::GetPose::Request req;
   localization_cu::GetPose::Response resp;
   ROS_INFO("Requesting the pose...\n");
@@ -540,6 +552,8 @@ bool load_pose()
 
 bool load_goal()
 {
+   //printf("--- 7 \n");   
+    
   localization_cu::GetPose::Request req;
   
   localization_cu::GetPose::Response resp;
@@ -652,7 +666,7 @@ int main(int argc, char** argv)
   // set up ROS topic publishers
   global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
   system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 10);
-  planning_area_pub = nh.advertise<geometry_msgs::Polygon>("/cu/planning_area_cu", 10);
+  planning_area_pub = nh.advertise<geometry_msgs::Polygon>("/cu/planning_area_cu", 1);
   
   // spin ros once
   ros::spinOnce();
@@ -944,7 +958,7 @@ int main(int argc, char** argv)
       now_time = clock(); 
   }
   
-  printf("here in main loop \n");
+  printf("starting planning phase \n");
   
   // this is where the planning stuff starts
   // set up the scene based on all start/goal locations and any maps
@@ -1048,14 +1062,18 @@ int main(int argc, char** argv)
     if(time_left_to_plan < message_wait_time)
       this_time_to_plan = time_left_to_plan;
     
+    int last_time_left_floor = (int)time_left_to_plan;
     while(this_time_to_plan > 0)
     {       
+      if(last_time_left_floor != (int)time_left_to_plan)
+      {
+        printf("\ntime left to plan: %f\n", time_left_to_plan);
+        last_time_left_floor = (int)time_left_to_plan;
         
-      printf("\ntime left to plan: %f\n", Globals.planning_time_remaining[agent_number]);
-      //for(int k = 0; k < Globals.number_of_agents; k++)
-      //  printf("agent %d: %f \n", k, Globals.planning_time_remaining[k]);
-      //printf("\n");
-        
+        //for(int k = 0; k < Globals.number_of_agents; k++)
+        //  printf("agent %d: %f \n", k, Globals.planning_time_remaining[k]);
+        //printf("\n");
+      }
         
       now_time = clock();
      
@@ -1153,15 +1171,14 @@ int main(int argc, char** argv)
   
   // now we just broadcast the final solution, in case other robots didn't get it
   
-  destroy_pose(robot_pose);
-  //destroy_pose(goal_pose);
-  
   while(!display_path) // if we want to display the path then we ignore this part
   {       
     //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
     //printf("%f %f %f \n", elookup_sum/en_lookup, eout_collision/en_collision, eout_sum/en_out );
    
       
+    //printf("----------------------\n");
+  
     start_wait_t = clock();
     now_time = clock();
     while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time)
@@ -1169,36 +1186,45 @@ int main(int argc, char** argv)
       now_time = clock();
     }
 
-    if(mode == 2 && agent_number != 0)
+    if(mode == 2 && agent_number != 0) 
       continue; 
 
+    //printf("getting \n");
     MultAgSln.GetMessages(startc, goalc);
+    
+    //printf("sending \n");
     MultAgSln.SendMessageUDP(prob_success);
 
+    
     // now extract this robot's path and send on to the controller
     
     vector<vector<float> > mult_agent_bst_sln_doubled;
     
+    //printf("here 1 \n");
     double_up_points(MultAgSln.BestSolution, mult_agent_bst_sln_doubled);
-    
+    //printf("here 2 \n");
     calculate_rotation(mult_agent_bst_sln_doubled);
-    
+    //printf("here3 \n");
     //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
-    
     extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, agent_number, world_dims);
-    
+    //printf("here 4 \n");
     calculate_times(Parametric_Times, mult_agent_bst_sln_doubled, target_mps, target_rps);
-
     //for(int i = 0; i < Parametric_Times.size(); i++)
     //{
     //  printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
     //}
     //getchar();
-    
+    //printf("here 5 \n");
     publish_global_path(ThisAgentsPath, Parametric_Times); 
+    //printf("here 6 \n");
     publish_planning_area(Scene);
- 
-    //printf("moving\n");
+
+    //printf("spinning \n");
+    ros::spinOnce(); ///////////////// error only happens when spinning
+    
+    //printf("sleeping \n");
+    loop_rate.sleep();
+    // printf("moving\n");
   }
 
   #ifdef using_glut
@@ -1209,10 +1235,20 @@ int main(int argc, char** argv)
   ros::spinOnce();
   loop_rate.sleep();
     
+  printf("here 8 \n");
+  Globals.kill_master = true; // shutdown listener thread
+  printf("here 9 \n");
+  
   // shutdown ros stuff
   pose_sub.shutdown();
   goal_sub.shutdown();
   global_path_pub.shutdown();
   system_update_pub.shutdown();
   planning_area_pub.shutdown();
+  
+  destroy_pose(robot_pose);
+  destroy_pose(goal_pose);
+  
+  printf("exiting program \n");
+  return 0;
 }
