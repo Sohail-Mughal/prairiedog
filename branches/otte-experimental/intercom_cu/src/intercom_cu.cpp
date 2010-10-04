@@ -71,6 +71,8 @@
 
 #include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
+#include "multi_robot_planner_cu/PolygonArray.h"
+
 #include "std_msgs/Int32.h"
 
 
@@ -81,6 +83,7 @@
 #include "intercom_cu/Pose2D_CU_ID.h"
 #include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
 #include "intercom_cu/Polygon_CU_ID.h"
+#include "intercom_cu/PolygonArray_CU_ID.h"
 
 #include "ros_to_buffer.cpp"
 
@@ -102,7 +105,7 @@ bool using_tf = true;              // when set to true, use the tf package
 int max_message_size = 500000;
 size_t max_network_message_size = 15000; // messages larger than this are split into multiple messages to be sent
 
-int NUM_MESSAGE_TYPES = 17;
+int NUM_MESSAGE_TYPES = 18;
   
 // global ROS subscriber handles
 ros::Subscriber selected_robot_sub;
@@ -123,6 +126,7 @@ ros::Subscriber system_update_sub;
 ros::Subscriber target_pose_sub;
 ros::Subscriber planning_area_sub;
 ros::Subscriber turn_circle_sub;
+ros::Subscriber obstacles_sub;
 
 // global ROS publisher handles
 ros::Publisher pose_pub;
@@ -141,6 +145,7 @@ ros::Publisher user_state_pub;
 ros::Publisher target_pose_pub;
 ros::Publisher planning_area_pub;
 ros::Publisher turn_circle_pub;
+ros::Publisher obstacles_pub;
 
 // global ROS provide service server handles
 ros::ServiceServer get_map_srv;
@@ -1102,6 +1107,28 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       turn_circle_pub.publish(msg);   
     }
   }
+  else if(message_type == 17 && G->listen_list[17]) // it is an obstacle array
+  {
+    if(G->listen_mode_list[17] == 0)
+    {
+      multi_robot_planner_cu::PolygonArray msg;
+      buffer_ptr = extract_from_buffer_PolygonArray(buffer_ptr, msg, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+      
+      obstacles_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[16] == 1)
+    {
+      intercom_cu::PolygonArray_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_PolygonArray(buffer_ptr, msg.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return;
+
+      obstacles_pub.publish(msg);   
+    }
+  }
 }  
     
     
@@ -1548,6 +1575,18 @@ void turn_circle_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 14);                           // send 
 }
 
+void obstacles_callback(const multi_robot_planner_cu::PolygonArray::ConstPtr& msg)
+{    
+  uint this_msg_size = max_message_size; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 17,0,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_PolygonArray(buffer_ptr, *msg, buffer_max);                      // add posestamped
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 14);                           // send 
+}
+
 int main(int argc, char * argv[]) 
 {    
   // init ROS
@@ -1619,6 +1658,8 @@ int main(int argc, char * argv[])
     planning_area_sub = nh.subscribe("/cu/planning_area_cu", 1, planning_area_callback);
   if(Globals.send_list[16])
     turn_circle_sub = nh.subscribe("/cu/turn_circle_cu", 1, turn_circle_callback);
+  if(Globals.send_list[17])
+    obstacles_sub = nh.subscribe("/cu/obstacles_cu", 1, obstacles_callback);
   
   // set up ROS topic publishers
   if(Globals.listen_list[0])
@@ -1718,6 +1759,13 @@ int main(int argc, char * argv[])
       turn_circle_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/turn_circle_cu", 1);
     else if(Globals.listen_mode_list[16] == 1) 
       turn_circle_pub = nh.advertise<intercom_cu::Pose2D_CU_ID>("/cu_multi/turn_circle_cu", 1);
+  }
+  if(Globals.listen_list[17])
+  {
+    if(Globals.listen_mode_list[16] == 0) 
+      obstacles_pub = nh.advertise<multi_robot_planner_cu::PolygonArray>("/cu/obstacles_cu", 1);
+    else if(Globals.listen_mode_list[16] == 1) 
+      obstacles_pub = nh.advertise<intercom_cu::PolygonArray_CU_ID>("/cu_multi/obstacles_cu", 1);
   }
   
   // set up service servers
@@ -1820,7 +1868,8 @@ int main(int argc, char * argv[])
   target_pose_sub.shutdown();
   planning_area_sub.shutdown();
   turn_circle_sub.shutdown();
-  
+  obstacles_sub.shutdown();
+          
   // destroy publishers
   pose_pub.shutdown();
   global_path_pub.shutdown();
@@ -1838,7 +1887,8 @@ int main(int argc, char * argv[])
   target_pose_pub.shutdown();
   planning_area_pub.shutdown();
   turn_circle_pub.shutdown();
-  
+  obstacles_pub.shutdown();
+          
   // destroy service providers
   get_map_srv.shutdown();
   

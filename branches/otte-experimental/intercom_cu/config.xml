@@ -58,6 +58,11 @@
           <agent id="2"/>  
         </to>
       </message> 
+      <message type="17" mode="2">
+        <to>
+          <agent id="2"/>  
+        </to>
+      </message> 
     </broadcast>
     <receive>
       <message type="6"/>
@@ -125,6 +130,11 @@
           <agent id="2"/>  
         </to>
       </message> 
+      <message type="17" mode="2">
+        <to>
+          <agent id="2"/>  
+        </to>
+      </message> 
     </broadcast>
     <receive>
       <message type="6"/>
@@ -155,6 +165,7 @@
       <message type="14" mode="1"/>
       <message type="15" mode="1"/>
       <message type="16" mode="1"/>
+      <message type="17" mode="1"/>
     </receive> 
   </agent>
   

@@ -349,6 +349,23 @@ size_t add_to_buffer_Polygon(size_t buffer_ptr, const geometry_msgs::Polygon& po
   return buffer_ptr;
 }
 
+size_t add_to_buffer_PolygonArray(size_t buffer_ptr, const multi_robot_planner_cu::PolygonArray& p_array, size_t buffer_max) // adds the PolygonArray at the buffer pointed to by (void*)buffer_ptr, returns the next free location in the buffer, errors if try to insert past buffer_max
+{
+  // add header  
+  buffer_ptr = add_to_buffer_Header(buffer_ptr, p_array.header, buffer_max);
+  
+  // add number of polygons
+  uint num_points = p_array.polygons.size();
+  buffer_ptr = add_to_buffer_uint(buffer_ptr, num_points, buffer_max);
+  
+  // add each polygon
+  for(uint i = 0; i < num_points; i++)
+    buffer_ptr = add_to_buffer_Polygon(buffer_ptr, p_array.polygons[i], buffer_max);
+  
+  
+  return buffer_ptr;
+}
+
 /*------------ functions for extracting ros data to a buffer ------------*/
 size_t extract_from_buffer_int8(size_t buffer_ptr, int8_t& i, size_t buffer_max) // extracts int i from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
 {
@@ -815,6 +832,35 @@ size_t extract_from_buffer_Polygon(size_t buffer_ptr, geometry_msgs::Polygon& po
       return 0;
     
     poly.points[i] = point;
+  }
+  
+  return buffer_ptr;
+}
+
+size_t extract_from_buffer_PolygonArray(size_t buffer_ptr, multi_robot_planner_cu::PolygonArray& p_array, size_t buffer_max) // extracts PolygonArray from (void*)buffer_ptr, returns 0 if try to extract past buffer_max, returns the next free location in the buffer
+{
+  // extract header  
+  buffer_ptr = extract_from_buffer_Header(buffer_ptr, p_array.header, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
+  // extract number of points
+  uint num_points;
+  buffer_ptr = extract_from_buffer_uint(buffer_ptr, num_points, buffer_max);
+  if(buffer_ptr == 0)
+    return 0;
+  
+  // extract each point
+  p_array.polygons.resize(num_points);
+  
+  for(uint i = 0; i < num_points; i++)
+  {
+    geometry_msgs::Polygon polygon;
+    buffer_ptr = extract_from_buffer_Polygon(buffer_ptr, polygon, buffer_max);
+    if(buffer_ptr == 0)
+      return 0;
+    
+    p_array.polygons[i] = polygon;
   }
   
   return buffer_ptr;
