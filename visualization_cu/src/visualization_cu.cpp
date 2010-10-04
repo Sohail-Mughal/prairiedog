@@ -53,6 +53,8 @@
 
 #include "hokuyo_listener_cu/PointCloudWithOrigin.h"
 
+#include "multi_robot_planner_cu/PolygonArray.h"
+
 #include "std_msgs/Int32.h"
 
 #include "intercom_cu/PoseStamped_CU_ID.h"
@@ -62,6 +64,7 @@
 #include "intercom_cu/Pose2D_CU_ID.h"
 #include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
 #include "intercom_cu/Polygon_CU_ID.h"
+#include "intercom_cu/PolygonArray_CU_ID.h"
 
 #ifndef PI
   #define PI 3.1415926535897
@@ -156,6 +159,9 @@ vector<POINT_LIST*> global_paths;
 vector<POINT_LIST*> laser_scan_data;
 vector<POINT_LIST*> planning_areas;
 vector<vector<float> > turn_circles; // each is [x, y, rad]
+vector<vector<vector<vector<float> > > > obstacles; // for each robot: list of polygons, each polygon is a list of points [x, y]
+
+
 int num_robots = 1;
 int current_robot = 0;
 
@@ -195,6 +201,9 @@ ros::Subscriber planning_area_multi_sub;
 
 ros::Subscriber turn_circle_sub;
 ros::Subscriber turn_circle_multi_sub;
+
+ros::Subscriber obstacles_sub;
+ros::Subscriber obstacles_multi_sub;
 
 // global ROS publisher handles
 ros::Publisher goal_pub;
@@ -305,7 +314,6 @@ void draw_string(float* pos, float pad_left, float pad_bottom, const char* strin
     for(int i = 0; string[i] != '\0'; i++)
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, string[i]);
 }
-
 
 /*---------------------- MAP --------------------------------------------*/
 struct MAP
@@ -571,6 +579,34 @@ void draw_turn_circles(const vector<vector<float> >& turn_cs, float* clr, float 
   }
     
   glPopMatrix(); 
+}
+
+// draws pl in the gui at buffer height z_height as line segments, where pl is a list of [x y]
+void draw_point_list_2D_lines(const vector<vector<float> >& pl, float* color, float z_height)
+{    
+  glPushMatrix(); 
+    
+  glTranslatef(-1, -1, z_height);
+  
+  if(costmap != NULL)
+  {
+    float map_rad = 2/(float)max(costmap->height, costmap->width); 
+    glScaled(map_rad,map_rad,1);
+  }
+    
+  if(pl.size() > 0)
+  {
+    glBegin(GL_LINE_STRIP);
+    glColor3f(color[0], color[1], color[2]); 
+    
+    int length = pl.size();
+    
+    for(int i = 0; i < length; i++)  
+      glVertex2f(pl[i][0], pl[i][1]);
+    
+    glEnd(); 
+  } 
+  glPopMatrix();
 }
 
 /* ----------------------- POSE -----------------------------------------*/
@@ -1007,6 +1043,26 @@ void draw_planning_areas(const vector<POINT_LIST*>& p_areas) // draws the planni
     }
   }
 }
+
+void draw_obstacles(const vector<vector<vector<vector<float> > > >& obs_map_list) // draws list of polygon obstacles from each robot
+{
+  for(int i = 0; i < num_robots; i++)
+  {
+    int num_polygons = obs_map_list[i].size();  
+    
+    for(int j = 0; j < num_polygons; j++)
+    {
+      if(obs_map_list[i][j].size() < 1)
+          continue;
+        
+      if(i == current_robot)
+        draw_point_list_2D_lines(obs_map_list[i][j], RED, .99);
+      else
+        draw_point_list_2D_lines(obs_map_list[i][j], RED, .99);   
+    }
+  }
+}   
+   
 
 /*----------------------- GRID_LIST ------------------------------------*/
 
@@ -1759,6 +1815,44 @@ void turn_circle_multi_callback(const intercom_cu::Pose2D_CU_ID::ConstPtr& msg)
   turn_circle_callback_helper(msg->data, msg->id.data);
 }  
 
+void obstacles_callback_helper(const multi_robot_planner_cu::PolygonArray msg, int robot_id)
+{
+  float x_scl = 1/costmap->resolution;
+  float y_scl = 1/costmap->resolution;
+  
+  int num_obstacles = msg.polygons.size();
+  obstacles[robot_id].resize(num_obstacles);
+   
+  for(int i = 0; i < num_obstacles; i++)
+  {
+    int num_points = msg.polygons[i].points.size();
+      
+    obstacles[robot_id][i].resize(num_points+1);
+    for(int j = 0; j < num_points; j++)
+    {
+      obstacles[robot_id][i][j].resize(2); 
+      obstacles[robot_id][i][j][0] = x_scl*msg.polygons[i].points[j].x;
+      obstacles[robot_id][i][j][1] = y_scl*msg.polygons[i].points[j].y;
+    }
+    obstacles[robot_id][i][num_points].resize(2); 
+    obstacles[robot_id][i][num_points][0] = x_scl*msg.polygons[i].points[0].x;
+    obstacles[robot_id][i][num_points][1] = y_scl*msg.polygons[i].points[0].y;
+  }
+  
+  display_flag = 1;
+  glutPostRedisplay(); 
+}
+
+void obstacles_callback(const multi_robot_planner_cu::PolygonArray::ConstPtr& msg)
+{
+  obstacles_callback_helper(*msg, current_robot);
+}
+
+void obstacles_multi_callback(const intercom_cu::PolygonArray_CU_ID::ConstPtr& msg)
+{
+  obstacles_callback_helper(msg->data, msg->id.data);
+} 
+
 /*----------------------- ROS Publisher Functions -----------------------*/
 void publish_user_control(int x, int theta)
 {
@@ -1847,6 +1941,9 @@ void display()
 
      // draw planning areas
      draw_planning_areas(planning_areas);
+     
+     // draw (polygon) obstacles
+     draw_obstacles(obstacles);
      
      // draw the local path
     // if(local_path != NULL)
@@ -2638,6 +2735,12 @@ void cleanup()
   planning_area_sub.shutdown();
   planning_area_multi_sub.shutdown();
   
+  turn_circle_sub.shutdown();
+  turn_circle_multi_sub.shutdown();
+  
+  obstacles_sub.shutdown();
+  obstacles_multi_sub.shutdown();
+  
   goal_pub.shutdown();
   new_pose_pub.shutdown();
   user_control_pub.shutdown();
@@ -2741,6 +2844,8 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_robots; i++)
     turn_circles[i].resize(3,0);
   
+  obstacles.resize(num_robots);
+  
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
   pose_multi_sub = nh.subscribe("/cu_multi/pose_cu", 1, pose_multi_callback);
@@ -2776,6 +2881,9 @@ int main(int argc, char *argv[])
   
   turn_circle_sub = nh.subscribe("/cu/turn_circle_cu", 1, turn_circle_callback);
   turn_circle_multi_sub = nh.subscribe("/cu_multi/turn_circle_cu", 1, turn_circle_multi_callback);
+  
+  obstacles_sub = nh.subscribe("/cu/obstacles_cu", 1, obstacles_callback);
+  obstacles_multi_sub = nh.subscribe("/cu_multi/obstacles_cu", 1, obstacles_multi_callback);
   
   // set up ROS topic publishers
   goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/cu/reset_goal_cu", 1);
