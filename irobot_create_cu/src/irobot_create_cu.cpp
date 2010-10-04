@@ -410,6 +410,7 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
 
       // save into first_path
       first_path.resize(length);
+      
       for(int i = 0; i < length; i++)
       {
         first_path[i].resize(4);  // (x, y, alpha, time)
@@ -417,11 +418,20 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
         first_path[i][1] = global_path[i].y;
         first_path[i][2] = global_path[i].alpha;
         first_path[i][3] = global_path[i].z;
+        
+        //if(global_path[i].z > 1000)
+        //{
+        //  printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ \n");
+        //  printf("sent in a large time :  global_path[%d].z= %d, (%u total or %d) \n", i, global_path[i].z, global_path.size(), length);   
+        //  getchar(); 
+        //}
+        
       }
-      
-      extract_trajectory(trajectory, first_path, .1);      
+      extract_trajectory(trajectory, first_path, .1); 
+
       //print_2d_float_vector(first_path);
       //print_2d_float_vector(trajectory);
+      //printf("(%u points) \n", trajectory.size());
       //getchar();
     }
     else // check to make sure this is the same as the first path we recieved
@@ -601,10 +611,14 @@ void publish_turn_circle(float x, float y, float theta)
 // given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
 void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, float time_granularity)
 {
+    
+  if(p.size() < 1)
+    printf("trying to extract trajectory from a path of length < 1 \n");
+    
   t.resize(0);
   t.push_back(p[0]);
   for(int i = 1; i < (int)p.size(); i++)
-  {   
+  {    
     if(p[i][3] - p[i-1][3] < time_granularity) // just use next point
     {
       t.push_back(p[i]);
@@ -622,10 +636,13 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
       else if(alpha_start > alpha_end && alpha_start - alpha_end > PI) // it is easier to go in the other direction
         alpha_start -= 2*PI;
           
+      vector<float> this_path_point(4);
       for(float this_time = start_time + time_granularity; this_time < end_time; this_time += time_granularity)
       {
-        vector<float> this_path_point(4);
+        
         float percentage_through =  (this_time - start_time)/(end_time - start_time);
+        //printf("percentage_through: %f, this_time=%f, end_time=%f, start_time=%f, p[i].size()=%u, p[i][3]=%f \n", percentage_through, this_time, end_time, start_time, p[i].size(), p[i][3]);
+        
         
         this_path_point[0] = p[i-1][0] + (p[i][0] - p[i-1][0])*percentage_through;  // x
         this_path_point[1] = p[i-1][1] + (p[i][1] - p[i-1][1])*percentage_through;  // y
@@ -647,7 +664,7 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
         
         t.push_back(this_path_point);
       }
-      t.push_back(p[i]);  
+      t.push_back(p[i]);
     }
   }
 }

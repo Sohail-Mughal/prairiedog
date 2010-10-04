@@ -841,6 +841,7 @@ int main(int argc, char** argv)
     // wait until we have a goal and a robot pose
     while((goal_pose == NULL || robot_pose == NULL) && ros::ok())
     {
+      printf("waiting for goal and/or pose \n");
       if(goal_pose == NULL)
       {
         //printf("waiting for goal\n");
@@ -1229,10 +1230,8 @@ int main(int argc, char** argv)
     if(mode == 2 && agent_number != 0) 
       continue; 
 
-    //printf("getting \n");
     MultAgSln.GetMessages(startc, goalc);
     
-    //printf("sending \n");
     MultAgSln.SendMessageUDP(prob_success);
 
     
@@ -1240,27 +1239,22 @@ int main(int argc, char** argv)
     
     vector<vector<float> > mult_agent_bst_sln_doubled;
     
-    //printf("here 1 \n");
     double_up_points(MultAgSln.BestSolution, mult_agent_bst_sln_doubled);
-    //printf("here 2 \n");
     calculate_rotation(mult_agent_bst_sln_doubled);
-    //printf("here3 \n");
     //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
     extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, agent_number, world_dims);
-    //printf("here 4 \n");
     calculate_times(Parametric_Times, mult_agent_bst_sln_doubled, target_mps, target_rps);
     //for(int i = 0; i < Parametric_Times.size(); i++)
     //{
     //  printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
     //}
     //getchar();
-    //printf("here 5 \n");
+
     publish_global_path(ThisAgentsPath, Parametric_Times); 
-    //printf("here 6 \n");
+
     publish_planning_area(Scene);
     publish_obstacles(Scene);
 
-    //printf("spinning \n");
     ros::spinOnce(); ///////////////// error only happens when spinning
     
     //printf("sleeping \n");

@@ -371,11 +371,14 @@ void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution
   
   //printf("times: 0");
   
-  for(int i = 1; i < (int)MultiSolution.size(); i++)
+  int num_of_points = MultiSolution.size();
+  for(int i = 1; i < num_of_points; i++)
   {
+    int num_of_dimensions = MultiSolution[i].size();
+              
     // find max time required by any robot
     this_max = 0;
-    for(int j = 0; j < (int)MultiSolution.size(); j +=3)
+    for(int j = 0; j < num_of_dimensions; j +=3)
     {
       // find max time based on translation
       x_dif = MultiSolution[i][j] - MultiSolution[i-1][j];
@@ -403,7 +406,7 @@ void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution
     Times[i] = Times[i-1] + this_max;
     //printf("%f \n", Times[i]);
   }
-  //printf(".\n");
+  //printf(". ---- MultiSolution.size()=%u \n", MultiSolution.size());
 }
 
 void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& start_config)  // makes sure start angles are correct
