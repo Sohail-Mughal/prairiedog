@@ -18,6 +18,7 @@
   <depend package="move_base_msgs"/>
   <depend package="hokuyo_listener_cu"/>
   <depend package="tinyxml" />
+  <depend package="multi_robot_planner_cu"/>
 
   <export>
     <cpp cflags="-I${prefix}/msg/cpp"/>
