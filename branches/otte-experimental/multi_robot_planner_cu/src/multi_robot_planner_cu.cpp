@@ -64,6 +64,7 @@
 #include "localization_cu/GetPose.h"
 
 #include "geometry_msgs/Polygon.h"
+#include "multi_robot_planner_cu/PolygonArray.h"
 
 using namespace std;
 
@@ -221,6 +222,7 @@ ros::Subscriber goal_sub;
 ros::Publisher global_path_pub;
 ros::Publisher system_update_pub;
 ros::Publisher planning_area_pub;   
+ros::Publisher obstacles_pub; 
 
 // globals for robot and goal
 POSE* robot_pose = NULL;
@@ -497,6 +499,31 @@ void publish_planning_area(const NavScene& S)
   planning_area_pub.publish(msg); 
 }
 
+void publish_obstacles(const NavScene& S)
+{
+  multi_robot_planner_cu::PolygonArray msg;
+
+  int num_polygons = S.polygon_list.size();
+  
+  msg.header.frame_id = "/map_cu";
+  msg.polygons.resize(num_polygons);
+
+  for(int i = 0; i < num_polygons; i++)
+  {
+    int num_points = S.polygon_list[i].size();
+    msg.polygons[i].points.resize(num_points);
+    
+    for(int j = 0; j < num_points; j++)
+    {
+      msg.polygons[i].points[j].x = S.polygon_list[i][j][0] - S.translation[0];
+      msg.polygons[i].points[j].y = S.polygon_list[i][j][1] - S.translation[1];
+      msg.polygons[i].points[j].z = 0;        
+    }
+  }
+
+  obstacles_pub.publish(msg); 
+}
+
 /*----------------------- ROS service functions -------------------------*/
 
 bool load_pose()
@@ -667,6 +694,7 @@ int main(int argc, char** argv)
   global_path_pub = nh.advertise<nav_msgs::Path>("/cu/global_path_cu", 1);
   system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 10);
   planning_area_pub = nh.advertise<geometry_msgs::Polygon>("/cu/planning_area_cu", 1);
+  obstacles_pub = nh.advertise<multi_robot_planner_cu::PolygonArray>("/cu/obstacles_cu", 1);
   
   // spin ros once
   ros::spinOnce();
@@ -962,10 +990,19 @@ int main(int argc, char** argv)
   
   // this is where the planning stuff starts
   // set up the scene based on all start/goal locations and any maps
-  if(!Scene.LoadFromGlobals(Globals))  ////////////////////////////////////////still need to ad functionality that reads in map file (and correct sub-piece of it)
+  if(!Scene.LoadFromGlobals(Globals))
     return 0;
+  
+  char map_file[] = "../lab.txt";
+  if(!Scene.LoadMapFromFile(map_file))
+  {
+    printf("unable to load map file: %s\n", map_file);
+    return 0;
+  }
+  
   Scene.PrintScenceInfo(); 
   publish_planning_area(Scene);
+  publish_obstacles(Scene);
   ros::spinOnce();
   
   int num_robots = Scene.num_robots;
@@ -1042,6 +1079,7 @@ int main(int argc, char** argv)
     now_time = clock();
     
     publish_planning_area(Scene);
+    publish_obstacles(Scene);
     ros::spinOnce();
     
   }
@@ -1113,6 +1151,7 @@ int main(int argc, char** argv)
 
       // ROS stuff
       publish_planning_area(Scene);
+      publish_obstacles(Scene);
       ros::spinOnce();
       
       
@@ -1156,6 +1195,7 @@ int main(int argc, char** argv)
     printf(" waiting, not moving\n");
     
     publish_planning_area(Scene);
+    publish_obstacles(Scene);
     ros::spinOnce();
   }
   now_time = clock();
@@ -1218,6 +1258,7 @@ int main(int argc, char** argv)
     publish_global_path(ThisAgentsPath, Parametric_Times); 
     //printf("here 6 \n");
     publish_planning_area(Scene);
+    publish_obstacles(Scene);
 
     //printf("spinning \n");
     ros::spinOnce(); ///////////////// error only happens when spinning
@@ -1235,9 +1276,7 @@ int main(int argc, char** argv)
   ros::spinOnce();
   loop_rate.sleep();
     
-  printf("here 8 \n");
   Globals.kill_master = true; // shutdown listener thread
-  printf("here 9 \n");
   
   // shutdown ros stuff
   pose_sub.shutdown();
@@ -1245,6 +1284,7 @@ int main(int argc, char** argv)
   global_path_pub.shutdown();
   system_update_pub.shutdown();
   planning_area_pub.shutdown();
+  obstacles_pub.shutdown();
   
   destroy_pose(robot_pose);
   destroy_pose(goal_pose);

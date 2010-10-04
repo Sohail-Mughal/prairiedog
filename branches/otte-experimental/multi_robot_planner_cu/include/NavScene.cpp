@@ -356,7 +356,7 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
         {
           if(fscanf(ifp, "%f, ", &this_value) <= 0) 
           {
-            printf("problems reading start configuration from scene file (element %d) \n",l); 
+            printf("problems reading polygon from scene file (element %d) \n",j); 
             fclose(ifp);
             return false;
           }
@@ -420,6 +420,194 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
 
   return true;
 }
+
+bool NavScene::LoadMapFromFile(const char* filename) // loads only the map portion of a file
+{
+  FILE* ifp = fopen(filename,"r");
+  if(ifp == NULL)
+  {
+    printf("cannot read scene file \n");
+    return false;   
+  }    
+  
+  float this_value;
+  
+  //get first line from file
+  char line_from_file[500];
+  vector<float> this_translation;
+  
+  if(fscanf(ifp, "%s\n", line_from_file) <= 0)
+  {
+    printf("problems reading first line of scene file \n");
+    fclose(ifp);
+    return false;   
+  }
+
+  if( line_from_file[0] == 'P' )   // there is no translation
+  {
+    // get num_polygons from from file
+    if(sscanf(line_from_file, "P:%d\n", &num_polygons) <= 0)
+    {
+      printf("problems reading world dims from scene file \n");
+      fclose(ifp);
+      return false;
+    }    
+  }    
+  else if( line_from_file[0] == 'T' ) // there is translation
+  {   
+    // get translation along each dimension
+    int ind = 2;
+    float temp;
+     
+    while(sscanf((char*)(line_from_file+(size_t)ind), "%f", &temp) > 0)
+    {
+      this_translation.push_back(temp);
+      while(line_from_file[ind] != ';' && line_from_file[ind] != ',')
+        ind++;
+      ind++;
+    }
+     
+    // get num_polygons from from file
+    if(fscanf(ifp, "P:%d\n", &num_polygons) <= 0)
+    {
+      printf("problems reading world dims from scene file \n");
+      fclose(ifp);
+      return false;
+    }
+  }
+  else
+  {
+    printf("problems reading world dims or translation from scene file \n");
+    fclose(ifp);
+    return false;
+  } 
+   
+  
+  if(num_polygons < 0)
+  {
+    printf("problems: num_polygons cannot be less than 0 \n"); 
+    fclose(ifp);
+    return false;
+  }
+  else if(num_polygons > 0)
+  {
+    // get number of spatial workspace dims from from file
+    if(fscanf(ifp, "n:%d\n", &num_spatial_dims) <= 0)
+    {
+      printf("problems reading num spatial world dims from scene file \n");
+      fclose(ifp);
+      return false;
+    }
+    if(num_spatial_dims < 1)
+    {
+      printf("problems: num spatial world dims than 1 \n"); 
+      fclose(ifp);
+      return false;
+    }
+  
+    while(this_translation.size() < (uint)num_spatial_dims)
+      this_translation.push_back(0);    
+    
+    printf("Translation: ");
+    for(int i = 0; i < num_spatial_dims; i++)
+      printf("%f, ", this_translation[i]);
+    printf("\n");
+    
+    // this is the translation between map_cu and the smaller planning space for multi_robot_planner_cu (Assuming already set by this point);
+    while(translation.size() < (uint)num_spatial_dims)
+      translation.push_back(0);    
+    
+    int this_points;
+    polygon_list.resize(num_polygons);
+    for(int i = 0; i < num_polygons; i++)
+    {
+      // get this polygon's num points from from file
+      if(fscanf(ifp, "p:%d\n", &this_points) <= 0)
+      {
+        printf("problems reading world dims from scene file \n");
+        fclose(ifp);
+        return false;
+      }
+      if(this_points < 0)
+      {
+        printf("problems: a polygon's number of points cannot be less than 0 \n"); 
+        fclose(ifp);
+        return false;
+      }  
+      
+      polygon_list[i].resize(this_points);
+    
+      for(int j = 0; j < this_points; j++)
+      {
+        polygon_list[i][j].resize(num_spatial_dims);
+        for(int k = 0; k < num_spatial_dims; k++)   
+        {
+          if(fscanf(ifp, "%f, ", &this_value) <= 0) 
+          {
+            printf("problems reading polygon from file (element %d) \n",j); 
+            fclose(ifp);
+            return false;
+          }
+          polygon_list[i][j][k] = this_value + this_translation[k] + translation[k];
+        }
+        fscanf(ifp, "\n");
+      }
+    }
+    
+    // allocate point lookup table
+    int x_num_points = (int)(2*dim_max[0]/resolution+1);
+    int y_num_points = (int)(2*dim_max[1]/resolution+1);
+  
+    PointSafeLookup.resize(x_num_points);
+    for(int i = 0; i < x_num_points; i++)
+      PointSafeLookup[i].assign(y_num_points, -1);
+  
+    if(using_edge_lookup_table == 1)
+    {
+      // allocate edge lookup table
+      EdgeSafeLookup.resize(x_num_points);
+      for(int i1 = 0; i1 < x_num_points; i1++)
+      {
+        EdgeSafeLookup[i1].resize(y_num_points);
+        for(int j1 = 0; j1 < y_num_points; j1++)
+        {
+          EdgeSafeLookup[i1][j1].resize(x_num_points);
+          for(int i2 = 0; i2 < x_num_points; i2++)    
+            EdgeSafeLookup[i1][j1][i2].assign(y_num_points, -1);
+        }
+      }
+    }
+    
+    if(add_points_to_messages == 1)
+    {
+      // allocate structures to hold last n points
+        
+      last_n_points_x.assign(num_points_per_file, -1);     
+      last_n_points_y.assign(num_points_per_file, -1);    
+      last_n_points_val.assign(num_points_per_file, 0); 
+      n_points_ptr = 0;     
+    
+      last_n_edges_x1.assign(num_edges_per_file, -1);
+      last_n_edges_y1.assign(num_edges_per_file, -1);
+      last_n_edges_x2.assign(num_edges_per_file, -1);
+      last_n_edges_y2.assign(num_edges_per_file, -1);
+      last_n_edges_val.assign(num_edges_per_file, 0);
+      n_edge_ptr = 0; 
+    }
+  }
+  else // num_polygons == 0
+  {
+      
+      
+  }
+  
+  
+  fclose(ifp);
+  printf("sucessfully read file \n");
+
+  return true;
+}
+
 
 #ifndef not_using_globals
 bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from the global variables

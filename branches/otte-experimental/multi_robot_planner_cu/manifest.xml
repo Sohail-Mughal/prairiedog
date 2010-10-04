@@ -11,4 +11,8 @@
   <depend package="mapper_cu"/>
   <depend package="localization_cu"/>
   <depend package="tf"/>
+
+  <export>
+    <cpp cflags="-I${prefix}/msg/cpp"/>
+  </export>
 </package>

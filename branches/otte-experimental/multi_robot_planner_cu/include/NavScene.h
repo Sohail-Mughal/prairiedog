@@ -8,7 +8,9 @@ class NavScene
     ~NavScene();                             // destructor
     
     void PrintScenceInfo();      // prints on command line the info about the scene
-    bool LoadFromFile(const char* filename); // loads the scene info from the file
+    bool LoadFromFile(const char* filename);   // loads the scene info from the file
+    bool LoadMapFromFile(const char* filename); // loads only the map portion of a file
+
     
     #ifndef not_using_globals
     bool LoadFromGlobals(GlobalVariables& G); // loads the scene info from the global variables
