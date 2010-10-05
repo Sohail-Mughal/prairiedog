@@ -285,7 +285,7 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
       continue;
   
     // agent id, start and goal
-    sprintf(temp,"%d %f %f %f %f %f %f\n", i, start_coords[i][0], start_coords[i][1], start_coords[i][2], goal_coords[i][0], goal_coords[i][1], goal_coords[i][2]);   
+    sprintf(temp,"%d %f %f %f %f %f %f\n", global_ID[i], start_coords[i][0], start_coords[i][1], start_coords[i][2], goal_coords[i][0], goal_coords[i][1], goal_coords[i][2]);   
     strcat(buffer, temp);
   }
   sprintf(temp,"A");   
@@ -313,7 +313,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     // get sending agent id
     if(sscanf(buffer,"A %d\n", &sending_agent) < 1)
       return;
-        
+
     while(true) // break out when done
     {
       // get to start of next line
@@ -324,37 +324,39 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       index++;
       if(buffer[index] == '\0' || buffer[index] == 'A')
         break;
-    
+
       // read this data
       if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
         continue;
-      
+
       num++;
       
-      if(have_info[an_id] == 0) // new data
-      {     
-        if(start_coords[an_id].size() < 3)
-          start_coords[an_id].resize(3); 
-        start_coords[an_id][0] = sx;
-        start_coords[an_id][1] = sy;
-        start_coords[an_id][2] = st;
+      int local_an_id = local_ID[an_id];
+      ////////////// another place to maybey use for dynamic team maintainance
+      if(have_info[local_an_id] == 0) // new data
+      {  
+        if(start_coords[local_an_id].size() < 3)
+          start_coords[local_an_id].resize(3); 
+        start_coords[local_an_id][0] = sx;
+        start_coords[local_an_id][1] = sy;
+        start_coords[local_an_id][2] = st;
         
-        if(goal_coords[an_id].size() < 3)
-          goal_coords[an_id].resize(3);
-        goal_coords[an_id][0] = gx;
-        goal_coords[an_id][1] = gy;
-        goal_coords[an_id][2] = gt;
+        if(goal_coords[local_an_id].size() < 3)
+          goal_coords[local_an_id].resize(3);
+        goal_coords[local_an_id][0] = gx;
+        goal_coords[local_an_id][1] = gy;
+        goal_coords[local_an_id][2] = gt;
       
-        have_info[an_id] = 1;     
+        have_info[local_an_id] = 1;     
         
         printf("recieved new data from %d: \n", an_id);
-        printf("start: [%f %f %f] \n", start_coords[an_id][0], start_coords[an_id][1], start_coords[an_id][2]);
-        printf("goal:  [%f %f %f] \n", goal_coords[an_id][0], goal_coords[an_id][1], goal_coords[an_id][2]);
+        printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
+        printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
         //getchar();
       }
     }
-    if(num >= team_size && sending_agent != -1) // this agent has the min number of starts/goals to start planning
-      agent_ready[sending_agent] = 1;
+    if(num >= team_size && sending_agent != -1) // the sending agent has the min number of starts/goals to start planning
+      agent_ready[local_ID[sending_agent]] = 1;
 
   }
   else
@@ -836,19 +838,22 @@ void *Robot_Listner_Ad_Hoc(void * inG)
     memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
     message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
 
-    //printf("here 11 \n");
+    //printf("here 11 %d\n", message_length);
     
     int message_ptr = 0;
     if(message_length < 0) 
       printf("had problems getting a message \n");
     else  // the sending computer's info is in senders_address
     {   
-      //printf("Received data: %d\n", (int)planning_message_buffer[0]);
+      //printf("- here 1 \n");
+      //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
         
       if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
       {
         //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
         G->recover_data_from_buffer(planning_message_buffer);
+        
+        //printf("trying to recover data \n");
         
         message_ptr++;
         while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
