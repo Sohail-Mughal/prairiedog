@@ -4,60 +4,7 @@ GlobalVariables::GlobalVariables()
 
 GlobalVariables::GlobalVariables(int num_of_agents)  
 {
-  number_of_agents = num_of_agents;
-  min_number_of_agents = num_of_agents;
-  InPorts.resize(number_of_agents);
-  OutPorts.resize(number_of_agents);
-  
-  int min_port = 55000;
-  for(int i = 0; i < number_of_agents; i++)
-  {
-    InPorts[i] = min_port; 
-    min_port ++;
-  }
-  for(int i = 0; i < number_of_agents; i++)
-  {
-    OutPorts[i] = min_port; 
-    min_port ++;
-  }
-
-  MasterInPort = 56001;
-  MasterOutPort = 56002;
-
-  have_info.resize(number_of_agents, 0);   // gets set to 1 when we get an agent's info
-  agent_ready.resize(number_of_agents, 0); // gets set to 1 when we get an agent's info
-  other_addresses.resize(number_of_agents);
-
-  other_IP_strings = (char**)malloc(sizeof(char*)*number_of_agents);
-  
-  for(int i = 0; i < number_of_agents; i++) 
-  {
-    other_IP_strings[i] = (char*)malloc(sizeof(char)*256);
-    //memset(&other_IP_strings[i],'\0',256);
-  }
-  
-  non_planning_yet = true;   
-  
-  agent_number = -1;
-  
-  kill_master = false;
-  
-  start_coords.resize(number_of_agents);
-  goal_coords.resize(number_of_agents);
-  
-  last_update_time.resize(number_of_agents);
-  planning_time_remaining.resize(number_of_agents, LARGE);
-  
-  sync_message_wait_time = 1;
-  message_wait_time = 1;
-  
-  robot_radius = 1;
-  prob_at_goal = .8;
-  move_max = 1;
-  theta_max = 2*PI;
-  resolution = .01;
-  angular_resolution =.3;
-  planning_border_width = 1;
+  Populate(num_of_agents);
 }
 
 void error(const char *msg)
@@ -81,9 +28,13 @@ GlobalVariables::~GlobalVariables()                             // destructor
 void GlobalVariables::Populate(int num_of_agents)  
 {
   number_of_agents = num_of_agents;
-  min_number_of_agents = num_of_agents;
+  min_team_size = 1;
+  team_size = 0;
+  
   InPorts.resize(number_of_agents);
   OutPorts.resize(number_of_agents);
+  InTeam.resize(number_of_agents, false);
+  local_ID.resize(number_of_agents, -1);
   
   int min_port = 55000;
   for(int i = 0; i < number_of_agents; i++)
@@ -187,10 +138,21 @@ bool GlobalVariables::have_min_agent_data()
            
   //printf(" have info about %d robots , min : %d \n", num, min_number_of_agents);
   
-  if(num >= min_number_of_agents)
+  if(num >= min_team_size)
     return true;
   
   return false;
+}
+
+// returns true if we have data for all members of the team
+bool GlobalVariables::have_all_team_data()
+{
+  for(int i = 0; i < team_size; i++)
+  {         
+    if(have_info[i] == 0)
+      return false;
+  }
+  return true;
 }
 
 // returns true if all agents are ready to plan
@@ -218,11 +180,23 @@ bool GlobalVariables::min_agents_ready_to_plan()
       num++;
   }
            
-  if(num >= min_number_of_agents)
+  if(num >= min_team_size)
     return true;
   
   return false;
 }
+
+// returns true if all agents in the team are ready to plan
+bool GlobalVariables::all_team_ready_to_plan()
+{
+  for(int i = 0; i < team_size; i++)
+  {
+    if(agent_ready[i] == 0)
+      return false;
+  }
+  return true;
+}
+
 
 // returns true if all agents are moving
 bool GlobalVariables::all_agents_moving()
@@ -379,7 +353,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         //getchar();
       }
     }
-    if(num >= min_number_of_agents && sending_agent != -1) // this agent has the min number of starts/goals to start planning
+    if(num >= team_size && sending_agent != -1) // this agent has the min number of starts/goals to start planning
       agent_ready[sending_agent] = 1;
 
   }
@@ -447,358 +421,358 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
 
 /* ------------------------- the actual threads ------------------------ */
 
-void *Master_Listner(void * inG)
-{
-  GlobalVariables* G = (GlobalVariables*)inG;  
-  struct sockaddr_in my_address, senders_address;
-  int my_address_length, senders_address_length;
-  char message_buffer[max_message_size];
-  int message_length;
-  int in_port;
-    
-  if(G->agent_number < 0)
-    in_port = G->MasterInPort;
-  else
-    in_port = G->InPorts[G->agent_number];    
+// void *Master_Listner(void * inG)
+// {
+//   GlobalVariables* G = (GlobalVariables*)inG;  
+//   struct sockaddr_in my_address, senders_address;
+//   int my_address_length, senders_address_length;
+//   char message_buffer[max_message_size];
+//   int message_length;
+//   int in_port;
+//     
+//   if(G->agent_number < 0)
+//     in_port = G->MasterInPort;
+//   else
+//     in_port = G->InPorts[G->agent_number];    
+// 
+//   printf("Master Listener \n");   
+//   
+//   // create socket
+//   G->my_in_sock = socket(AF_INET, SOCK_DGRAM, 0);
+//   if(G->my_in_sock < 0)  // failed to open socket
+//   error("Problems opening socket\n");
+// 
+//   // clear all memory of my_address structure
+//   my_address_length = sizeof(my_address);
+//   memset(&my_address, NULL, my_address_length); 
+//    
+//   // populate my_address structure
+//   my_address.sin_family = AF_INET;
+//   my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
+//   my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
+// 
+// 
+//   // bind in_socket with my_address
+//   if(bind(G->my_in_sock, (struct sockaddr *)&my_address, my_address_length)<0) 
+//     error("problems binding in_socket");
+// 
+//   senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct  
+//         
+//   while(!G->have_all_agent_addresses()) // until have all
+//   {
+//     printf("waiting for data from robots \n"); 
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
+//         
+//     if(message_length < 0) 
+//       printf("had problems getting a message \n");
+//     else
+//     {   
+//       char IP[256];
+//       int sending_agent; 
+//       int ready; 
+//       sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
+//           
+//       if(sending_agent < 0)
+//         continue;
+//           
+//       if(ready == 1)
+//         G->agent_ready[sending_agent] = 1;
+//           
+//       if(G->have_info[sending_agent] == 1)
+//         continue;
+// 
+//       if(G->set_up_agent_address(sending_agent, IP)) // then we have data from a new agent
+//         printf("Received data from robot: %d %s\n", sending_agent, G->other_IP_strings[sending_agent]);
+//     }
+//   }
+//       
+//   printf("have all agent's IP data \n");
+//       
+//   while(!G->all_agents_ready_to_plan())
+//   {
+//     char IP[256];
+//     int sending_agent; 
+//     int ready; 
+//     
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
+//     sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
+//           
+//     if(sending_agent < 0)
+//       continue;
+//           
+//     if(ready == 1)
+//       G->agent_ready[sending_agent] = 1;   
+//   }
+//       
+//   printf("all agent's are ready to plan \n");
+//   // now all agents are ready to plan, and will be moving shortly
+//   
+//   while(!G->all_agents_moving())
+//   {  
+//     char IP[256];
+//     int sending_agent; 
+//     int ready; 
+//     
+//     printf("waiting for agents to start moving \n"); 
+//     sleep(1);
+//     
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
+//     sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
+//           
+//     if(sending_agent < 0)
+//       continue;
+//           
+//     if(ready == 2)
+//       G->agent_moving[sending_agent] = 1;   
+//   }
+//   
+//   // now all agents are moving, this thread terminates
+//   return NULL;
+// }
+// 
+// 
+// void *Master_Sender(void * inG)
+// {
+//   GlobalVariables* G = (GlobalVariables*)inG;  
+//   char buffer[max_message_size]; 
+//  
+//   printf("Master Sender \n");
+//   
+//   // create an outgoing socket
+//   G->my_out_sock = socket(AF_INET, SOCK_DGRAM, 0); 
+//   if(G->my_out_sock < 0)        // failed to create socket
+//     error("problems creating socket");
+//   
+//   while(!G->have_all_agent_addresses()) // wait until we get ip data from every robot;
+//   { 
+//     printf("waiting for addresses \n");
+//     sleep(1);
+//   }
+//   while(!G->all_agents_ready_to_plan())
+//   {
+//     // send IP data about all agents to all agents  
+//     printf("distributing addresses \n");
+//       
+//     G->populate_buffer_with_ips(buffer);
+//     
+//     printf("sending: %s \n", buffer);
+//     G->broadcast(buffer, max_message_size);
+//     sleep(1);  
+//   }
+//   
+//   printf("Sender: agents ready to plan\n");
+//   
+//   for(int i = 0; i < 20; i++)  // send 20 messages to every saying they can start moving
+//   {
+//     buffer[0] = 1; // plan flag  
+//     buffer[1] = '\0';
+//     G->broadcast(buffer, max_message_size);  
+//   }
+//   
+//   printf("agents should now be planning \n");
+// 
+//   while(!G->all_agents_moving())
+//   {
+//     printf("waiting for agents to start moving \n"); 
+//     sleep(1);
+//   }
+//   
+//   // now all agents are moving, so we send kill messages to them, and then kill the master
+//   
+//   for(int i = 0; i < 20; i++)  // send 20 messages to kill every robot
+//   {
+//     buffer[0] = 3; // kill flag  
+//     buffer[1] = '\0';
+//     G->broadcast(buffer, 1024);  
+//   }
+//   
+//   G->kill_master = true;
+//   
+//   // this thread terminates
+//   return NULL;
+// }
 
-  printf("Master Listener \n");   
-  
-  // create socket
-  G->my_in_sock = socket(AF_INET, SOCK_DGRAM, 0);
-  if(G->my_in_sock < 0)  // failed to open socket
-  error("Problems opening socket\n");
+// void *Robot_Listner(void * inG)
+// {
+//   GlobalVariables* G = (GlobalVariables*)inG;  
+//   struct sockaddr_in my_address, senders_address;
+//   int my_address_length, senders_address_length;
+//   char message_buffer[max_message_size];
+//   int in_socket;
+//   int message_length;
+//   int in_port;
+//     
+//   if(G->agent_number < 0)
+//     in_port = G->MasterInPort;
+//   else
+//     in_port = G->InPorts[G->agent_number];    
+// 
+//   printf("Robot Listener \n"); 
+//     
+//     
+//   // create socket
+//   in_socket = socket(AF_INET, SOCK_DGRAM, 0);
+//   if(in_socket < 0)  // failed to open socket
+//     error("Problems opening socket\n");
+// 
+//   // clear all memory of my_address structure
+//   my_address_length = sizeof(my_address);
+//   memset(&my_address, NULL, my_address_length); 
+//    
+//   // populate my_address structure
+//   my_address.sin_family = AF_INET;
+//   my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
+//   my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
+// 
+// 
+//   // bind in_socket with my_address
+//   if(bind(in_socket, (struct sockaddr *)&my_address, my_address_length)<0) 
+//     error("problems binding in_socket");
+// 
+//   senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
+//       
+//   while(!G->have_all_agent_addresses()) // forever
+//   {
+//     printf("waiting for data from master \n"); 
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
+//     if(message_length < 0) 
+//       printf("had problems getting a message \n");
+//     else  // the sending computers info is in senders_address
+//     {   
+//       printf("Received data from master: %s\n", message_buffer);
+//       G->recover_ips_from_buffer(message_buffer);
+//     }
+//   }  
+//    
+//   while(G->non_planning_yet)
+//   {
+//     printf("waiting to start planning\n");  
+//     
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
+//     if(message_length < 0) 
+//       printf("had problems getting a message \n");
+//     else  // the sending computers info is in senders_address
+//     {   
+//       printf("Received data: %d\n", (int)message_buffer[0]);
+//       
+//       if(message_buffer[0] == 1) // we can start moving
+//         G->non_planning_yet = false; 
+//     }
+//   }
+//   
+//   printf("starting to plan \n");
+//   
+//   char planning_message_buffer[max_message_size];
+//           
+//   while(!G->kill_master) // this thread is now responsible for reading in data from other processes
+//   {  
+//     memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
+//     message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
+//     if(message_length < 0) 
+//       printf("had problems getting a message \n");
+//     else  // the sending computers info is in senders_address
+//     {   
+//       //printf("Received data: %d\n", (int)planning_message_buffer[0]);
+//       
+//       if(planning_message_buffer[0] == 2) // it has planning data in it;
+//       {
+//         int agent_sending = (int)planning_message_buffer[1];  
+//         if(agent_sending >= 0 && agent_sending < G->number_of_agents)
+//         { 
+//           // put the message into a file  
+//           //printf("%s\n", &(planning_message_buffer[2]));
+//         
+//           char this_file[100];
+//           sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, MultAgSln.in_msg_ctr[agent_sending]);
+//           
+//           //printf("attempting to open: %s \n",this_file);
+//           
+//           FILE* ofp = fopen(this_file,"w");
+//           if(ofp == NULL) // problem opening file
+//           {
+//             printf("cannot open message file for writing\n");
+//             continue;
+//           }
+//           
+//           fprintf(ofp, "%s\n", &(planning_message_buffer[2]));
+//           fclose(ofp);
+//         }
+//       }
+//       else if(planning_message_buffer[0] == 3) // it has a kill message in it
+//       {
+//         G->kill_master = true;
+//       }
+//     }     
+//   }
+//   // this thread terminates
+//   return NULL;
+// }
 
-  // clear all memory of my_address structure
-  my_address_length = sizeof(my_address);
-  memset(&my_address, NULL, my_address_length); 
-   
-  // populate my_address structure
-  my_address.sin_family = AF_INET;
-  my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
-  my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
-
-
-  // bind in_socket with my_address
-  if(bind(G->my_in_sock, (struct sockaddr *)&my_address, my_address_length)<0) 
-    error("problems binding in_socket");
-
-  senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct  
-        
-  while(!G->have_all_agent_addresses()) // until have all
-  {
-    printf("waiting for data from robots \n"); 
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
-        
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else
-    {   
-      char IP[256];
-      int sending_agent; 
-      int ready; 
-      sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
-          
-      if(sending_agent < 0)
-        continue;
-          
-      if(ready == 1)
-        G->agent_ready[sending_agent] = 1;
-          
-      if(G->have_info[sending_agent] == 1)
-        continue;
-
-      if(G->set_up_agent_address(sending_agent, IP)) // then we have data from a new agent
-        printf("Received data from robot: %d %s\n", sending_agent, G->other_IP_strings[sending_agent]);
-    }
-  }
-      
-  printf("have all agent's IP data \n");
-      
-  while(!G->all_agents_ready_to_plan())
-  {
-    char IP[256];
-    int sending_agent; 
-    int ready; 
-    
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
-    sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
-          
-    if(sending_agent < 0)
-      continue;
-          
-    if(ready == 1)
-      G->agent_ready[sending_agent] = 1;   
-  }
-      
-  printf("all agent's are ready to plan \n");
-  // now all agents are ready to plan, and will be moving shortly
-  
-  while(!G->all_agents_moving())
-  {  
-    char IP[256];
-    int sending_agent; 
-    int ready; 
-    
-    printf("waiting for agents to start moving \n"); 
-    sleep(1);
-    
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(G->my_in_sock, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks untill a message is recieved
-    sscanf(message_buffer, "%d %d %s",&sending_agent, &ready, IP);
-          
-    if(sending_agent < 0)
-      continue;
-          
-    if(ready == 2)
-      G->agent_moving[sending_agent] = 1;   
-  }
-  
-  // now all agents are moving, this thread terminates
-  return NULL;
-}
-
-
-void *Master_Sender(void * inG)
-{
-  GlobalVariables* G = (GlobalVariables*)inG;  
-  char buffer[max_message_size]; 
- 
-  printf("Master Sender \n");
-  
-  // create an outgoing socket
-  G->my_out_sock = socket(AF_INET, SOCK_DGRAM, 0); 
-  if(G->my_out_sock < 0)        // failed to create socket
-    error("problems creating socket");
-  
-  while(!G->have_all_agent_addresses()) // wait until we get ip data from every robot;
-  { 
-    printf("waiting for addresses \n");
-    sleep(1);
-  }
-  while(!G->all_agents_ready_to_plan())
-  {
-    // send IP data about all agents to all agents  
-    printf("distributing addresses \n");
-      
-    G->populate_buffer_with_ips(buffer);
-    
-    printf("sending: %s \n", buffer);
-    G->broadcast(buffer, max_message_size);
-    sleep(1);  
-  }
-  
-  printf("Sender: agents ready to plan\n");
-  
-  for(int i = 0; i < 20; i++)  // send 20 messages to every saying they can start moving
-  {
-    buffer[0] = 1; // plan flag  
-    buffer[1] = '\0';
-    G->broadcast(buffer, max_message_size);  
-  }
-  
-  printf("agents should now be planning \n");
-
-  while(!G->all_agents_moving())
-  {
-    printf("waiting for agents to start moving \n"); 
-    sleep(1);
-  }
-  
-  // now all agents are moving, so we send kill messages to them, and then kill the master
-  
-  for(int i = 0; i < 20; i++)  // send 20 messages to kill every robot
-  {
-    buffer[0] = 3; // kill flag  
-    buffer[1] = '\0';
-    G->broadcast(buffer, 1024);  
-  }
-  
-  G->kill_master = true;
-  
-  // this thread terminates
-  return NULL;
-}
-
-void *Robot_Listner(void * inG)
-{
-  GlobalVariables* G = (GlobalVariables*)inG;  
-  struct sockaddr_in my_address, senders_address;
-  int my_address_length, senders_address_length;
-  char message_buffer[max_message_size];
-  int in_socket;
-  int message_length;
-  int in_port;
-    
-  if(G->agent_number < 0)
-    in_port = G->MasterInPort;
-  else
-    in_port = G->InPorts[G->agent_number];    
-
-  printf("Robot Listener \n"); 
-    
-    
-  // create socket
-  in_socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if(in_socket < 0)  // failed to open socket
-    error("Problems opening socket\n");
-
-  // clear all memory of my_address structure
-  my_address_length = sizeof(my_address);
-  memset(&my_address, NULL, my_address_length); 
-   
-  // populate my_address structure
-  my_address.sin_family = AF_INET;
-  my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
-  my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
-
-
-  // bind in_socket with my_address
-  if(bind(in_socket, (struct sockaddr *)&my_address, my_address_length)<0) 
-    error("problems binding in_socket");
-
-  senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
-      
-  while(!G->have_all_agent_addresses()) // forever
-  {
-    printf("waiting for data from master \n"); 
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else  // the sending computers info is in senders_address
-    {   
-      printf("Received data from master: %s\n", message_buffer);
-      G->recover_ips_from_buffer(message_buffer);
-    }
-  }  
-   
-  while(G->non_planning_yet)
-  {
-    printf("waiting to start planning\n");  
-    
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else  // the sending computers info is in senders_address
-    {   
-      printf("Received data: %d\n", (int)message_buffer[0]);
-      
-      if(message_buffer[0] == 1) // we can start moving
-        G->non_planning_yet = false; 
-    }
-  }
-  
-  printf("starting to plan \n");
-  
-  char planning_message_buffer[max_message_size];
-          
-  while(!G->kill_master) // this thread is now responsible for reading in data from other processes
-  {  
-    memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
-    message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else  // the sending computers info is in senders_address
-    {   
-      //printf("Received data: %d\n", (int)planning_message_buffer[0]);
-      
-      if(planning_message_buffer[0] == 2) // it has planning data in it;
-      {
-        int agent_sending = (int)planning_message_buffer[1];  
-        if(agent_sending >= 0 && agent_sending < G->number_of_agents)
-        { 
-          // put the message into a file  
-          //printf("%s\n", &(planning_message_buffer[2]));
-        
-          char this_file[100];
-          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, MultAgSln.in_msg_ctr[agent_sending]);
-          
-          //printf("attempting to open: %s \n",this_file);
-          
-          FILE* ofp = fopen(this_file,"w");
-          if(ofp == NULL) // problem opening file
-          {
-            printf("cannot open message file for writing\n");
-            continue;
-          }
-          
-          fprintf(ofp, "%s\n", &(planning_message_buffer[2]));
-          fclose(ofp);
-        }
-      }
-      else if(planning_message_buffer[0] == 3) // it has a kill message in it
-      {
-        G->kill_master = true;
-      }
-    }     
-  }
-  // this thread terminates
-  return NULL;
-}
-
-void *Robot_Sender(void * inG)
-{
-  GlobalVariables* G = (GlobalVariables*)inG;  
-  struct hostent *hp;
-  char buffer[256];
-  int message_size;      
-   
-  printf("Robot Sender \n");   
-        
-  struct sockaddr_in master_address;
-  int master_address_length;   
-
-  // create an outgoing socket
-  G->my_out_sock = socket(AF_INET, SOCK_DGRAM, 0); 
-  if(G->my_out_sock < 0)        // failed to create socket
-    error("problems creating socket");
-   
-  // set up hostent structure with master's data
-  hp = gethostbyname(G->master_IP);
-  if(hp==0) 
-    error("Unknown host");
-
-  // populate master_address structure
-  master_address.sin_family = AF_INET;
-  bcopy((char *)hp->h_addr, (char *)&master_address.sin_addr, hp->h_length); // copy in address of master
-  master_address.sin_port = htons(G->MasterInPort);   // htons() converts 'number' to proper network byte order
-  
-  master_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct
-  
-  while(!G->have_all_agent_addresses()) // until we have the other robot's data, send our data to the server
-  { 
-    printf("waiting for agent adresses \n");  
-      
-    memset(&buffer,'\0',sizeof(buffer)); 
-    sprintf(buffer, "%d 0 %s\n", G->agent_number, G->my_IP);
-    message_size = sendto(G->my_out_sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&master_address, sizeof(struct sockaddr_in));  // send this agent's IP to the master
-
-    if(message_size < 0) 
-      error("Problems sending data 1");
-     sleep(1);        
-  }
-  printf("have all agent adresses \n");  
-   
-  // once we have all other robot's id, we send that info to the agent, but keep sending our info as well
-  while(G->non_planning_yet)
-  {
-    printf("waiting to plan \n");    
-      
-    sprintf(buffer, "%d 1 %s\n", G->agent_number, G->my_IP);
-    message_size = sendto(G->my_out_sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&master_address, master_address_length);  // send info to master
-
-    if(message_size < 0) 
-      error("Problems sending data");
-    sleep(1);          
-  }
-  printf("planning \n"); 
-  
-  // now we can start path planning, this thread terminates   
-  return NULL;
-} 
+// void *Robot_Sender(void * inG)
+// {
+//   GlobalVariables* G = (GlobalVariables*)inG;  
+//   struct hostent *hp;
+//   char buffer[256];
+//   int message_size;      
+//    
+//   printf("Robot Sender \n");   
+//         
+//   struct sockaddr_in master_address;
+//   int master_address_length;   
+// 
+//   // create an outgoing socket
+//   G->my_out_sock = socket(AF_INET, SOCK_DGRAM, 0); 
+//   if(G->my_out_sock < 0)        // failed to create socket
+//     error("problems creating socket");
+//    
+//   // set up hostent structure with master's data
+//   hp = gethostbyname(G->master_IP);
+//   if(hp==0) 
+//     error("Unknown host");
+// 
+//   // populate master_address structure
+//   master_address.sin_family = AF_INET;
+//   bcopy((char *)hp->h_addr, (char *)&master_address.sin_addr, hp->h_length); // copy in address of master
+//   master_address.sin_port = htons(G->MasterInPort);   // htons() converts 'number' to proper network byte order
+//   
+//   master_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct
+//   
+//   while(!G->have_all_agent_addresses()) // until we have the other robot's data, send our data to the server
+//   { 
+//     printf("waiting for agent adresses \n");  
+//       
+//     memset(&buffer,'\0',sizeof(buffer)); 
+//     sprintf(buffer, "%d 0 %s\n", G->agent_number, G->my_IP);
+//     message_size = sendto(G->my_out_sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&master_address, sizeof(struct sockaddr_in));  // send this agent's IP to the master
+// 
+//     if(message_size < 0) 
+//       error("Problems sending data 1");
+//      sleep(1);        
+//   }
+//   printf("have all agent adresses \n");  
+//    
+//   // once we have all other robot's id, we send that info to the agent, but keep sending our info as well
+//   while(G->non_planning_yet)
+//   {
+//     printf("waiting to plan \n");    
+//       
+//     sprintf(buffer, "%d 1 %s\n", G->agent_number, G->my_IP);
+//     message_size = sendto(G->my_out_sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&master_address, master_address_length);  // send info to master
+// 
+//     if(message_size < 0) 
+//       error("Problems sending data");
+//     sleep(1);          
+//   }
+//   printf("planning \n"); 
+//   
+//   // now we can start path planning, this thread terminates   
+//   return NULL;
+// } 
 
 // this thread always listens for incomming messages from other robots
 void *Robot_Listner_Ad_Hoc(void * inG)
@@ -806,7 +780,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   GlobalVariables* G = (GlobalVariables*)inG;  
   struct sockaddr_in my_address, senders_address;
   int my_address_length, senders_address_length;
-  char message_buffer[max_message_size];
+//   char message_buffer[max_message_size];
   int in_socket;
   int message_length;
   int in_port;
@@ -835,27 +809,30 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   
   senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
 
-  while(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
-  {
-    printf("listining for start/goal from other agents \n"); 
-    memset(&message_buffer,'\0',sizeof(message_buffer)); 
-    message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved 
-    
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else  // the sending computers info is in senders_address
-    {   
-      printf("Received start-up data from an agent\n");
-      G->recover_data_from_buffer(message_buffer);
-    }        
-  }  
- 
-  // now we have the min number of agent start/goal locations, prepare to start recieving planning messages
+//   while(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+//   {
+//     printf("listining for start/goal from other agents \n"); 
+//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
+//     message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved 
+//     
+//     if(message_length < 0) 
+//       printf("had problems getting a message \n");
+//     else  // the sending computers info is in senders_address
+//     {   
+//       printf("Received start-up data from an agent\n");
+//       G->recover_data_from_buffer(message_buffer);
+//     }        
+//   }  
+//  
+//   // now we have the min number of agent start/goal locations, prepare to start recieving planning messages
   
   char planning_message_buffer[max_message_size];
           
-  while(!G->kill_master) // this thread is now responsible for reading in data from other processes
+  while(!G->kill_master) // this thread is responsible for reading in data from other processes
   {  
+    if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+      printf("listining for start/goal from other agents \n");   
+      
     memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
     message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
 
@@ -871,12 +848,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
       if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
       {
         //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
-        G->recover_data_from_buffer(message_buffer);
+        G->recover_data_from_buffer(planning_message_buffer);
         
         message_ptr++;
-        while(message_buffer[message_ptr] != 'A' && message_buffer[message_ptr] != '\0')
+        while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
           message_ptr++;
-        if(message_buffer[message_ptr] == 'A')
+        if(planning_message_buffer[message_ptr] == 'A')
           message_ptr++;
       }
    
@@ -906,8 +883,17 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         //    printf("here 33 \n");
         
         //printf("recieved message from agent %d:\n%s\n", agent_sending, &(planning_message_buffer[message_ptr]));
-        
-        if(agent_sending >= 0 && agent_sending < G->number_of_agents && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // last case checks for when messages are recieved before MultAgSln is populated
+        if(agent_sending < 0)
+        {
+           // don't know who sent the message, so ignore 
+        }
+        else if(G->local_ID[agent_sending] == -1)
+        {
+          // recieved a message from a robot that is not yet part of this
+          printf("recieved a message from a robot that is not yet part of this team\n");
+            
+        }
+        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // last case checks for when messages are recieved before MultAgSln is populated
         { 
           // put the message into a file             
           // printf("MultAgSln.in_msg_ctr[agent_sending]: %d\n", MultAgSln.in_msg_ctr[agent_sending]);
@@ -931,7 +917,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           fclose(ofp);
           
           // mark that this agent is planning
-          G->agent_ready[agent_sending] = 1;
+          G->agent_ready[G->local_ID[agent_sending]] = 1;
           
           //    printf("here 55 \n");
         }
@@ -971,7 +957,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   clock_t start_wait_t, now_time;
 
   printf("waiting for agent start and goal coords (sending data) \n");  
-  while(!G->have_min_agent_data()) // until we have the min number of the other robot's data
+  while(!G->have_all_team_data() || G->team_size < G->min_team_size) // until we have the min number of the other robot's data
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
@@ -985,8 +971,8 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   
   G->non_planning_yet = false;
   
-  // now we start path planning, but this thread still keeps broadcasting the data to agents who are not yet ready to plan
-  while(!G->min_agents_ready_to_plan()) // until we have the min number of the other robot's data
+  // now we start path planning, but this thread still keeps broadcasting the data to agents in our team who are not yet ready to plan
+  while(!G->all_team_ready_to_plan()) // until the rest of the team is ready to plan
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
@@ -998,8 +984,8 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
       now_time = clock(); 
   }
   
-  // now we know the min number of agents are all planning, so we exit this thread
-  printf("min number of agents are planning, exiting ad-hoc sender startup thread \n"); 
+  // now we know the team is all planning, so we exit this thread
+  printf("all members of team are planning, exiting ad-hoc sender startup thread \n"); 
   
   return NULL;
 } 

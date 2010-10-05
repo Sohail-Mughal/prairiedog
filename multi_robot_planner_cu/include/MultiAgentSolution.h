@@ -7,10 +7,8 @@ class MultiAgentSolution
     MultiAgentSolution(const MultiAgentSolution& M);           // copy constructor
     ~MultiAgentSolution();                                     // destructor 
     
-    void Populate(int the_num_agents, int the_agent_id);       // populates or re-populates the structure
-    #ifndef not_using_globals
-    void Populate(int the_num_agents, int the_agent_id, GlobalVariables* G);  // populates or re-populates the structure
-    #endif
+    void Populate(int the_num_agents, int the_agent_id, int this_dims_per_robot);       // populates or re-populates the structure
+    void Populate(int the_num_agents, int the_agent_id, GlobalVariables* G, int this_dims_per_robot);  // populates or re-populates the structure
             
     void ExtractSolution(Cspace& C);                           // this extracts a solution from the Cspace C, and updates things approperiatly if the solution is better than the best solution found so far.
     void AddSolution(Cspace& C);                               // this adds the best solution to the Cspace C
@@ -20,9 +18,7 @@ class MultiAgentSolution
         
     bool GetMessages(const vector<float>& start_config, const vector<float>& goal_config);  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message, also makes sure that they use start and goal configs
     void SendMessage(float send_prob);                         // sends a message containing the current best solution with probability send_prob
-    #ifndef not_using_globals
     void SendMessageUDP(float send_prob);                      // while above function just uses a file, this uses UDP
-    #endif
             
     bool StartMoving();                                        // returns true if this agent can start moving
     
@@ -34,11 +30,10 @@ class MultiAgentSolution
     
     float OverallMessageStats();                               // returns the probability this robot recieved a message that was sent by another robot
     
-    
-    
     int num_agents;                       // the number of agents
-    int agent_id;                         // the id of this agent (between 0 and num_agents-1, inclusive)
-  
+    int agent_id;                         // the id of this agent (note this is the global id)
+    int dims_per_robot;                   // the number of dimensions in the solution per each robot
+    
     vector<vector<float> > BestSolution;  // a path of configurations that is the best solution this agent has found/recieved so far
     float best_solution_length;           // the length of the best solution
     int best_solution_agent;              // the agent with the best solution so far
@@ -64,7 +59,5 @@ class MultiAgentSolution
     int current_it;                        // remembers the messaging iteration
     vector<vector<int> > LastItAdded;      // keeps track of if NodeID[a][b] has been added this message iteration
     
-    #ifndef not_using_globals
     GlobalVariables* Gbls;                 // pointer to the global variable structure;
-    #endif
 };

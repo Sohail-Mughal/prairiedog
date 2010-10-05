@@ -10,48 +10,7 @@ Cspace::Cspace() // default constructor
 
 Cspace::Cspace(vector<float> the_start, vector<float> the_goal, int dimensions) // constructor
 {
-  dims = dimensions;
-  
-  // check to make sure both start and goal are valid configs
-  if(W.PointValid(the_start) < 0)
-    printf("error: invalid start configuration, %f \n", W.PointValid(the_start));
-  
-  float goal_dist = W.PointValid(the_goal);
-  if(goal_dist < 0)
-    printf("error: invalid goal configuration, %f \n", goal_dist);
-  
-  // save start and goal
-  start.resize(dims);
-  for(int i = 0; i < dims; i++)
-    start[i] = the_start[i];
-  for(int i = 0; i < dims; i++)
-    goal[i] = the_goal[i];
-  
-  // add goal to tree
-  ValidConfigs.resize(0);
-  ValidConfigs.push_back(the_goal);
-   
-  Neighbors.resize(1);
-  Neighbors[0].push_back(0);
-  SafeDistance.push_back(goal_dist);
-  DistToGoal.push_back(0);
-  MinDistToStart.push_back(W.Dist(the_goal,the_start));
-  
-  num_points = 1;
-  start_ind = -1;
-  best_total_path_length = LARGE;
-  chop_tree = false;
-    
-  num_valid_points = 1;
-  ValidInds.push_back(0);
-  ValidIndsInd.push_back(0);
-  
-  #ifdef use_kd_tree 
-  T = new KD_Tree;
-  vector<float> V2Temp;
-  redude_3_to_2(the_goal, V2Temp);
-  T->insertNode(0, V2Temp);
-  #endif
+  Populate(the_start, the_goal, dimensions);
 }
 
 Cspace::Cspace(const Cspace& C)   // copy constructor

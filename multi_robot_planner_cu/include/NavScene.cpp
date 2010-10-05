@@ -72,7 +72,7 @@ NavScene::~NavScene()                 // destructor
     
 }
 
-void NavScene::PrintScenceInfo()      // prints on command line the info about the scene
+void NavScene::PrintSceneInfo()      // prints on command line the info about the scene
 {
   printf("Scene Info:\n");
   printf("world_dims: %d\n", world_dims);
@@ -623,7 +623,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   float max_x = -LARGE;
   float max_y = -LARGE;  
     
-  for(int i = 0; i < G.number_of_agents; i++)
+  for(int i = 0; i < G.team_size; i++)
   {
     if(min_x > G.start_coords[i][0])
       min_x = G.start_coords[i][0];
@@ -666,12 +666,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   dim_max[2] = max_theta - min_theta;
 
   // get num_robots
-  num_robots = 0;
-  for(int i = 0; i < G.number_of_agents; i++)
-  {
-    if(G.have_info[i] != 0)
-      num_robots++;    
-  }
+  num_robots = G.team_size;
   if(num_robots < 1)
   {
     printf("problems: num_robots cannot be less than 1 \n"); 

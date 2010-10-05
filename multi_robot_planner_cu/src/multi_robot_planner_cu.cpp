@@ -155,7 +155,7 @@ int next_ind_animate = -1;
 int display_flag = 0;
 unsigned int the_seed; // rand seed
  
-int min_num_agents = -1; // waits until this many agents have contact before planning (this number includes this agent), -1 means wait for all
+int min_num_agents = 2; // waits until this many agents have contact before planning (this number includes this agent), -1 means wait for all
 
 float map_resolution = -1; // reset later to proper value
 float map_width = 0;
@@ -189,7 +189,7 @@ int max_message_size = 5000;
 NavScene Scene; // this is the NavScene we are using
 Cspace Cspc;  // this is the Cspace we are using
 MultiAgentSolution MultAgSln;  // this is the MultiAgentSolution we are using
-GlobalVariables Globals;
+GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotComs.h
 vector<vector<float> > ThisAgentsPath; // holds this agents path of the best solution
 vector<float> Parametric_Times; // holds time parametry of best solution
         
@@ -903,10 +903,15 @@ int main(int argc, char** argv)
   // set up globals used by communication threads
   Globals.Populate(total_agents);
   Globals.agent_number = agent_number;
+  Globals.InTeam[agent_number] = true;
+  Globals.local_ID[agent_number] = 0;
+  Globals.global_ID.push_back(0);
+  Globals.team_size = 1;
+  
   if(min_num_agents < 0)
-    Globals.min_number_of_agents = total_agents;
+    Globals.min_team_size = total_agents;
   else
-    Globals.min_number_of_agents = min_num_agents;
+    Globals.min_team_size = min_num_agents;
 
   sprintf(Globals.base_IP, "%s.", base_ip);
   sprintf(Globals.my_IP, "%s.%d", base_ip, agent_number+1);
@@ -939,20 +944,21 @@ int main(int argc, char** argv)
   Globals.sync_message_wait_time = sync_message_wait_time;
   Globals.message_wait_time = message_wait_time;
   
-  if(Globals.start_coords[agent_number].size() < 3)
-     Globals.start_coords[agent_number].resize(3); 
-  Globals.start_coords[agent_number][0] = robot_pose->x;
-  Globals.start_coords[agent_number][1] = robot_pose->y;
-  Globals.start_coords[agent_number][2] = robot_pose->alpha;
+  // this agent has local id 0
+  if(Globals.start_coords[0].size() < 3)
+     Globals.start_coords[0].resize(3); 
+  Globals.start_coords[0][0] = robot_pose->x;
+  Globals.start_coords[0][1] = robot_pose->y;
+  Globals.start_coords[0][2] = robot_pose->alpha;
   
-  if(Globals.goal_coords[agent_number].size() < 3)
-     Globals.goal_coords[agent_number].resize(3); 
-  Globals.goal_coords[agent_number][0] = goal_pose->x;
-  Globals.goal_coords[agent_number][1] = goal_pose->y;
-  Globals.goal_coords[agent_number][2] = goal_pose->alpha;
+  if(Globals.goal_coords[0].size() < 3)
+     Globals.goal_coords[0].resize(3); 
+  Globals.goal_coords[0][0] = goal_pose->x;
+  Globals.goal_coords[0][1] = goal_pose->y;
+  Globals.goal_coords[0][2] = goal_pose->alpha;
   
-  Globals.have_info[agent_number] = 1;
-  Globals.agent_ready[agent_number] = 1;
+  Globals.have_info[0] = 1;
+  Globals.agent_ready[0] = 1;
           
   Globals.robot_radius = robot_radius;
   Globals.prob_at_goal = prob_at_goal;
@@ -963,8 +969,8 @@ int main(int argc, char** argv)
   Globals.planning_border_width = planning_border_width;
   
   printf("My IP: %s\n",Globals.my_IP);
-  printf("My start: %f %f %f\n", Globals.start_coords[agent_number][0], Globals.start_coords[agent_number][1], Globals.start_coords[agent_number][2]);
-  printf("My goal: %f %f %f\n", Globals.goal_coords[agent_number][0], Globals.goal_coords[agent_number][1], Globals.goal_coords[agent_number][2]);
+  printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
+  printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
   
   // kick off communication threads
   pthread_t Listener_thread, Sender_thread;
@@ -993,7 +999,6 @@ int main(int argc, char** argv)
   // set up the scene based on all start/goal locations and any maps
   if(!Scene.LoadFromGlobals(Globals))
     return 0;
-  
   char map_file[] = "../lab.txt";
   if(!Scene.LoadMapFromFile(map_file))
   {
@@ -1001,7 +1006,7 @@ int main(int argc, char** argv)
     return 0;
   }
   
-  Scene.PrintScenceInfo(); 
+  Scene.PrintSceneInfo(); 
   publish_planning_area(Scene);
   publish_obstacles(Scene);
   ros::spinOnce();
@@ -1014,10 +1019,9 @@ int main(int argc, char** argv)
   goalc = Scene.goalC;
   dist_threshold = map_resolution;
   Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
-  //Cspc.W.dim_max = Scene.dim_max;
   Cspc.Populate(startc, goalc, num_robots*world_dims);
     
-  MultAgSln.Populate(total_agents, agent_number, &Globals);
+  MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
   
   int iterations_left = -1; // negative means that time is used instead
   
