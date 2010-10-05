@@ -455,22 +455,27 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }
       //printf("number of dimensions solution: %d \n",file_dimensions);
     
-      
-      fscanf(ifp, "m:\n");
       // get the mapping for the order of dimesions vs global robot ids
+      bool got_complete_mapping = true;
+      //printf("recovering the following mapping : ");  
+      fscanf(ifp, "m:\n");
       for(int j = 0; j < Gbls->team_size; j++)
       {
         if(fscanf(ifp, "%d, ", &this_s) <= 0) 
         {
-          printf("problems reading data (not enough agent solution flags) \n");
+          printf("problems reading data (not enough mapping flags) \n");
+          got_complete_mapping = false;
           break;
         }  
 
+        //printf("%d, ", this_s);
         file_DimensionMapping[j] = this_s;
       }
       fscanf(ifp, "\n");
-      // printf("\n"); 
+      //printf("\n"); 
      
+      if(!got_complete_mapping)
+        break;
       
       // calculate which local dimensions the message dimensions coorisponds to
       vector<int> temp_mapping(file_dimensions, -1);
@@ -1050,7 +1055,6 @@ void MultiAgentSolution::SendMessage(float send_prob) // sends a message contain
   }
 }
 
-#ifndef not_using_globals
 void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above function just uses a file, this uses UDP
 {    
   if(BestSolution.size() < 1)
@@ -1161,13 +1165,16 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     // add the dimensional mapping to the file, the nth value in the file denotes which global robot the nth dimension group represents
     sprintf(temp_buffer, "m:\n"); 
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    //printf("adding the following mapping: ");
     for(int j = 0; j < Gbls->team_size; j++)
     {
       sprintf(temp_buffer, "%d, ",Gbls->global_ID[j]); 
       string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+     // printf("%d, ",Gbls->global_ID[j]);
     }
     sprintf(temp_buffer,"\n");  
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    //printf("\n");
     
     // best path (itself)
     for(int j = 0; j < num_points; j++)
@@ -1323,7 +1330,6 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     out_msg_ctr[i]++;
   }
 }
-#endif
 
 bool MultiAgentSolution::StartMoving()   // returns true if this agent can start moving
 {
