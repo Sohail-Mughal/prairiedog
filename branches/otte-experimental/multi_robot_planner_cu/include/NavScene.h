@@ -7,7 +7,7 @@ class NavScene
     NavScene(const NavScene& W);             // copy constructor
     ~NavScene();                             // destructor
     
-    void PrintScenceInfo();      // prints on command line the info about the scene
+    void PrintSceneInfo();      // prints on command line the info about the scene
     bool LoadFromFile(const char* filename);   // loads the scene info from the file
     bool LoadMapFromFile(const char* filename); // loads only the map portion of a file
 

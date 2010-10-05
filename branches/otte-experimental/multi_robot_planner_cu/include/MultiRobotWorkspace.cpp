@@ -10,16 +10,7 @@ MultiRobotWorkspace::MultiRobotWorkspace() // default constructor
 
 MultiRobotWorkspace::MultiRobotWorkspace(int n_robots, float robot_r)         // constructor
 {
-   num_robots = n_robots;
-   robot_radius.resize(n_robots); 
-   for(int i = 0; i < n_robots; i++)
-     robot_radius[i] = robot_r;    
-   
-   dims = 3;
-   dim_max.resize(dims);
-   dim_max[0] = 1;    // x
-   dim_max[1] = 1;    // y
-   dim_max[2] = 2*PI; // z
+   Populate(n_robots, robot_r);
 }
 
 MultiRobotWorkspace::MultiRobotWorkspace(const MultiRobotWorkspace& W)   // copy constructor

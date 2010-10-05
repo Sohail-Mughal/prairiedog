@@ -12,8 +12,10 @@ class GlobalVariables
    bool set_up_agent_address(int ag_id, const char* IP_string);
    bool have_all_agent_addresses();
    bool have_min_agent_data();
+   bool have_all_team_data();
    bool all_agents_ready_to_plan();
    bool min_agents_ready_to_plan();
+   bool all_team_ready_to_plan();
    bool all_agents_moving();
    void broadcast(void* buffer, size_t buffer_size); // sends data to all robots we have info from
    void hard_broadcast(void* buffer, size_t buffer_size); // sends data to all robots we think may exist, regardless of if we have info from them
@@ -26,25 +28,30 @@ class GlobalVariables
    
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning
    
-   vector<int> InPorts;
-   vector<int> OutPorts;
+   vector<int> InPorts;      // indexed using global ID (i.e. agent number)
+   vector<int> OutPorts;     // indexed using global ID (i.e. agent number)
    int MasterInPort;
    int MasterOutPort;
 
-   vector<int> have_info;     // have_info[i] gets set to 1 when we get agent i's info (start and goal)
-   vector<int> agent_ready;   // agent_ready[i] is set to 1 when agent i has enough info to start planning
-   vector<int> agent_moving;  // agent_moving[i] set to 1 when i starts moving
-   vector<struct sockaddr_in> other_addresses;  
-   char** other_IP_strings;
-   vector<vector<float> > start_coords;  // start_coords[i] holds the start location for robot i
-   vector<vector<float> > goal_coords;   // goal_coords[i] holds the goal location for robot i   
+   vector<bool> InTeam;       // InTeam[n] = true means that agent n is in this agent's dynamic team, indexed using global ID (i.e. agent number)
+   vector<int> local_ID;      // local_ID[n] gives the index associated with robot n on this agent (i.e. 1 level of id abstraction)
+   vector<int> global_ID;     // inverse mapping of local_ID
    
-   vector<float> planning_time_remaining; // holds the ammount of planning time remaining for each agent
-   vector<clock_t> last_update_time;      // last_update_time[i] holds the last time planning_time_remaining[i] was updated
+   vector<int> have_info;     // have_info[i] gets set to 1 when we get agent i's info (start and goal), indexed using local_ID
+   vector<int> agent_ready;   // agent_ready[i] is set to 1 when agent i has enough info to start planning, indexed using local_ID
+   vector<int> agent_moving;  // agent_moving[i] set to 1 when i starts moving, indexed using local_ID
+   vector<struct sockaddr_in> other_addresses;  // indexed using global ID (i.e. agent number)
+   char** other_IP_strings;                     // indexed using global ID (i.e. agent number)
+   
+   vector<vector<float> > start_coords;  // start_coords[i] holds the start location for robot i, indexed using local_ID
+   vector<vector<float> > goal_coords;   // goal_coords[i] holds the goal location for robot i, indexed using local_ID
+   
+   vector<float> planning_time_remaining; // holds the ammount of planning time remaining for each agent, indexed using local_ID
+   vector<clock_t> last_update_time;      // last_update_time[i] holds the last time planning_time_remaining[i] was updated, indexed using local_ID
    
    bool non_planning_yet;
    
-   int agent_number;
+   int agent_number;    // this agent's global id
      
    char master_IP[256]; // only used in structured mode (i.e. not ad-hoc)
    char base_IP[256];   // only used in ad-hoc, all ip addresses are then found as base_IP.(agent_id+1)
@@ -53,7 +60,9 @@ class GlobalVariables
    int  my_in_sock;
    
    int number_of_agents;
-   int min_number_of_agents;  //  min number needed to start planning
+   int min_team_size;         // the dynamic team must be this big to start planning
+   int team_size;             // the dynamic team currently has this many members
+   
    bool kill_master;
    
    float sync_message_wait_time;  // time to wait between sending messages during sync phases

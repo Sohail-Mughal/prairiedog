@@ -7,65 +7,22 @@ MultiAgentSolution::MultiAgentSolution() // default constructor
    moving = false; 
    total_nodes_added = 0;
    current_it = 0;
+   dims_per_robot = 2;
    
-   #ifndef not_using_globals
    Gbls = NULL;
-   #endif
 }
 
 MultiAgentSolution::MultiAgentSolution(int the_num_agents, int the_agent_id)  // constructor
 {
-  num_agents = the_num_agents;
-  agent_id = the_agent_id;
-  
-  BestSolution.resize(0);
-  best_solution_length = -1;
-  best_solution_agent = -1;
-  
-  Votes.resize(the_num_agents);
-  for(int i = 0; i < the_num_agents; i++)
-    Votes[i] = -1;  
- 
-  FinalSolutionSent.resize(the_num_agents);
-  for(int i = 0; i < the_num_agents; i++)
-    FinalSolutionSent[i] = 0;  
-  
-  moving = false; 
-  
-  in_msg_ctr.resize(the_num_agents);
-  out_msg_ctr.resize(the_num_agents);
-  
-  message_send_attempts.resize(the_num_agents);
-  messages_sent_to_us.resize(the_num_agents);
-  messages_recieved_by_us.resize(the_num_agents);
-  
-  if(uni_tree_build == 1)
-  {   
-    total_nodes_added = 1;
-   
-    NodeID.resize(the_num_agents);
-    for(int i = 0; i < the_num_agents; i++)
-      NodeID[i].push_back(0);
-    
-    NodeIDInda.push_back(0);
-    NodeIDIndb.push_back(0);
-    
-    current_it = 0;
-    
-    LastItAdded.resize(the_num_agents);
-    for(int i = 0; i < the_num_agents; i++)
-      LastItAdded[i].push_back(0);
-  }
-  
-  #ifndef not_using_globals
-  Gbls = NULL;
-  #endif
+  Populate(the_num_agents,the_agent_id, 2);
 }
 
 MultiAgentSolution::MultiAgentSolution(const MultiAgentSolution& M)   // copy constructor
 {
    num_agents = M.num_agents;
    agent_id = M.agent_id;
+      
+   dims_per_robot = M.dims_per_robot;
    
    best_solution_length = M.best_solution_length;
    BestSolution = M.BestSolution;
@@ -97,9 +54,7 @@ MultiAgentSolution::MultiAgentSolution(const MultiAgentSolution& M)   // copy co
      LastItAdded = M.LastItAdded;
    }
    
-   #ifndef not_using_globals
    Gbls = M.Gbls;
-   #endif
 }
 
 MultiAgentSolution::~MultiAgentSolution()  // destructor 
@@ -107,7 +62,7 @@ MultiAgentSolution::~MultiAgentSolution()  // destructor
     
 }
 
-void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id)  // populates or re-populates the structure
+void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id, int this_dims_per_robot)  // populates or re-populates the structure
 {
    num_agents = the_num_agents;
    agent_id = the_agent_id;
@@ -134,7 +89,6 @@ void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id)  // popu
    
    if(uni_tree_build == 1)
    {
-     //  printf(" in 6 \n");
      NodeID.resize(the_num_agents);
    
      total_nodes_added = 1;
@@ -152,59 +106,16 @@ void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id)  // popu
        LastItAdded[i].push_back(0);
    }
    
-   #ifndef not_using_globals
+   dims_per_robot = this_dims_per_robot;
+   
    Gbls = NULL;
-   #endif
 }
 
-#ifndef not_using_globals
-void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id, GlobalVariables* G)  // populates or re-populates the structure
+void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id, GlobalVariables* G, int this_dims_per_robot)  // populates or re-populates the structure
 {
-   num_agents = the_num_agents;
-   agent_id = the_agent_id;
-   
-   BestSolution.resize(0);
-   best_solution_length = -1;
-   best_solution_agent = -1;
-   
-   Votes.resize(the_num_agents);
-   for(int i = 0; i < the_num_agents; i++)
-     Votes[i] = -1;   
-   
-   FinalSolutionSent.resize(the_num_agents);
-   for(int i = 0; i < the_num_agents; i++)
-     FinalSolutionSent[i] = 0;   
-   
-   moving = false;  
-   in_msg_ctr.resize(the_num_agents);
-   out_msg_ctr.resize(the_num_agents);
-   
-   message_send_attempts.resize(the_num_agents);
-   messages_sent_to_us.resize(the_num_agents);
-   messages_recieved_by_us.resize(the_num_agents);
-   
-   if(uni_tree_build == 1)
-   {
-     //  printf(" in 6 \n");
-     NodeID.resize(the_num_agents);
-   
-     total_nodes_added = 1;
-   
-     for(int i = 0; i < the_num_agents; i++)
-       NodeID[i].push_back(0);
-     
-     NodeIDInda.push_back(0);
-     NodeIDIndb.push_back(0);
-     
-     current_it = 0;
-     
-     LastItAdded.resize(the_num_agents);
-     for(int i = 0; i < the_num_agents; i++)
-       LastItAdded[i].push_back(0);
-   }
+   Populate(the_num_agents, the_agent_id, this_dims_per_robot);
    Gbls = G;
 }
-#endif
 
 void MultiAgentSolution::ExtractSolution(Cspace& C)  // this extracts a solution from the Cspace C, and updates things approperiatly if the solution is better than the best solution found so far.
 {
@@ -402,10 +313,13 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
 {   
   bool found_path_in_file = false;
     
-  // check for messages from every other agent  
+  // check for messages from every other agent that is part of this team
 
   for(int i = 0; i < num_agents; i++)
   {
+    if(!Gbls->InTeam[i])  
+      continue;
+    
     if(i == agent_id)
       continue;  
    
@@ -430,6 +344,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       vector<int> file_FinalSolutionSent(num_agents,0);
       int file_num_points;  
       int file_dimensions;  
+      vector<int> file_DimensionMapping(Gbls->team_size,-1);
       vector<vector<float> > file_path;
       int file_move_flag;  
       int message_num;
@@ -443,10 +358,6 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           fclose(ifp);
           
           in_msg_ctr[i]++;
-          
-          // NOT sure what I was doing here: wierd...
-          //messages_sent_to_us[i] = (float)message_num;
-          //messages_recieved_by_us[i] = (float)(in_msg_ctr[i]);
           
           // get rid of message file
           remove(this_file);
@@ -504,7 +415,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           //printf("[%d, ]\n", this_s);  
             
-          printf("problems reading data (not enough path dimensions) \n");
+          printf("problems reading data (not enough agent solution flags) \n");
           break;
         }  
         //printf("%d, ", this_s); 
@@ -514,7 +425,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       fscanf(ifp, "\n");
       // printf("\n"); 
     
-      // get number of point in the path 
+      // get number of points in the path 
       if(fscanf(ifp, "p:%d\n", &file_num_points) <= 0)
       {
         // problems reading data
@@ -544,13 +455,41 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }
       //printf("number of dimensions solution: %d \n",file_dimensions);
     
+      
+      fscanf(ifp, "m:\n");
+      // get the mapping for the order of dimesions vs global robot ids
+      for(int j = 0; j < Gbls->team_size; j++)
+      {
+        if(fscanf(ifp, "%d, ", &this_s) <= 0) 
+        {
+          printf("problems reading data (not enough agent solution flags) \n");
+          break;
+        }  
+
+        file_DimensionMapping[j] = this_s;
+      }
+      fscanf(ifp, "\n");
+      // printf("\n"); 
+     
+      
+      // calculate which local dimensions the message dimensions coorisponds to
+      vector<int> temp_mapping(file_dimensions, -1);
+      for(int k = 0; k < file_dimensions; k++) 
+      {
+        int message_robot_id = k/dims_per_robot;                    // which robot this represnets in the message
+        int global_robot_id = file_DimensionMapping[message_robot_id]; // that robot's global id
+        int local_robot_id = Gbls->local_ID[global_robot_id];          // that robot's local id on this agent
+        temp_mapping[k] = (local_robot_id*dims_per_robot) + (k - (message_robot_id*dims_per_robot)); // the dimension in the solution this goes into
+      }
+        
+
       //extract the path;
       file_path.resize(file_num_points);
       //printf("the path: \n");
       float this_value;
       bool successfull_path_get = true;
       for(int j = 0; j < file_num_points && successfull_path_get; j++)
-      {
+      {   
         file_path[j].resize(file_dimensions);
         for(int k = 0; k < file_dimensions; k++)   
         {
@@ -560,7 +499,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             successfull_path_get = false;
             break;
           }
-          file_path[j][k] = this_value;
+          file_path[j][temp_mapping[k]] = this_value;
           //printf("%f, ", file_path[j][k]); 
         }
         fscanf(ifp, "\n");
@@ -597,7 +536,6 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         break;
       }
       
-      #ifndef not_using_globals
       // get remaining planning time from file
       float remaining_planning_time;
       if(fscanf(ifp, "r:%f\n", &remaining_planning_time) <= 0)
@@ -613,12 +551,12 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         Gbls->planning_time_remaining[i] = remaining_planning_time;
         Gbls->last_update_time[i] = clock();
       }
-      #endif
       
       // get file move flag from file
       if(fscanf(ifp, "m:%d\n", &file_move_flag) <= 0)
       {      
         // problems reading data
+        printf("problems reading moving data (have you added the time to start to the old message stuff in MultiAgentSolution yet? \n");
         fclose(ifp);
         break;
       }
@@ -644,6 +582,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       // extract nodes from file
       if(uni_tree_build == 1)
       {
+        printf("this has not yet been changed to use 1 level of abstraction for dimensions, it will probably not work \n");  
+          
         int num_nodes_in_file;
         if(fscanf(ifp, "n:%d\n", &num_nodes_in_file) > 0)
         {
@@ -764,6 +704,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       bool have_everybodys_final_solution = true;
       for(int j = 0; j < num_agents; j++)
       {
+        if(!Gbls->InTeam[j])
+          continue;
         if(FinalSolutionSent[j] == 0)
         {
           have_everybodys_final_solution = false;  
@@ -799,8 +741,10 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         // regardless, we need to record the robots that the message came from
         for(int j = 0; j < num_agents; j++)
         {
+          if(!Gbls->InTeam[j])
+            continue;
           if(file_votes[j] == 1)
-          Votes[j] = best_solution_agent;
+            Votes[j] = best_solution_agent;
         }
         Votes[agent_id] = best_solution_agent;  
         printf("have everybody's solution\n");  
@@ -819,13 +763,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           // we want to see who else supports this agent
           for(int j = 0; j < num_agents; j++)
           {
+            if(!Gbls->InTeam[j])
+              continue;
+                        
             if(file_votes[j] == 1)
               Votes[j] = agent_id;
           }
           Votes[agent_id] = agent_id;
-    
-          // but we already know everything else, and this agent may even have a better path then the one that caused the other robots to vote for it
-          //printf("continue 1 \n");
+          
           continue;
         }
         else if(best_solution_length <= file_best_solution_length && best_solution_length != -1)
@@ -864,6 +809,9 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
     
         for(int j = 0; j < num_agents; j++)
         {
+          if(!Gbls->InTeam[j])
+            continue;
+            
           if(file_votes[j] == 1)
             Votes[j] = best_solution_agent;
         }
@@ -895,7 +843,7 @@ void MultiAgentSolution::SendMessage(float send_prob) // sends a message contain
   pctr_all = 0;
   ectr_all = 0;
   
- if(BestSolution.size() <= 0) // | BestSolution[0].size() <= 0)
+  if(BestSolution.size() <= 0) // | BestSolution[0].size() <= 0)
   {
     //printf(" solution has 0 points \n");     
     if(add_points_to_messages == 1)
@@ -1201,7 +1149,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     sprintf(temp_buffer,"\n");  
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
-    // best path
+    // best path (meta data)
     int num_points = BestSolution.size();       
     int num_dims = BestSolution[0].size();
     sprintf(temp_buffer, "p:%d\n", num_points);\
@@ -1210,6 +1158,18 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     sprintf(temp_buffer, "d:%d\n", num_dims);
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
+    // add the dimensional mapping to the file, the nth value in the file denotes which global robot the nth dimension group represents
+    sprintf(temp_buffer, "m:\n"); 
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    for(int j = 0; j < Gbls->team_size; j++)
+    {
+      sprintf(temp_buffer, "%d, ",Gbls->global_ID[j]); 
+      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    }
+    sprintf(temp_buffer,"\n");  
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    
+    // best path (itself)
     for(int j = 0; j < num_points; j++)
     {
       for(int k = 0; k < num_dims; k++) 
