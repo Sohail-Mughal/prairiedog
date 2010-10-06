@@ -106,9 +106,13 @@ void Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimen
   ValidConfigs.push_back(the_goal); 
   
   Neighbors.resize(1);
+  Neighbors[0].resize(0);
   Neighbors[0].push_back(0);
+  SafeDistance.resize(0);
   SafeDistance.push_back(goal_dist);
+  DistToGoal.resize(0);
   DistToGoal.push_back(0);
+  MinDistToStart.resize(0);
   MinDistToStart.push_back(W.Dist(the_goal,the_start));
   
   num_points = 1;
@@ -117,7 +121,9 @@ void Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimen
   chop_tree = false;
     
   num_valid_points = 1;
+  ValidInds.resize(0);
   ValidInds.push_back(0);
+  ValidIndsInd.resize(0);
   ValidIndsInd.push_back(0);
   
   #ifdef use_kd_tree 
