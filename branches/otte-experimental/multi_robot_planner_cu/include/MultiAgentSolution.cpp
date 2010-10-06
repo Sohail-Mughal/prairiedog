@@ -71,35 +71,44 @@ void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id, int this
    best_solution_length = -1;
    best_solution_agent = -1;
    
+   Votes.resize(0);
    Votes.resize(the_num_agents, -1); 
    Votes[agent_id] = agent_id;
    
-   FinalSolutionSent.resize(the_num_agents);
-   for(int i = 0; i < the_num_agents; i++)
-     FinalSolutionSent[i] = 0;   
+   FinalSolutionSent.resize(0);
+   FinalSolutionSent.resize(the_num_agents, 0);
    
    moving = false;  
+   in_msg_ctr.resize(0);
    in_msg_ctr.resize(the_num_agents);
+   out_msg_ctr.resize(0);
    out_msg_ctr.resize(the_num_agents);
    
-   message_send_attempts.resize(the_num_agents);
-   messages_sent_to_us.resize(the_num_agents);
-   messages_recieved_by_us.resize(the_num_agents);
+   message_send_attempts.resize(the_num_agents);   // not resized to 0 first since we want this to last after a re-populate
+   messages_sent_to_us.resize(the_num_agents);     // not resized to 0 first since we want this to last after a re-populate
+   messages_recieved_by_us.resize(the_num_agents); // not resized to 0 first since we want this to last after a re-populate
    
    if(uni_tree_build == 1)
    {
+     NodeID.resize(0);
      NodeID.resize(the_num_agents);
    
      total_nodes_added = 1;
    
      for(int i = 0; i < the_num_agents; i++)
+     {
+       NodeID[i].resize(0);
        NodeID[i].push_back(0);
+     }
      
+     NodeIDInda.resize(0);
      NodeIDInda.push_back(0);
+     NodeIDIndb.resize(0);
      NodeIDIndb.push_back(0);
      
      current_it = 0;
      
+     LastItAdded.resize(0);
      LastItAdded.resize(the_num_agents);
      for(int i = 0; i < the_num_agents; i++)
        LastItAdded[i].push_back(0);

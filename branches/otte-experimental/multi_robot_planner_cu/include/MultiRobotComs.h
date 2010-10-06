@@ -63,8 +63,9 @@ class GlobalVariables
    int min_team_size;         // the dynamic team must be this big to start planning
    int team_size;             // the dynamic team currently has this many members
    
-   bool kill_master;
-   
+   bool kill_master;          // if true then we shut down all threads
+   bool master_reset;         // if true then we restart the planning
+           
    float sync_message_wait_time;  // time to wait between sending messages during sync phases
    float message_wait_time;       // time to wait between sending messages during planning
    

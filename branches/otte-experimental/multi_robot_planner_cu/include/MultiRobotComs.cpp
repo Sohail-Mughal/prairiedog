@@ -82,6 +82,9 @@ void GlobalVariables::Populate(int num_of_agents)
   resolution = .01;
   angular_resolution = .3;
   planning_border_width = 1;
+  
+  master_reset = false;
+  kill_master = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -330,7 +333,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     if(sscanf(buffer,"A %d\n", &sending_agent) < 1)
       return;
     
-    printf("recieved message: %s \n", buffer);
+   // printf("recieved message: %s \n", buffer);
     
     // get to start of next line
     while(buffer[index] != '\n' && buffer[index] != '\0') 
@@ -376,7 +379,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       // read this data
       if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
         continue;
-      printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
+      //printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
       
       
       num++;
@@ -386,7 +389,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       if(overlap && !InTeam[an_id])
       {
         // robot an_id is in a team that overlaps with this agent's team, but they are not in the same team
-        printf("!!!!!!!!!!!!!!!!!! need to join teams !!!!!!!!!!!!!!!!!!!!!!!!\n");
+        printf("\n\n!!!!!!!!!!!!!!!!!! need to join teams !!!!!!!!!!!!!!!!!!!!!!!!\n\n\n");
          
         Globals.InTeam[an_id] = true;
         
@@ -395,9 +398,11 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         Globals.team_size++;
         
         local_an_id = Globals.local_ID[an_id];
+        
+        master_reset = true;
       }
 
-      printf("local_an_id:%d \n", local_an_id);
+      //printf("local_an_id:%d \n", local_an_id);
       if(local_an_id != -1)
       {
         if(InTeam[local_an_id] && have_info[local_an_id] == 0) // new data
@@ -969,8 +974,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         else if(G->local_ID[agent_sending] == -1)
         {
           // recieved a message from a robot that is not yet part of this team
-          printf("recieved a message from a robot that is not yet part of this team\n");
-            
+          // printf("recieved a message from a robot that is not yet part of this team\n");  
         }
         else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // last case checks for when messages are recieved before MultAgSln is populated
         { 
@@ -1036,22 +1040,28 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   clock_t start_wait_t, now_time;
 
   printf("waiting for agent start and goal coords (sending data) \n");  
-  while(!G->have_all_team_data() || G->team_size < G->min_team_size) // until we have the min number of the other robot's data
+  while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !Globals.master_reset) // until we have the min number of the other robot's data
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
     start_wait_t = clock();
     now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !Globals.master_reset)
       now_time = clock(); 
   }
   printf("we have min number of start and goal locations to start planning\n");  
   
+  if(Globals.master_reset)
+  {
+    printf("sender thread exiting due to master reset 1 \n");
+    return NULL;
+  }
+  
   G->non_planning_yet = false;
   
   // now we start path planning, but this thread still keeps broadcasting the data to agents in our team who are not yet ready to plan
-  while(!G->all_team_ready_to_plan()) // until the rest of the team is ready to plan
+  while(!G->all_team_ready_to_plan() && !Globals.master_reset) // until the rest of the team is ready to plan
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
@@ -1059,8 +1069,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     start_wait_t = clock();
     now_time = clock();
     
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !Globals.master_reset)
       now_time = clock(); 
+  }
+  
+  if(Globals.master_reset)
+  {
+    printf("sender thread exiting due to master reset 2 \n");
+    return NULL;
   }
   
   // now we know the team is all planning, so we exit this thread
