@@ -76,4 +76,8 @@ class GlobalVariables
    float resolution;          // resolution of the rrt
    float angular_resolution;  // angular resolution of the rrt
    float planning_border_width; // this much more space provided around robots for planning
+   
+   vector<float> team_bound_area_min;  // holds the minimum point in the hyper cube team bounding area  (note, this gets populated when NavSceen is populated)
+   vector<float> team_bound_area_size; // holds the distance along each dimension of the hyper cube team bounding area (note, this gets populated when NavSceen is populated)
+   
 };

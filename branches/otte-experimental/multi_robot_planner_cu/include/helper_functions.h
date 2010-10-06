@@ -42,3 +42,5 @@ void calculate_rotation(vector<vector<float> >& MultiSolution); // calculates th
 void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution, float mps_target, float rps_target); // calculates the time parametery of the MultiSolution, where mps_target is the target meters per second of the fastest moving robot and rps is the target radians per second of fastest moving robot, note that these should be slightly slower than the max possible values to allow a behind robot to catch up, assumes 2D workspace and orientation for each robot
 
 void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& start_config);  // makes sure start angles are correct
+
+bool quads_overlap(float x1_min, float x1_length, float y1_min, float y1_length, float x2_min, float x2_length, float y2_min, float y2_length ); // returns true if the quads overlap

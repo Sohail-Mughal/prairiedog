@@ -417,3 +417,38 @@ void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& s
     printf("robot %d actual start:   %f, %f, %f \n\n", i/3, start_config[i], start_config[i+1], start_config[i+2]);
   }
 }
+
+bool quads_overlap(float x1_min, float x1_length, float y1_min, float y1_length, float x2_min, float x2_length, float y2_min, float y2_length ) // returns true if the quads overlap
+{
+  float rad_1 = x1_length/2.0;  
+  float rad_2 = x2_length/2.0;  
+  float center_1 = x1_min + rad_1;
+  float center_2 = x2_min + rad_2;  
+  
+  float center_dist = center_1 - center_2;
+  if(center_dist < 0)
+    center_dist *= -1;
+    
+  // now center_dist has the distance in the x direction between the two centers
+  
+  if(center_dist > rad_1+rad_2) // quads cannot possibly intersect
+    return false;
+  // otherwise the x overlap, so we need to look at y direction
+  
+  
+  rad_1 = y1_length/2.0;  
+  rad_2 = y2_length/2.0;  
+  center_1 = y1_min + rad_1;
+  center_2 = y2_min + rad_2;  
+  
+  center_dist = center_1 - center_2;
+  if(center_dist < 0)
+    center_dist *= -1;
+    
+  // now center_dist has the distance in the y direction between the two centers
+  
+  if(center_dist > rad_1+rad_2) // quads cannot possibly intersect
+    return false;
+  
+  return true;
+}
