@@ -608,8 +608,6 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
   return true;
 }
 
-
-#ifndef not_using_globals
 bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from the global variables
 {    
   // get world dims
@@ -665,6 +663,17 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   dim_max[1] = max_y - min_y;
   dim_max[2] = max_theta - min_theta;
 
+  // store info about planning bounding area in the global data structure
+  G.team_bound_area_min.resize(3);
+  G.team_bound_area_min[0] = min_x;
+  G.team_bound_area_min[1] = min_y;
+  G.team_bound_area_min[2] = 0;
+  
+  G.team_bound_area_size.resize(3);
+  G.team_bound_area_size[0] = dim_max[0];
+  G.team_bound_area_size[1] = dim_max[1];
+  G.team_bound_area_size[2] = dim_max[2];
+  
   // get num_robots
   num_robots = G.team_size;
   if(num_robots < 1)
@@ -765,7 +774,6 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   
   return true;
 }
-#endif
 
 void NavScene::DrawObstacles()        // draws the obstacles in the obstacle list
 {

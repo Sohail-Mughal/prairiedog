@@ -71,9 +71,8 @@ void MultiAgentSolution::Populate(int the_num_agents, int the_agent_id, int this
    best_solution_length = -1;
    best_solution_agent = -1;
    
-   Votes.resize(the_num_agents);
-   for(int i = 0; i < the_num_agents; i++)
-     Votes[i] = -1;   
+   Votes.resize(the_num_agents, -1); 
+   Votes[agent_id] = agent_id;
    
    FinalSolutionSent.resize(the_num_agents);
    for(int i = 0; i < the_num_agents; i++)
@@ -1339,9 +1338,14 @@ bool MultiAgentSolution::StartMoving()   // returns true if this agent can start
   if(mode == 0) // pss
   {
     // check if all agents vote for our path (given best info we have)
-    for(int i = 0; i < num_agents; i++)
-      if(Votes[i] != agent_id)
-        return false;
+    for(int i = 0; i < Gbls->team_size; i++)
+    {    
+      if(Gbls->InTeam[i])
+      {
+        if(Votes[i] != agent_id)
+          return false;
+      }
+    }
   }
   else if(mode == 1) // ss
   {
@@ -1697,7 +1701,7 @@ bool MultiAgentSolution::GreedyPathSmooth()              // greedily smooths Bes
   return found_shorter_path;
 }
 
-float MultiAgentSolution::OverallMessageStats()          // returns the probability tis robot recieved a message that was sent by another robot
+float MultiAgentSolution::OverallMessageStats()          // returns the probability this robot recieved a message that was sent by another robot
 {
   float overall_attempts = 0;
   float overall_recieved = 0;

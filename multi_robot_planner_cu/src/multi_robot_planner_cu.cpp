@@ -155,7 +155,7 @@ int next_ind_animate = -1;
 int display_flag = 0;
 unsigned int the_seed; // rand seed
  
-int min_num_agents = -1; // waits until this many agents have contact before planning (this number includes this agent), -1 means wait for all
+int min_num_agents = 1; // waits until this many agents have contact before planning (this number includes this agent), -1 means wait for all
 
 float map_resolution = -1; // reset later to proper value
 float map_width = 0;
@@ -906,24 +906,7 @@ int main(int argc, char** argv)
   Globals.InTeam[agent_number] = true;
   Globals.local_ID[agent_number] = 0;
   Globals.global_ID.push_back(agent_number);
-  Globals.team_size = 2;
-  
-  
-  
-  
-  /////////////// remove this once get better way to auto-add when need to 
-  int other_agent = 0;
-  if(agent_number == 0)
-    other_agent = 1;
-  
-  Globals.InTeam[other_agent] = true;
-  Globals.local_ID[other_agent] = 1;
-  Globals.global_ID.push_back(other_agent);
-  Globals.team_size = 2;
-  ///////////////
-  
-  
-  
+  Globals.team_size = 1;
   
   if(min_num_agents < 0)
     Globals.min_team_size = total_agents;
