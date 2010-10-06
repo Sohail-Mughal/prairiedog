@@ -477,6 +477,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         break;
       
       // calculate which local dimensions the message dimensions coorisponds to
+      bool successfull_path_get = true;
       vector<int> temp_mapping(file_dimensions, -1);
       for(int k = 0; k < file_dimensions; k++) 
       {
@@ -484,14 +485,20 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         int global_robot_id = file_DimensionMapping[message_robot_id]; // that robot's global id
         int local_robot_id = Gbls->local_ID[global_robot_id];          // that robot's local id on this agent
         temp_mapping[k] = (local_robot_id*dims_per_robot) + (k - (message_robot_id*dims_per_robot)); // the dimension in the solution this goes into
-      }
         
-
+        if(temp_mapping[k] > file_dimensions)
+          successfull_path_get = false;
+      }
+      if(!successfull_path_get)
+      {
+        printf("---ignoring message for a different problem (maps to higher dimension than we have)\n"); 
+        break; 
+      }
+      
       //extract the path;
       file_path.resize(file_num_points);
       //printf("the path: \n");
       float this_value;
-      bool successfull_path_get = true;
       for(int j = 0; j < file_num_points && successfull_path_get; j++)
       {   
         file_path[j].resize(file_dimensions);
@@ -503,6 +510,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             successfull_path_get = false;
             break;
           }
+              
           file_path[j][temp_mapping[k]] = this_value;
           //printf("%f, ", file_path[j][k]); 
         }
@@ -1325,7 +1333,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       
       //printf(" out 7\n");
     }
-    Gbls->broadcast(out_buffer, sizeof(out_buffer));
+    Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
     out_msg_ctr[i]++;
   }
 }

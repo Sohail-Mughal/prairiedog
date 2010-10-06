@@ -59,7 +59,7 @@ class GlobalVariables
    int  my_out_sock;
    int  my_in_sock;
    
-   int number_of_agents;
+   int number_of_agents;      // total number of agents 
    int min_team_size;         // the dynamic team must be this big to start planning
    int team_size;             // the dynamic team currently has this many members
    

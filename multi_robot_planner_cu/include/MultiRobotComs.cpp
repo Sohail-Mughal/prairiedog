@@ -216,8 +216,11 @@ void GlobalVariables::broadcast(void* buffer, size_t buffer_size) // sends data 
   {
     if(i == agent_number)
       continue;
-    if(!InTeam[i] | have_info[local_ID[i]] == 0)
+    if(!InTeam[i])
       continue;
+    if(have_info[local_ID[i]] == 0)
+      continue;
+    
     
     int sent_size = sendto(my_out_sock, buffer, buffer_size, 0, (struct sockaddr *)&other_addresses[i], sizeof(struct sockaddr_in));  // send this agent's IP to the master
     if(sent_size < 0) 
@@ -232,8 +235,6 @@ void GlobalVariables::hard_broadcast(void* buffer, size_t buffer_size) // sends 
   {
     if(i == agent_number)
       continue;
-    
-    printf("-------////\\\\sending to %d\n", i);
     
     int sent_size = sendto(my_out_sock, buffer, buffer_size, 0, (struct sockaddr *)&other_addresses[i], sizeof(struct sockaddr_in));  // send this agent's IP to the master
     if(sent_size < 0) 
@@ -290,9 +291,12 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   // for each robot that is in our team that we have info about
   for(int i = 0; i < number_of_agents; i++)
   {
-    if(have_info[local_ID[i]] == 0 || !InTeam[i])
+    if(!InTeam[i])
       continue;
 
+    if(have_info[local_ID[i]] == 0)
+      continue;
+    
     int local_id_temp = local_ID[i];
     
     // agent id, start and goal
@@ -337,8 +341,6 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
 
     if(buffer[index] == 'B')
     {
-      printf("got a message with a B \n");  
-        
       // get message planning area bounds
       if(sscanf(&(buffer[index]),"B: %f %f %f %f %f %f\n", &sx, &sy, &st, &gx, &gy, &gt) < 6)
       {
@@ -354,10 +356,10 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     if(team_bound_area_min.size() > 0)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
-    if(overlap)
-      printf("quads overlap \n");
-    else
-      printf("quads don't overlap \n");
+    //if(overlap)
+    //  printf("quads overlap \n");
+    //else
+    //  printf("quads don't overlap \n");
     
     
     while(true) // break out when done
@@ -366,17 +368,10 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       while(buffer[index] != '\n' && buffer[index] != '\0') 
         index++;
       if(buffer[index] == '\0' || buffer[index] == 'A')
-      {
-        printf("braek 1 \n");
         break;
-      }
       index++;
       if(buffer[index] == '\0' || buffer[index] == 'A')
-      {
-        printf("break 2 \n");
         break;
-      }
-      printf("here ---- %c \n", buffer[index]);
       
       // read this data
       if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
@@ -397,34 +392,35 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         
         Globals.local_ID[an_id] = Globals.team_size;
         Globals.global_ID.push_back(an_id);
-        //Globals.team_size++;
+        Globals.team_size++;
         
         local_an_id = Globals.local_ID[an_id];
       }
 
-      printf("++++++ %d %d(%d) %d \n", an_id,  local_an_id, have_info[local_an_id], have_info.size());
-      
-      
-      if(local_an_id != -1 & (InTeam[local_an_id] & have_info[local_an_id] == 0)) // new data
-      {  
-        if(start_coords[local_an_id].size() < 3)
-          start_coords[local_an_id].resize(3); 
-        start_coords[local_an_id][0] = sx;
-        start_coords[local_an_id][1] = sy;
-        start_coords[local_an_id][2] = st;
+      printf("local_an_id:%d \n", local_an_id);
+      if(local_an_id != -1)
+      {
+        if(InTeam[local_an_id] && have_info[local_an_id] == 0) // new data
+        {  
+          if(start_coords[local_an_id].size() < 3)
+            start_coords[local_an_id].resize(3); 
+          start_coords[local_an_id][0] = sx;
+          start_coords[local_an_id][1] = sy;
+          start_coords[local_an_id][2] = st;
         
-        if(goal_coords[local_an_id].size() < 3)
-          goal_coords[local_an_id].resize(3);
-        goal_coords[local_an_id][0] = gx;
-        goal_coords[local_an_id][1] = gy;
-        goal_coords[local_an_id][2] = gt;
+          if(goal_coords[local_an_id].size() < 3)
+            goal_coords[local_an_id].resize(3);
+          goal_coords[local_an_id][0] = gx;
+          goal_coords[local_an_id][1] = gy;
+          goal_coords[local_an_id][2] = gt;
       
-        have_info[local_an_id] = 1;     
+          have_info[local_an_id] = 1;     
         
-        printf("recieved new data from %d: \n", an_id);
-        printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
-        printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
-        //getchar();
+          printf("recieved new data from %d: \n", an_id);
+          printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
+          printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
+          //getchar();
+        }
       }
     }
     if(num >= team_size && sending_agent != -1 && InTeam[sending_agent]) // the sending agent has the min number of starts/goals to start planning
