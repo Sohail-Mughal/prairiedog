@@ -192,7 +192,10 @@ MultiAgentSolution MultAgSln;  // this is the MultiAgentSolution we are using
 GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotComs.h
 vector<vector<float> > ThisAgentsPath; // holds this agents path of the best solution
 vector<float> Parametric_Times; // holds time parametry of best solution
-        
+  
+bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
+
+
 #include "helper_functions.cpp"
 #include "NavScene.cpp"
 #include "MultiRobotWorkspace.cpp"  

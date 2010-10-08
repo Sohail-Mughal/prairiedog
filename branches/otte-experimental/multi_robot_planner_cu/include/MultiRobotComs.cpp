@@ -386,7 +386,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       
       int local_an_id = local_ID[an_id];
       
-      if(overlap && !InTeam[an_id])
+      if(overlap && !InTeam[an_id] && JOIN_ON_OVERLAPPING_AREAS)
       {
         // robot an_id is in a team that overlaps with this agent's team, but they are not in the same team
         printf("\n\n!!!!!!!!!!!!!!!!!! need to join teams !!!!!!!!!!!!!!!!!!!!!!!!\n\n\n");
@@ -971,12 +971,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         {
            // don't know who sent the message, so ignore 
         }
-        else if(G->local_ID[agent_sending] == -1)
+        else if(G->local_ID[agent_sending] == -1 && JOIN_ON_OVERLAPPING_AREAS)
         {
-          // recieved a message from a robot that is not yet part of this team
+          // recieved a message from a robot that is not yet part of this team 
+          // (if we do not join on overlapping areas, then we join on intersecting paths, so we want the message to be saved so we can check for this later)
           // printf("recieved a message from a robot that is not yet part of this team\n");  
         }
-        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // last case checks for when messages are recieved before MultAgSln is populated
+        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
         { 
           // put the message into a file             
           // printf("MultAgSln.in_msg_ctr[agent_sending]: %d\n", MultAgSln.in_msg_ctr[agent_sending]);
@@ -999,9 +1000,11 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
           fclose(ofp);
           
-          // mark that this agent is planning
-          G->agent_ready[G->local_ID[agent_sending]] = 1;
-          
+          if(G->local_ID[agent_sending] != -1)
+          {
+            // mark that this agent is planning
+            G->agent_ready[G->local_ID[agent_sending]] = 1;
+          }
           //    printf("here 55 \n");
         }
       }
