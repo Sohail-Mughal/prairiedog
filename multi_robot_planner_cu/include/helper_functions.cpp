@@ -452,3 +452,224 @@ bool quads_overlap(float x1_min, float x1_length, float y1_min, float y1_length,
   
   return true;
 }
+
+float PointSafe(const vector<float>& point, int index, float the_robot_rad, const vector<vector<vector<float> > >& obstacle_list) // this checks if a point is safe with respect to the obstacle list, where the points' coords start at index in vectors, it returns the minimum distance to an obstacle
+{ 
+  int num_polygons = obstacle_list.size(); 
+  if(num_polygons == 0)
+     return LARGE;
+  
+  float r_x, r_y, o_x1, o_x2, o_y1, o_y2, dist_temp;
+  float min_dist = LARGE;
+  int this_edge_num;
+  
+  r_x = point[index];
+  r_y = point[index+1];
+  
+  //  do collision detection
+  for(int i = 0; i < num_polygons; i++) // each polynomial
+  {
+    this_edge_num = obstacle_list[i].size();
+    for(int j = 0; j < this_edge_num; j++) // each edge
+    {        
+      if(j == 0)   
+      {   
+        o_x1 = obstacle_list[i][this_edge_num-1][0];
+        o_x2 = obstacle_list[i][0][0];
+        o_y1 = obstacle_list[i][this_edge_num-1][1];
+        o_y2 = obstacle_list[i][0][1];  
+      }
+      else
+      {
+        o_x1 = obstacle_list[i][j-1][0];
+        o_x2 = obstacle_list[i][j][0];
+        o_y1 = obstacle_list[i][j-1][1];
+        o_y2 = obstacle_list[i][j][1]; 
+      }
+     
+      dist_temp = line_dist_to_point(o_x1, o_y1, o_x2, o_y2, r_x, r_y) - the_robot_rad;
+      if(dist_temp < min_dist)
+        min_dist = dist_temp;
+      
+      dist_temp = line_dist_to_point(o_x1, o_y1, o_x2, o_y2, r_x, r_y) - the_robot_rad; 
+      if(dist_temp < min_dist)
+        min_dist = dist_temp;
+      
+      if(min_dist <= 0)
+      {
+        return min_dist;  // early break out if there is a collision
+      }
+    }    
+  }    
+  
+  return min_dist; 
+}
+
+bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad) // this checks if an edge is safe vs obstacle_list, where the points' coords start at index in vectors (note assumes 2d points)
+{
+  int num_polygons = obstacle_list.size(); 
+  if(num_polygons == 0)
+     return true;
+
+  float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo, x, y;
+  int this_edge_num;
+  
+  r_x1 = point1[index];
+  r_x2 = point2[index];
+  r_y1 = point1[index+1];
+  r_y2 = point2[index+1];
+    
+  // do collision detection
+  Mr_top = r_y2 - r_y1;
+  Mr_bottom = r_x2 - r_x1;
+            
+  for(int i = 0; i < num_polygons; i++) // each polygon
+  {
+    this_edge_num = obstacle_list[i].size();
+    for(int j = 0; j < this_edge_num; j++) // each edge
+    {    
+      if(j == 0)   
+      {   
+        o_x1 = obstacle_list[i][this_edge_num-1][0];
+        o_x2 = obstacle_list[i][0][0];
+        o_y1 = obstacle_list[i][this_edge_num-1][1];
+        o_y2 = obstacle_list[i][0][1];  
+      }
+      else
+      {
+        o_x1 = obstacle_list[i][j-1][0];
+        o_x2 = obstacle_list[i][j][0];
+        o_y1 = obstacle_list[i][j-1][1];
+        o_y2 = obstacle_list[i][j][1]; 
+      }
+     
+      Mo_top = o_y2 - o_y1;
+      Mo_bottom = o_x2 - o_x1;
+      
+      if(Mo_bottom != 0 && Mr_bottom != 0) // neither obstacle nor path is vertical 
+      {
+        Mr = Mr_top/Mr_bottom;
+        Mo = Mo_top/Mo_bottom;
+      
+        // for numerical stability break this up based on which slope is larger
+        if(fabs(Mr) <= fabs(Mo))
+        {
+          x = (Mo*o_x1-Mr*r_x1+r_y1-o_y1)/(Mo-Mr);
+          y = Mr*(x-r_x1)+r_y1;
+        }
+        else
+        {
+          x = (Mr*r_x1-Mo*o_x1+o_y1-r_y1)/(Mr-Mo);
+          y = Mo*(x-o_x1)+o_y1; 
+        }
+      }
+      else if(Mo_bottom != 0) // && Mr_bottom == 0 // the path is vertical
+      {
+        Mo = Mo_top/Mo_bottom;
+        x = r_x1;    
+        y = Mo*(x-o_x1)+o_y1;   
+      }
+      else if(Mr_bottom != 0) // && Mo_bottom == 0 // the obstacle is vertical
+      {
+        Mr = Mr_top/Mr_bottom;
+        x = o_x1;
+        y = Mr*(x-r_x1)+r_y1;  
+      }
+      else // Mo_bottom == 0 && Mr_bottom == 0 // both path and obstacle are vertical
+      {
+        if(fabs(o_x1 - r_x1) > the_robot_rad)
+          continue; // they are vertical and further then robot rad away, so no collision
+          
+        if(Mo_top != 0 && Mr_top != 0)  // neither the obstacle nor the path are points (both are vertical segments)  
+        {
+          if(((o_y1 <= r_y1 && r_y1 <= o_y2) || (o_y2 <= r_y1 && r_y1 <= o_y1)) ||
+             ((o_y1 <= r_y2 && r_y2 <= o_y2) || (o_y2 <= r_y2 && r_y2 <= o_y1)) ||
+             ((r_y1 <= o_y1 && o_y1 <= r_y2) || (r_y2 <= o_y1 && o_y1 <= r_y1)) ||
+             ((r_y1 <= o_y2 && o_y2 <= r_y2) || (r_y2 <= o_y2 && o_y2 <= r_y1))) // collision
+          { 
+            return false;  
+          }   
+        } 
+        else if(Mo_top != 0) // && Mr_top == 0 // the path is a point
+        {
+          x = r_x1;
+          y = r_y1;
+        }
+        else if(Mr_top != 0) // && Mo_top == 0 // the obstacle is a point
+        {
+          x = o_x1;
+          y = o_y1;  
+        }
+        else //(Mo_top == 0 && Mr_top == 0) // both obstacle and path are points
+        {
+          x = r_x1;
+          y = r_y1;
+        }
+      }
+      
+      if((line_dist_to_point(o_x1, o_y1, o_x2, o_y2, x, y) <= the_robot_rad) &&
+         ((o_x1 <= x && x <= o_x2) || (o_x2 <= x && x <= o_x1)) &&
+         ((o_y1 <= y && y <= o_y2) || (o_y2 <= y && y <= o_y1)) &&
+         ((r_x1 <= x && x <= r_x2) || (r_x2 <= x && x <= r_x1)) &&
+         ((r_y1 <= y && y <= r_y2) || (r_y2 <= y && y <= r_y1))) // collision */
+      {
+        return false; 
+      }
+     
+      // the lines do not intersect, but it is still possible that they are too close together
+      // need 4 tests, one each for each end point tested against the other line
+      
+      
+      /* assuming the path segment ends have already been checked against the obstacle
+       * we can ignor the firt two tests */
+      float dist_temp = line_dist_to_point(o_x1, o_y1, o_x2, o_y2, r_x1, r_y1); 
+      if(dist_temp < the_robot_rad)
+      {
+        return false;
+      }
+     
+      dist_temp = line_dist_to_point(o_x1, o_y1, o_x2, o_y2, r_x2, r_y2); 
+      if(dist_temp < the_robot_rad)
+      { 
+        return false;
+      }
+      
+      dist_temp = line_dist_to_point(r_x1, r_y1, r_x2, r_y2, o_x1, o_y1); 
+      if(dist_temp < the_robot_rad)
+      {
+        return false;
+      }
+      
+      dist_temp = line_dist_to_point(r_x1, r_y1, r_x2, r_y2, o_x2, o_y2); 
+      if(dist_temp < the_robot_rad)
+      {
+        return false;
+      }
+    }    
+  }    
+  return true; 
+}
+
+bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad, int path_dims) // this if the solution is safe vs obstacle_list, path_dims is the dimensions of 1 robot's path
+{
+  if(solution.size() == 0)
+    return true;
+  
+  if(obstacle_list.size() == 0)
+    return true;
+  
+  int num_solution_points = (int)solution.size();
+  int num_solution_dims = (int)solution[0].size();
+  
+  // check per each solution edge
+  for(int i = 0; i < num_solution_points - 1; i++)
+  {   
+    // check per each robot
+    for(int j = 0; j < num_solution_dims; j += path_dims)
+    {
+      if(!EdgeSafe(solution[i], solution[i+1], j, obstacle_list, the_robot_rad))
+        return false;
+    }
+  }
+  return true;
+}

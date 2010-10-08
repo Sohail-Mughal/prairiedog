@@ -44,3 +44,9 @@ void calculate_times(vector<float>& Times, vector<vector<float> >& MultiSolution
 void verrify_start_angle(vector<vector<float> >& MultiSolution, vector<float>& start_config);  // makes sure start angles are correct
 
 bool quads_overlap(float x1_min, float x1_length, float y1_min, float y1_length, float x2_min, float x2_length, float y2_min, float y2_length ); // returns true if the quads overlap
+
+float PointSafe(const vector<float>& point, int index, float the_robot_rad, const vector<vector<vector<float> > >& obstacle_list); // this checks if a point is safe with respect to the obstacle list, where the points' coords start at index in vectors, it returns the minimum distance to an obstacle
+
+bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad); // this checks if an edge is safe vs obstacle_list, where the points' coords start at index in vectors
+
+bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad, int path_dims); // this if the solution is safe vs obstacle_list, path_dims is the dimensions of 1 robot's path
