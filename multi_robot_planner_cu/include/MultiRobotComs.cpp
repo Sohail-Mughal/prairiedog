@@ -35,7 +35,8 @@ void GlobalVariables::Populate(int num_of_agents)
   OutPorts.resize(number_of_agents);
   InTeam.resize(number_of_agents, false);
   local_ID.resize(number_of_agents, -1);
-  
+  planning_iteration.resize(number_of_agents,0);
+    
   int min_port = 55000;
   for(int i = 0; i < number_of_agents; i++)
   {
@@ -282,17 +283,58 @@ void GlobalVariables::recover_ips_from_buffer(char* buffer) // gets everybody's 
 
 int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents ip, start, and goal positions into the buffer, returns the index of '\0' end of the message
 {
-  char temp[1000];
+  char temp[2000];
+  sprintf(buffer, "A %d,%d\n", agent_number, planning_iteration[agent_number]);  // message type 'A' from this agent
   
-  sprintf(buffer, "A %d\n", agent_number);  // message type 'A' from this agent
 
+  char temptemp[500];
+  
+  // add the team members
+  sprintf(temp, "T: %d\n", team_size);   
+  
+  for(int i = 0; i < team_size; i++)
+  {
+    sprintf(temptemp,"%d,", global_ID[i]);  
+    strcat(temp, temptemp);
+  }
+   
+  sprintf(temptemp,"\n");  
+  strcat(temp, temptemp);
+  strcat(buffer, temp);  
+  
+  // add who is ready to plan
+  int num_ready = 0;
+  for(int i = 0; i < team_size; i++)
+  {
+    if(agent_ready[i] == 1)
+      num_ready++;
+  }
+  
+  if(num_ready > 0)
+  {
+    sprintf(temp, "R: %d\n", num_ready);   
+  
+    for(int i = 0; i < team_size; i++)
+    {
+      if(agent_ready[i] == 1)
+      {
+        sprintf(temptemp,"%d,", global_ID[i]);  
+        strcat(temp, temptemp);
+      }
+    }
+   
+    sprintf(temptemp,"\n");  
+    strcat(temp, temptemp);
+    strcat(buffer, temp);  
+  }
+     
   if(team_bound_area_min.size() > 0)
   {
     // add this team's planning bounds
     sprintf(temp,"B: %f %f %f %f %f %f\n", team_bound_area_min[0], team_bound_area_min[1], team_bound_area_min[2], team_bound_area_size[0], team_bound_area_size[1], team_bound_area_size[2]);   
     strcat(buffer, temp);
   }
-    
+  
   // for each robot that is in our team that we have info about
   for(int i = 0; i < number_of_agents; i++)
   {
@@ -328,14 +370,29 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
   {
     int index = 0;
     int sending_agent = -1;
+    int senders_planning_iteration = -1;
     int an_id;
     float sx, sy, st, gx, gy, gt;
     int num = 0;
+    bool team_includes_this_ag = false;
     
     // get sending agent id
-    if(sscanf(buffer,"A %d\n", &sending_agent) < 1)
+    if(sscanf(buffer,"A %d,%d\n", &sending_agent,&senders_planning_iteration) < 2)
       return false;
     
+    bool updated_planning_iteration = false;
+    if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
+    {
+      printf("old problem --- %d %d\n", senders_planning_iteration, planning_iteration[sending_agent]);
+      return false;
+    }
+    else if(senders_planning_iteration > planning_iteration[sending_agent]) // keep data about sender current
+    {
+      planning_iteration[sending_agent] = senders_planning_iteration;
+      updated_planning_iteration = true;
+      printf("updated_planning_iteration \n"); 
+    }
+              
     // printf("recieved message: %s \n", buffer);
     
     // get to start of next line
@@ -345,6 +402,98 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       return false;
     index++;
 
+    vector<int> robots_in_senders_team;
+    if(buffer[index] == 'T')
+    {
+      // find out who is in the sending robot's team 
+      int num_in;
+      if(sscanf(&(buffer[index]),"T: %d\n", &num_in) < 1)
+      {
+        printf("problem reading agent in team\n");
+        return false;  
+      } 
+      
+      // get to start of next line
+      while(buffer[index] != '\n' && buffer[index] != '\0') 
+        index++;
+      if(buffer[index] == '\0')
+        return false;
+      index++;
+      
+      robots_in_senders_team.resize(num_in);
+      //printf(" agents in sender's team : ");
+      int temp_ag;
+      for(int j = 0; j < num_in; j++)
+      {
+        if(sscanf(&(buffer[index]),"%d,", &temp_ag) < 1)
+        {
+          printf("problems agent ready to plan\n");
+          return false;  
+        }   
+        
+        if(temp_ag == agent_number) // this agent is in the sending robots team
+        {
+          team_includes_this_ag = true;
+          //printf("!->");
+        }
+        //printf("%d, ", temp_ag);
+        robots_in_senders_team[j] = temp_ag; 
+        
+        while(buffer[index] != ',' && buffer[index] != '\n' && buffer[index] != '\0')
+          index++;
+        
+        if(buffer[index] == ',')
+          index++;
+      }
+      //printf("\n");
+      if(buffer[index] != '\n' && buffer[index] != '\0')
+        printf("problems, end of line not where expected \n");
+      
+      index++;   
+    }
+     
+    if(buffer[index] == 'R')
+    {
+      // find out who is ready to plan  
+      int num_ready;
+      if(sscanf(&(buffer[index]),"R: %d\n", &num_ready) < 1)
+      {
+        printf("problem reading number ready to plan\n");
+        return false;  
+      } 
+      
+      // get to start of next line
+      while(buffer[index] != '\n' && buffer[index] != '\0') 
+        index++;
+      if(buffer[index] == '\0')
+        return false;
+      index++;
+      
+      //printf("agents in sender's team that are ready to plan: ");
+      int temp_ag;
+      while(buffer[index] != '\n' && buffer[index] != '\0')
+      {
+        if(sscanf(&(buffer[index]),"%d,", &temp_ag) < 1)
+        {
+          printf("problems agent ready to plan\n");
+          return false;  
+        }   
+          
+        //printf("%d", temp_ag);
+        if(local_ID[temp_ag] >= 0 && local_ID[temp_ag] < team_size) 
+          agent_ready[local_ID[temp_ag]] = 1;
+        
+        while(buffer[index] != ',' && buffer[index] != '\n' && buffer[index] != '\0')
+          index++;
+        
+        if(buffer[index] == ',')
+          index++;
+      }
+      //printf("\n");
+      index++;   
+    }
+    
+    
     if(buffer[index] == 'B')
     {
       // get message planning area bounds
@@ -353,20 +502,52 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         printf("problem reading planning bounds from message\n");
         return false;  
       }
+      
+      //printf("sending agent's message bounds : %f %f %f %f %f %f\n", sx, sy, st, gx, gy, gt);
     }
     else
-      index--; // hack to make next loop a little easier in case planning area bounds not sent    
+      index--; // hack to make next buffer read a little easier in case planning area bounds not sent    
     
     // check if message planning bounds intersects with this agent's team's planning bounds
     if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
-    //if(overlap)
-    //  printf("quads overlap \n");
-    //else
-    //  printf("quads don't overlap \n");
+    bool need_to_join_solutions = false;
+    if(overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
+      need_to_join_solutions = true;
+    if(!InTeam[sending_agent] && team_includes_this_ag)   // need to join because the sending agent thinks we are in its team, but we currently don't think so
+      need_to_join_solutions = true;
+          
+    if(need_to_join_solutions)    
+    {
+      printf("\n\n----------------------- need to join teams -------------------------\n\n\n");
+
+      for(uint k = 0; k < robots_in_senders_team.size(); k++)
+      {
+        int temp_ag = robots_in_senders_team[k];
+              
+        if(!InTeam[temp_ag])
+        {    
+          InTeam[temp_ag] = true;
+          local_ID[temp_ag] = team_size;
+          global_ID.push_back(temp_ag);
+          team_size++;
+        } 
+      }
+     
+      if(overlap && JOIN_ON_OVERLAPPING_AREAS && !master_reset)
+      {
+        // update the planning iteration of all agents in the new combined group (but us, we'll do that at the start of the main loop in main after we reset)
+        for(int j= 1; j < team_size; j++)
+          planning_iteration[global_ID[j]]++;
+      }
+      
+      master_reset = true;   
+
+      return overlap;
+    }
     
-    vector<int> agents_in_solution;
+    // if we are here then the solutions don;t need to be merged
     while(true) // break out when done
     {
       // get to start of next line
@@ -387,65 +568,14 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       num++;
       
       int local_an_id = local_ID[an_id];
-      agents_in_solution.push_back(an_id); // save for later in case we need to join teams
       
-      if(overlap && !InTeam[an_id] && JOIN_ON_OVERLAPPING_AREAS)
-      {
-        // robot an_id is in a team that overlaps with this agent's team, but they are not in the same team
-        printf("\n\n!!!!!!!!!!!!!!!!!! need to join teams !!!!!!!!!!!!!!!!!!!!!!!!\n\n\n");
-         
-        InTeam[an_id] = true;
-        
-        local_ID[an_id] = team_size;
-        global_ID.push_back(an_id);
-        team_size++;
-        
-        local_an_id = local_ID[an_id];
-        
-        master_reset = true;
-      }
-      else if(!JOIN_ON_OVERLAPPING_AREAS && ((local_an_id == 0 && !InTeam[sending_agent]) || master_reset)) // we are in this solution, but the sending agent is not in our team (or we are joining teams already)
-      {
-        printf("\n\n----------------------- need to join teams -------------------------\n\n\n"); 
-
-        
-        if(!master_reset) // we've just discovered that we are part of this solution, make sure all previous agents are also in our team
-        {
-          for(uint k = 0; k < agents_in_solution.size(); k++)
-          {
-            int temp_ag = agents_in_solution[k];
-              
-            if(!InTeam[temp_ag])
-            {
-                    
-              InTeam[temp_ag] = true;
-              local_ID[temp_ag] = team_size;
-              global_ID.push_back(temp_ag);
-              team_size++;
-            }
-          }
-     
-          master_reset = true;   
-        }
-        else // we are adding the remaing members of the solution if they need to be added
-        {
-          if(!InTeam[an_id])
-          {
-            InTeam[an_id] = true;
-            local_ID[an_id] = team_size;
-            global_ID.push_back(an_id);
-            team_size++;
-          }
-        }
-        continue; // we'll wait a message after we restart the planner for the new problem to fill in remaining start and goal
-      }
-          
-          
       //printf("local_an_id:%d \n", local_an_id);
       if(local_an_id != -1)
       {
         if(InTeam[local_an_id] && have_info[local_an_id] == 0) // new data
         {  
+          // if we get problems with different agents having different state from different start and goal then here is where we may want to put a check based on updated_planning_iteration and having diff start and goal by, say, more than .001 
+            
           if(start_coords[local_an_id].size() < 3)
             start_coords[local_an_id].resize(3); 
           start_coords[local_an_id][0] = sx;
@@ -467,9 +597,6 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         }
       }
     }
-    if(num >= team_size && sending_agent != -1 && InTeam[sending_agent]) // the sending agent has the min number of starts/goals to start planning
-      agent_ready[local_ID[sending_agent]] = 1;
-
   }
   else
     printf("asked to parse unknown message type \n");

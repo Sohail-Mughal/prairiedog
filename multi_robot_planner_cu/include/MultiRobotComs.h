@@ -37,6 +37,8 @@ class GlobalVariables
    vector<int> local_ID;      // local_ID[n] gives the index associated with robot n on this agent (i.e. 1 level of id abstraction)
    vector<int> global_ID;     // inverse mapping of local_ID
    
+   vector<int> planning_iteration; // keeps track of how many times each agent has restarted planning, indexed using global ID (i.e. agent number)
+   
    vector<int> have_info;     // have_info[i] gets set to 1 when we get agent i's info (start and goal), indexed using local_ID
    vector<int> agent_ready;   // agent_ready[i] is set to 1 when agent i has enough info to start planning, indexed using local_ID
    vector<int> agent_moving;  // agent_moving[i] set to 1 when i starts moving, indexed using local_ID
