@@ -349,8 +349,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       vector<int> file_FinalSolutionSent(num_agents,0);
       int file_num_points;  
       int file_dimensions;  
-      vector<float> file_DimensionMapping;
-      vector<int> file_DimensionOffset;
+      vector<int> file_DimensionMapping;
+      vector<float> file_DimensionOffset;
       vector<vector<float> > file_solution;
       int file_move_flag;  
       int message_num;
@@ -477,8 +477,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           break;
         }  
 
-        //printf("%d, ", this_s);
-        file_DimensionOffset[j] = this_s;
+        //printf("%d, ", this_f);
+        file_DimensionOffset[j] = this_f;
       }
       fscanf(ifp, "\n");
       //printf("\n"); 
@@ -559,11 +559,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       else
       {
         // different groups since they are not the same size
-          same_group = false;
-          
-          printf("message for different group \n");
-          fclose(ifp);
-          break; 
+        same_group = false;
       }
           
       if(!same_group)
@@ -613,40 +609,34 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           fclose(ifp);
           printf("problems building obstacle array from other team's solution \n");
+          remove(this_file);
           break;
         }  
             
-        printf("file_DimensionOffset: %f %f,   temp_team_bound_area_min: %f %f \n", file_DimensionOffset[0], file_DimensionOffset[1], temp_team_bound_area_min[0], temp_team_bound_area_min[1]);
-
-        
-         //////////////////////////  
-         multi_robot_planner_cu::PolygonArray msg;
-
-         int num_polygons = temp_polygon_list.size();
-  
-         msg.header.frame_id = "/map_cu";
-         msg.polygons.resize(num_polygons);
-
-         for(int l = 0; l < num_polygons; l++)
-         {
-           int num_points = temp_polygon_list[l].size();
-           msg.polygons[l].points.resize(num_points);
-    
-           for(int p = 0; p < num_points; p++)
-           {
-             msg.polygons[l].points[p].x = temp_polygon_list[l][p][0] + temp_team_bound_area_min[0];
-             msg.polygons[l].points[p].y = temp_polygon_list[l][p][1] + temp_team_bound_area_min[1];
-             msg.polygons[l].points[p].z = 0;        
-           }
-         }
-         obstacles_pub->publish(msg); 
-         //////////////////////////   
-        
-        
-        
-        
-        
-        
+          
+//          //////////////////////////  used to visualize what this robot is seeing as the other robot's path
+//          multi_robot_planner_cu::PolygonArray msg;
+// 
+//          int num_polygons = temp_polygon_list.size();
+//   
+//          msg.header.frame_id = "/map_cu";
+//          msg.polygons.resize(num_polygons);
+// 
+//          for(int l = 0; l < num_polygons; l++)
+//          {
+//            int num_points = temp_polygon_list[l].size();
+//            msg.polygons[l].points.resize(num_points);
+//     
+//            for(int p = 0; p < num_points; p++)
+//            {
+//              msg.polygons[l].points[p].x = temp_polygon_list[l][p][0] + temp_team_bound_area_min[0];
+//              msg.polygons[l].points[p].y = temp_polygon_list[l][p][1] + temp_team_bound_area_min[1];
+//              msg.polygons[l].points[p].z = 0;        
+//            }
+//          }
+//          obstacles_pub->publish(msg); 
+//          //////////////////////////   
+         
         
         if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
         {
@@ -698,7 +688,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             break;
           }
               
-          printf(" %d %d %d\n", j, k, temp_mapping[k]);
+          //printf(" %d %d %d\n", j, k, temp_mapping[k]);
           file_solution[j][temp_mapping[k]] = this_value;
           //printf("%f, ", file_solution[j][k]); 
         }
