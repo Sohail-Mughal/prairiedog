@@ -354,9 +354,10 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       vector<vector<float> > file_solution;
       int file_move_flag;  
       int message_num;
-       
+      int senders_planning_iteration;
+      
       // get solution length from file
-      if(fscanf(ifp, "l:%f\n", &file_best_solution_length) <= 0)
+      if(fscanf(ifp, "l:%f,%d\n", &file_best_solution_length, &senders_planning_iteration) <= 0)
       {
         // this may still contain workspace points
         if(Scene.GetPointsFromFile(ifp))
@@ -376,6 +377,13 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }
       //printf("solution from file: %f \n",file_best_solution_length);
     
+            
+      if(senders_planning_iteration < Gbls->planning_iteration[agent_id])
+      {
+        fclose(ifp);
+        break;
+      }
+      
       // get agent that created solution in file
       if(fscanf(ifp, "a:%d\n", &file_best_solution_agent) <= 0)
       {
@@ -390,7 +398,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         break;
       }
       //printf("corresponding agent: %d \n",file_best_solution_agent);
-      
+
       //get the list of agents that support the path in the file
       if(fscanf(ifp, "s:") < 0)
       {
@@ -642,7 +650,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           // they do intersect, so we need to add all robot members of the team from the solution in the file to our team
           printf("found a different group who's solution intersects with ours \n");
-            
+          printf("++++++++++++++++ need to join teams !!! ++++++++++++++++++++++++++++++\n");
           for(int j = 0; j < solution_num_robots; j++)
           {  
             int an_id = file_DimensionMapping[j];
@@ -658,6 +666,10 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             }
           }
             
+          // update the planning iteration of all agents in the new combined group (but us, we'll do that at the start of the main loop in main after we reset)
+          for(int j= 1; j < Gbls->team_size; j++)
+            Gbls->planning_iteration[Gbls->global_ID[j]]++;
+          
           Gbls->master_reset = true;
           
           fclose(ifp);
@@ -705,24 +717,41 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       
       // make sure that this message is for this problem  
       // check start
-      if(! equal_float_vector(file_solution[0], start_config, .0001f))
+      if(! equal_float_vector(file_solution[0], start_config, .001f))
       {
         printf("---ignoring message for a different problem (the start is different)\n");   
         
         print_float_vector(file_solution[0]);
         print_float_vector(start_config);
         
+        
+//         if(equal_float_vector(file_solution[0], start_config, .1f))
+//         {
+//           printf("restart due to delta close starts \n");
+//           not close enough, but really close, this can happen after a master restart if the robots don't sync properly   
+//           Gbls->master_reset = true;  
+//         }
+        
         fclose(ifp);
         break;
       }
       
       // check goal
-      if(! equal_float_vector(file_solution[file_solution.size()-1], goal_config, .0001f))
+      if(! equal_float_vector(file_solution[file_solution.size()-1], goal_config, .001f))
       {
         printf("---ignoring message for a different problem (the goal is different)\n");   
         
         print_float_vector(file_solution[file_solution.size()-1]);
         print_float_vector(goal_config);
+        
+        
+//         if(equal_float_vector(file_solution[file_solution.size()-1], goal_config, .1f))
+//         {
+//           printf("restart due to delta close goals \n");
+//           // not close enough, but really close, this can happen after a master restart if the robots don't sync properly    
+//           Gbls->master_reset = true;  
+//         }
+        
         
         fclose(ifp);
         break;
@@ -1021,6 +1050,9 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         found_path_in_file = true;
       }  
     }
+    
+    if(Gbls->master_reset)
+      break;
   }
   
   return found_path_in_file;
@@ -1309,7 +1341,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     
     // best path length (i.e. cost)
-    sprintf(temp_buffer,"l:%f\n",best_solution_length);
+    sprintf(temp_buffer,"l:%f,%d\n",best_solution_length, Gbls->planning_iteration[agent_id]);
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     
        

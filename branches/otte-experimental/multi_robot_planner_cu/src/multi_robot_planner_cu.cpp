@@ -956,7 +956,8 @@ int main(int argc, char** argv)
   // communication threads
   pthread_t Listener_thread, Sender_thread;
   pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
-      
+  Globals.planning_iteration[Globals.agent_number]--;     // becasue we ++ at top of loop
+  
   while(!Globals.kill_master)
   {   
     // remember the start time
@@ -964,7 +965,7 @@ int main(int argc, char** argv)
     now_time = clock();
     last_chop_t = clock();
     Globals.MAgSln = NULL;
-    
+            
     // this agent has local id 0
     if((int)Globals.start_coords[0].size() < 3*Globals.team_size)
       Globals.start_coords[0].resize( 3*Globals.team_size); 
@@ -989,6 +990,10 @@ int main(int argc, char** argv)
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
   
+    Globals.planning_iteration[Globals.agent_number]++;
+        
+    printf("my planning iteration : %d ------------------------------------------------ \n", Globals.planning_iteration[Globals.agent_number]);
+    
     printf("My IP: %s\n",Globals.my_IP);
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
     printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
@@ -998,7 +1003,7 @@ int main(int argc, char** argv)
       
     // start-up phase loop (wait until we have min number of agents start and goal locations)
     clock_t start_wait_t;
-    while(Globals.non_planning_yet)
+    while(Globals.non_planning_yet && !Globals.master_reset)
     {
       // wait until we have everybody in this team's address info
       printf("planner thread not planning yet\n");
@@ -1008,10 +1013,16 @@ int main(int argc, char** argv)
     
       start_wait_t = clock();
       now_time = clock();
-      while(difftime_clock(now_time, start_wait_t) < Globals.sync_message_wait_time)
+      while(difftime_clock(now_time, start_wait_t) < Globals.sync_message_wait_time && !Globals.master_reset)
         now_time = clock(); 
     }
   
+    if(Globals.master_reset)
+    {
+      printf("restarting planning 0\n");
+      continue;  // a team member has been added, need to restart planning with more dimensions
+    }
+    
     printf("starting planning phase \n");
   
     // this is where the planning stuff starts
