@@ -85,6 +85,8 @@ void GlobalVariables::Populate(int num_of_agents)
   
   master_reset = false;
   kill_master = false;
+  
+  MAgSln = NULL;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -319,8 +321,9 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   return index;
 }
 
-void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents ip, start, and goal position out of the buffer
+bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution
 {
+  bool overlap = false;
   if(buffer[0] == 'A') // message type 'A'  
   {
     int index = 0;
@@ -331,15 +334,15 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     
     // get sending agent id
     if(sscanf(buffer,"A %d\n", &sending_agent) < 1)
-      return;
+      return false;
     
-   // printf("recieved message: %s \n", buffer);
+    // printf("recieved message: %s \n", buffer);
     
     // get to start of next line
     while(buffer[index] != '\n' && buffer[index] != '\0') 
       index++;
     if(buffer[index] == '\0')
-      return;
+      return false;
     index++;
 
     if(buffer[index] == 'B')
@@ -348,14 +351,13 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       if(sscanf(&(buffer[index]),"B: %f %f %f %f %f %f\n", &sx, &sy, &st, &gx, &gy, &gt) < 6)
       {
         printf("problem reading planning bounds from message\n");
-        return;  
+        return false;  
       }
     }
     else
       index--; // hack to make next loop a little easier in case planning area bounds not sent    
     
     // check if message planning bounds intersects with this agent's team's planning bounds
-    bool overlap = false;
     if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
@@ -379,13 +381,12 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       // read this data
       if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
         continue;
-      printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
+      //printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
       
       
       num++;
       
       int local_an_id = local_ID[an_id];
-      
       agents_in_solution.push_back(an_id); // save for later in case we need to join teams
       
       if(overlap && !InTeam[an_id] && JOIN_ON_OVERLAPPING_AREAS)
@@ -403,43 +404,41 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         
         master_reset = true;
       }
-//       else if((local_an_id == 0 && !InTeam[sending_agent]) || master_reset) // we are in this solution, but the sending agent is not in our team (or we are joining teams already)
-//       {
-//         printf("\n\n----------------------- need to join teams -------------------------\n\n\n"); 
-// 
-//         
-//         if(!master_reset) // we've just discovered that we are part of this solution, make sure all previous agents are also in our team
-//         {
-//           for(uint k = 0; k < agents_in_solution.size(); k++)
-//           {
-//             int temp_ag = agents_in_solution[k];
-//               
-//             if(!InTeam[temp_ag])
-//             {
-//                     
-//               InTeam[temp_ag] = true;
-//               local_ID[temp_ag] = team_size;
-//               global_ID.push_back(temp_ag);
-//               team_size++;
-//               int local_temp_ag = local_ID[temp_ag];
-//               have_info[local_temp_ag] = 0; 
-//             }
-//           }
-//      
-//           master_reset = true;   
-//         }
-//         else // we are added the remaing members of the solution
-//         {
-//             
-//           InTeam[an_id] = true;
-//           local_ID[an_id] = team_size;
-//           global_ID.push_back(an_id);
-//           team_size++;
-//           int local_temp_an_id = local_ID[an_id];
-//           have_info[local_temp_an_id] = 0;
-//         }
-//         continue; // we'll wait a message after we restart the planner for the new problem to fill in remaining start and goal
-//       }
+      else if(!JOIN_ON_OVERLAPPING_AREAS && ((local_an_id == 0 && !InTeam[sending_agent]) || master_reset)) // we are in this solution, but the sending agent is not in our team (or we are joining teams already)
+      {
+        printf("\n\n----------------------- need to join teams -------------------------\n\n\n"); 
+
+        
+        if(!master_reset) // we've just discovered that we are part of this solution, make sure all previous agents are also in our team
+        {
+          for(uint k = 0; k < agents_in_solution.size(); k++)
+          {
+            int temp_ag = agents_in_solution[k];
+              
+            if(!InTeam[temp_ag])
+            {
+                    
+              InTeam[temp_ag] = true;
+              local_ID[temp_ag] = team_size;
+              global_ID.push_back(temp_ag);
+              team_size++;
+            }
+          }
+     
+          master_reset = true;   
+        }
+        else // we are adding the remaing members of the solution if they need to be added
+        {
+          if(!InTeam[an_id])
+          {
+            InTeam[an_id] = true;
+            local_ID[an_id] = team_size;
+            global_ID.push_back(an_id);
+            team_size++;
+          }
+        }
+        continue; // we'll wait a message after we restart the planner for the new problem to fill in remaining start and goal
+      }
           
           
       //printf("local_an_id:%d \n", local_an_id);
@@ -474,6 +473,8 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
   }
   else
     printf("asked to parse unknown message type \n");
+  
+  return overlap;
 }
 
 void GlobalVariables::tell_master_we_are_moving(void * inG) // tells the master that this robot is moving
@@ -803,19 +804,22 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
 //           //printf("%s\n", &(planning_message_buffer[2]));
 //         
 //           char this_file[100];
-//           sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, MultAgSln.in_msg_ctr[agent_sending]);
-//           
-//           //printf("attempting to open: %s \n",this_file);
-//           
-//           FILE* ofp = fopen(this_file,"w");
-//           if(ofp == NULL) // problem opening file
+//           if((MultiAgentSolution*)G->MAgSln != NULL)
 //           {
-//             printf("cannot open message file for writing\n");
-//             continue;
-//           }
+//             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
 //           
-//           fprintf(ofp, "%s\n", &(planning_message_buffer[2]));
-//           fclose(ofp);
+//             //printf("attempting to open: %s \n",this_file);
+//           
+//             FILE* ofp = fopen(this_file,"w");
+//             if(ofp == NULL) // problem opening file
+//             {
+//               printf("cannot open message file for writing\n");
+//               continue;
+//             }
+//           
+//             fprintf(ofp, "%s\n", &(planning_message_buffer[2]));
+//             fclose(ofp);
+//           }
 //         }
 //       }
 //       else if(planning_message_buffer[0] == 3) // it has a kill message in it
@@ -943,7 +947,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   
   char planning_message_buffer[max_message_size];
           
-  while(!G->kill_master) // this thread is responsible for reading in data from other processes
+  while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
   {  
     if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
     {
@@ -967,10 +971,11 @@ void *Robot_Listner_Ad_Hoc(void * inG)
       //printf("- here 1 \n");
       //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
         
+      bool overlapping = false;
       if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
       {
         //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
-        G->recover_data_from_buffer(planning_message_buffer);
+        overlapping = G->recover_data_from_buffer(planning_message_buffer);
         
         //printf("trying to recover data \n");
         
@@ -1005,25 +1010,51 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           printf("error: agent id >= 1000 \n");
      
         //    printf("here 33 \n");
-        
+
         //printf("recieved message from agent %d:\n%s\n", agent_sending, &(planning_message_buffer[message_ptr]));
         if(agent_sending < 0)
         {
            // don't know who sent the message, so ignore 
         }
-        else if(G->local_ID[agent_sending] == -1 && JOIN_ON_OVERLAPPING_AREAS)
+        else if(!G->InTeam[agent_sending] && !JOIN_ON_OVERLAPPING_AREAS && overlapping)
         {
-          // recieved a message from a robot that is not yet part of this team 
+          // recieved a message from a robot that is not yet part of this team
           // (if we do not join on overlapping areas, then we join on intersecting paths, so we want the message to be saved so we can check for this later)
+          // the final case above is because we can save time by automatically dropping from groups that do not overlap (as this is a precondition for intersection)
           // printf("recieved a message from a robot that is not yet part of this team\n");  
+            
+          char this_file[100];
+          
+          if((MultiAgentSolution*)(G->MAgSln) == NULL)
+            continue;
+          
+          ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough
+          ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending] = 1;
+          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
+          
+          //printf("attempting to open: %s \n",this_file);      
+          FILE* ofp = fopen(this_file,"w");
+
+          if(ofp == NULL) // problem opening file
+          {
+            printf("cannot open message file for writing\n");
+            continue;
+          }
+              
+          fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
+          fclose(ofp);
         }
-        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)MultAgSln.in_msg_ctr.size()) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
+        else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
+        {
+           printf("waiting while things reset \n"); 
+        }
+        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
         { 
           // put the message into a file             
-          // printf("MultAgSln.in_msg_ctr[agent_sending]: %d\n", MultAgSln.in_msg_ctr[agent_sending]);
+          // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
            
           char this_file[100];
-          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, MultAgSln.in_msg_ctr[agent_sending]);
+          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
           
           //printf("attempting to open: %s \n",this_file);
           //          printf("here 33.2 \n");
@@ -1064,6 +1095,14 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   }
      // printf("here 99 \n");
   // this thread terminates
+  
+  
+  if(G->master_reset)
+  {
+    printf("listner thread exiting due to master reset 2 \n");
+    return NULL;
+  }
+  
   return NULL;
 }
 

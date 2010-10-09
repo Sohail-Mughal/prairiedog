@@ -23,7 +23,7 @@ class GlobalVariables
    void populate_buffer_with_ips(char* buffer); // puts everybody's ip into a buffer
    void recover_ips_from_buffer(char* buffer); // gets everybody's ip out of the buffer
    int populate_buffer_with_data(char* buffer); // puts this agents ip, start, and goal positions into the buffer
-   void recover_data_from_buffer(char* buffer); // gets an agents ip, start, and goal position out of the buffer
+   bool recover_data_from_buffer(char* buffer); // gets an agents ip, start, and goal position out of the buffer
    void tell_master_we_are_moving(void * inG); // tells the master that this robot is moving
    
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning
@@ -81,4 +81,5 @@ class GlobalVariables
    vector<float> team_bound_area_min;  // holds the minimum point in the hyper cube team bounding area  (note, this gets populated when NavSceen is populated)
    vector<float> team_bound_area_size; // holds the distance along each dimension of the hyper cube team bounding area (note, this gets populated when NavSceen is populated)
    
+   void* MAgSln;   // pointer to the multi agent solution
 };
