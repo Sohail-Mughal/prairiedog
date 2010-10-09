@@ -60,4 +60,7 @@ class MultiAgentSolution
     vector<vector<int> > LastItAdded;      // keeps track of if NodeID[a][b] has been added this message iteration
     
     GlobalVariables* Gbls;                 // pointer to the global variable structure;
+    
+        
+    ros::Publisher* obstacles_pub;
 };

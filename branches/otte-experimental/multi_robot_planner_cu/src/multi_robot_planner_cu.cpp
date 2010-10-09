@@ -193,7 +193,7 @@ GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotCom
 vector<vector<float> > ThisAgentsPath; // holds this agents path of the best solution
 vector<float> Parametric_Times; // holds time parametry of best solution
   
-bool JOIN_ON_OVERLAPPING_AREAS = true; //false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
+bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
 
 #include "helper_functions.cpp"
@@ -524,7 +524,7 @@ void publish_obstacles(const NavScene& S)
     }
   }
 
-  obstacles_pub.publish(msg); 
+  //obstacles_pub.publish(msg); 
 }
 
 /*----------------------- ROS service functions -------------------------*/
@@ -953,9 +953,8 @@ int main(int argc, char** argv)
   Globals.angular_resolution = angular_resolution;         
   Globals.planning_border_width = planning_border_width;
   
-  // kick off communication threads
+  // communication threads
   pthread_t Listener_thread, Sender_thread;
-  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
   
   while(!Globals.kill_master)
   {   
@@ -963,7 +962,8 @@ int main(int argc, char** argv)
     start_time = clock();
     now_time = clock();
     last_chop_t = clock();
-  
+    Globals.MAgSln = NULL;
+    
     // this agent has local id 0
     if((int)Globals.start_coords[0].size() < 3*Globals.team_size)
       Globals.start_coords[0].resize( 3*Globals.team_size); 
@@ -992,8 +992,9 @@ int main(int argc, char** argv)
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
     printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
   
-    // kick off sender thread
+    // kick off sender and listener threads
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
+    pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
       
     // start-up phase loop (wait until we have min number of agents start and goal locations)
     clock_t start_wait_t;
@@ -1041,7 +1042,12 @@ int main(int argc, char** argv)
     Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
     Cspc.Populate(startc, goalc, num_robots*world_dims);
     MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
-  
+    
+    MultAgSln.obstacles_pub = &obstacles_pub;
+    
+    Globals.MAgSln = &MultAgSln;
+
+    
     int iterations_left = -1; // negative means that time is used instead
   
     clock_t phase_two_start_t = clock();

@@ -349,7 +349,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       vector<int> file_FinalSolutionSent(num_agents,0);
       int file_num_points;  
       int file_dimensions;  
-      vector<int> file_DimensionMapping;
+      vector<float> file_DimensionMapping;
+      vector<int> file_DimensionOffset;
       vector<vector<float> > file_solution;
       int file_move_flag;  
       int message_num;
@@ -447,7 +448,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       //printf("number of points in solution: %d \n",file_num_points);
     
       // get number of dimensions in the path 
-      if(fscanf(ifp, "d:%d\n", &file_dimensions) <= 0)
+      int offset_dims;
+      if(fscanf(ifp, "d:%d,%d\n", &file_dimensions, &offset_dims) <= 0)
       {
         // problems reading data
         fclose(ifp);
@@ -461,6 +463,32 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }
       //printf("number of dimensions solution: %d \n",file_dimensions);
     
+      
+      // get offset of each dimesion vs the global coordinates
+      file_DimensionOffset.resize(file_dimensions,0);
+      bool got_complete_offset = true;
+      float this_f;
+      for(int j = 0; j < offset_dims; j++)
+      {
+        if(fscanf(ifp, "%f, ", &this_f) <= 0) 
+        {
+          printf("problems reading data (not enough dimension offset flags) \n");
+          got_complete_offset = false;
+          break;
+        }  
+
+        //printf("%d, ", this_s);
+        file_DimensionOffset[j] = this_s;
+      }
+      fscanf(ifp, "\n");
+      //printf("\n"); 
+     
+      if(!got_complete_offset)
+      {
+        fclose(ifp);
+        break;
+      }
+      
       // get the mapping for the order of dimesions vs global robot ids
       bool got_complete_mapping = true;
       //printf("recovering the following mapping : "); 
@@ -496,6 +524,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         fclose(ifp);
         break;
       }
+      
       
       bool same_group = true;
       bool successfull_path_get = true;
@@ -537,87 +566,120 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           break; 
       }
           
-//       if(!same_group)
-//       {
-//         // the problem we recieved is for a different problem, but if we recieved this message (i.e. it was saved in the file)
-//         // then the bounding boxes for the problem intersect with our's, therefore we need to check if the two solutions conflict
-//           
-//         // because the two team's times are not synced, it is impossible to check collisions vs. time, therefore we must combine
-//         // teams if any of the individual paths overlap (or come close enough to cause robots to collide)
-//         // if we could somehow sync time, it would considerably reduce the complexity of this check.
-//           
-//           
-//         //extract the path into a polygon obstacle list
-//           
-//         vector<vector<vector<float> > > temp_polygon_list(solution_num_robots);  // each robot path in the file is a polygon
-//         for(int r = 0; r < solution_num_robots; r++)
-//           temp_polygon_list[r].resize(file_num_points);  // each path is file_num_points long
-//         
-//         printf("extracting path: \n");
-//         float this_value;
-//         for(int j = 0; j < file_num_points && successfull_path_get; j++)
-//         {   
-//           for(int r = 0; r < solution_num_robots && successfull_path_get; r++)
-//           {
-//             temp_polygon_list[r][j].resize(dims_per_robot);
-//             
-//             for(int d = 0; d < dims_per_robot && successfull_path_get; d++)   
-//             {
-//               if(fscanf(ifp, "%f, ", &this_value) <= 0) 
-//               {
-//                 // problems reading data (not enough path dimensions)
-//                 successfull_path_get = false;
-//                 break;
-//               }
-//               printf("%f, ", this_value);
-//               temp_polygon_list[r][j][d] = this_value;
-//               
-//             }
-//           }
-//           fscanf(ifp, "\n");
-//           printf("\n");
-//         }
-//         if(!successfull_path_get)
-//         {
-//           fclose(ifp);
-//           printf("problems building obstacle array from other team's solution \n");
-//           break;
-//         }  
-//             
-//           
-//         if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
-//         {
-//           // they do intersect, so we need to add all robot members of the team from the solution in the file to our team
-//           printf("found a different group who's solution intersects with ours \n");
-//             
-//           for(int j = 0; j < solution_num_robots; j++)
-//           {  
-//             int an_id = file_DimensionMapping[j];
-//             
-//             if(!Gbls->InTeam[an_id])
-//             {
-//               //not in team yet
-//               Gbls->InTeam[an_id] = true;
-//         
-//               Gbls->local_ID[an_id] = Gbls->team_size;
-//               Gbls->global_ID.push_back(an_id);
-//               Gbls->team_size++;
-//               
-//               int local_an_id = Globals.local_ID[an_id];
-//               Gbls->have_info[local_an_id] = 0; 
-//             }
-//           }
-//             
-//           Gbls->master_reset = true;
-//           
-//           fclose(ifp);
-//           break;  
-//         }
-//           
-//         // don't need any more info about this solution
-//         fclose(ifp);
-//         continue;
-//       }
+      if(!same_group)
+      {
+        // the problem we recieved is for a different problem, but if we recieved this message (i.e. it was saved in the file)
+        // then the bounding boxes for the problem intersect with our's, therefore we need to check if the two solutions conflict
+          
+        // because the two team's times are not synced, it is impossible to check collisions vs. time, therefore we must combine
+        // teams if any of the individual paths overlap (or come close enough to cause robots to collide)
+        // if we could somehow sync time, it would considerably reduce the complexity of this check.
+          
+          
+        //extract the path into a polygon obstacle list
+        
+        vector<float> temp_team_bound_area_min = Gbls->team_bound_area_min; 
+        temp_team_bound_area_min.resize(dims_per_robot);
+                
+        vector<vector<vector<float> > > temp_polygon_list(solution_num_robots);  // each robot path in the file is a polygon
+        for(int r = 0; r < solution_num_robots; r++)
+          temp_polygon_list[r].resize(file_num_points);  // each path is file_num_points long
+        
+        //printf("extracting path: \n");
+        float this_value;
+        for(int j = 0; j < file_num_points && successfull_path_get; j++)
+        {   
+          for(int r = 0; r < solution_num_robots && successfull_path_get; r++)
+          {
+            temp_polygon_list[r][j].resize(dims_per_robot);
+            
+            for(int d = 0; d < dims_per_robot && successfull_path_get; d++)   
+            {
+              if(fscanf(ifp, "%f, ", &this_value) <= 0) 
+              {
+                // problems reading data (not enough path dimensions)
+                successfull_path_get = false;
+                printf("problems getting path (to turn into obstacle) \n");
+                break;
+              }
+              //printf("%f, ", this_value);
+              temp_polygon_list[r][j][d] = this_value + file_DimensionOffset[d] - temp_team_bound_area_min[d]; // adjusted for both agents' transforms vs. the world
+            }
+          }
+          fscanf(ifp, "\n");
+          //printf("\n");
+        }
+        if(!successfull_path_get)
+        {
+          fclose(ifp);
+          printf("problems building obstacle array from other team's solution \n");
+          break;
+        }  
+            
+        printf("file_DimensionOffset: %f %f,   temp_team_bound_area_min: %f %f \n", file_DimensionOffset[0], file_DimensionOffset[1], temp_team_bound_area_min[0], temp_team_bound_area_min[1]);
+
+        
+         //////////////////////////  
+         multi_robot_planner_cu::PolygonArray msg;
+
+         int num_polygons = temp_polygon_list.size();
+  
+         msg.header.frame_id = "/map_cu";
+         msg.polygons.resize(num_polygons);
+
+         for(int l = 0; l < num_polygons; l++)
+         {
+           int num_points = temp_polygon_list[l].size();
+           msg.polygons[l].points.resize(num_points);
+    
+           for(int p = 0; p < num_points; p++)
+           {
+             msg.polygons[l].points[p].x = temp_polygon_list[l][p][0] + temp_team_bound_area_min[0];
+             msg.polygons[l].points[p].y = temp_polygon_list[l][p][1] + temp_team_bound_area_min[1];
+             msg.polygons[l].points[p].z = 0;        
+           }
+         }
+         obstacles_pub->publish(msg); 
+         //////////////////////////   
+        
+        
+        
+        
+        
+        
+        
+        if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
+        {
+          // they do intersect, so we need to add all robot members of the team from the solution in the file to our team
+          printf("found a different group who's solution intersects with ours \n");
+            
+          for(int j = 0; j < solution_num_robots; j++)
+          {  
+            int an_id = file_DimensionMapping[j];
+            
+            if(!Gbls->InTeam[an_id])
+            {
+              //not in team yet
+              Gbls->InTeam[an_id] = true;
+        
+              Gbls->local_ID[an_id] = Gbls->team_size;
+              Gbls->global_ID.push_back(an_id);
+              Gbls->team_size++;
+            }
+          }
+            
+          Gbls->master_reset = true;
+          
+          fclose(ifp);
+          remove(this_file);
+          break;  
+        }
+          
+        // don't need any more info about this solution
+        fclose(ifp);
+        remove(this_file);
+        continue;
+      }
       //if we are here then message is in the same group as this agent
 
       //extract the path;
@@ -1294,8 +1356,20 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     sprintf(temp_buffer, "p:%d\n", num_points);\
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
-    sprintf(temp_buffer, "d:%d\n", num_dims);
+    sprintf(temp_buffer, "d:%d,%d\n", num_dims, (int)Gbls->team_bound_area_min.size());
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    
+    // add the dimensional offset to the file, the dth value in the file denotes the world coordiante that coorisponds to local coordiante 0
+    //printf("adding the following offset: ");
+    for(uint j = 0; j < Gbls->team_bound_area_min.size(); j++)
+    {
+      sprintf(temp_buffer, "%f, ",Gbls->team_bound_area_min[j]); 
+      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+     // printf("%f, ",Gbls->team_bound_area_min[j]);
+    }
+    sprintf(temp_buffer,"\n");  
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    //printf("\n");
     
     // add the dimensional mapping to the file, the nth value in the file denotes which global robot the nth dimension group represents
     sprintf(temp_buffer, "m:%d\n", Gbls->team_size); 
