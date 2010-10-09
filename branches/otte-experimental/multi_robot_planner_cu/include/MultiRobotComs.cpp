@@ -356,7 +356,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     
     // check if message planning bounds intersects with this agent's team's planning bounds
     bool overlap = false;
-    if(team_bound_area_min.size() > 0)
+    if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
     //if(overlap)
@@ -364,7 +364,7 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     //else
     //  printf("quads don't overlap \n");
     
-    
+    vector<int> agents_in_solution;
     while(true) // break out when done
     {
       // get to start of next line
@@ -379,29 +379,69 @@ void GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       // read this data
       if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
         continue;
-      //printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
+      printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
       
       
       num++;
       
       int local_an_id = local_ID[an_id];
       
+      agents_in_solution.push_back(an_id); // save for later in case we need to join teams
+      
       if(overlap && !InTeam[an_id] && JOIN_ON_OVERLAPPING_AREAS)
       {
         // robot an_id is in a team that overlaps with this agent's team, but they are not in the same team
         printf("\n\n!!!!!!!!!!!!!!!!!! need to join teams !!!!!!!!!!!!!!!!!!!!!!!!\n\n\n");
          
-        Globals.InTeam[an_id] = true;
+        InTeam[an_id] = true;
         
-        Globals.local_ID[an_id] = Globals.team_size;
-        Globals.global_ID.push_back(an_id);
-        Globals.team_size++;
+        local_ID[an_id] = team_size;
+        global_ID.push_back(an_id);
+        team_size++;
         
-        local_an_id = Globals.local_ID[an_id];
+        local_an_id = local_ID[an_id];
         
         master_reset = true;
       }
-
+//       else if((local_an_id == 0 && !InTeam[sending_agent]) || master_reset) // we are in this solution, but the sending agent is not in our team (or we are joining teams already)
+//       {
+//         printf("\n\n----------------------- need to join teams -------------------------\n\n\n"); 
+// 
+//         
+//         if(!master_reset) // we've just discovered that we are part of this solution, make sure all previous agents are also in our team
+//         {
+//           for(uint k = 0; k < agents_in_solution.size(); k++)
+//           {
+//             int temp_ag = agents_in_solution[k];
+//               
+//             if(!InTeam[temp_ag])
+//             {
+//                     
+//               InTeam[temp_ag] = true;
+//               local_ID[temp_ag] = team_size;
+//               global_ID.push_back(temp_ag);
+//               team_size++;
+//               int local_temp_ag = local_ID[temp_ag];
+//               have_info[local_temp_ag] = 0; 
+//             }
+//           }
+//      
+//           master_reset = true;   
+//         }
+//         else // we are added the remaing members of the solution
+//         {
+//             
+//           InTeam[an_id] = true;
+//           local_ID[an_id] = team_size;
+//           global_ID.push_back(an_id);
+//           team_size++;
+//           int local_temp_an_id = local_ID[an_id];
+//           have_info[local_temp_an_id] = 0;
+//         }
+//         continue; // we'll wait a message after we restart the planner for the new problem to fill in remaining start and goal
+//       }
+          
+          
       //printf("local_an_id:%d \n", local_an_id);
       if(local_an_id != -1)
       {
@@ -1043,19 +1083,19 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   clock_t start_wait_t, now_time;
 
   printf("waiting for agent start and goal coords (sending data) \n");  
-  while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !Globals.master_reset) // until we have the min number of the other robot's data
+  while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
     start_wait_t = clock();
     now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !Globals.master_reset)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
       now_time = clock(); 
   }
   printf("we have min number of start and goal locations to start planning\n");  
   
-  if(Globals.master_reset)
+  if(G->master_reset)
   {
     printf("sender thread exiting due to master reset 1 \n");
     return NULL;
@@ -1064,7 +1104,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   G->non_planning_yet = false;
   
   // now we start path planning, but this thread still keeps broadcasting the data to agents in our team who are not yet ready to plan
-  while(!G->all_team_ready_to_plan() && !Globals.master_reset) // until the rest of the team is ready to plan
+  while(!G->all_team_ready_to_plan() && !G->master_reset) // until the rest of the team is ready to plan
   {       
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
@@ -1072,11 +1112,11 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     start_wait_t = clock();
     now_time = clock();
     
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !Globals.master_reset)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
       now_time = clock(); 
   }
   
-  if(Globals.master_reset)
+  if(G->master_reset)
   {
     printf("sender thread exiting due to master reset 2 \n");
     return NULL;

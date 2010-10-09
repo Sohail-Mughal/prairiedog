@@ -193,7 +193,7 @@ GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotCom
 vector<vector<float> > ThisAgentsPath; // holds this agents path of the best solution
 vector<float> Parametric_Times; // holds time parametry of best solution
   
-bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
+bool JOIN_ON_OVERLAPPING_AREAS = true; //false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
 
 #include "helper_functions.cpp"
@@ -895,16 +895,13 @@ int main(int argc, char** argv)
     ros::spinOnce();  // check in on callbacks
   }
   
-  // remember the start time
+  // each of the following loops is a complete planning cycle
   clock_t start_time, now_time, last_time;  
-  start_time = clock();
-  now_time = clock();
-  last_chop_t = clock();
-     
+  Globals.Populate(total_agents);
+      
   // enter into communication with other robots to get their start and goal positions
   
   // set up globals used by communication threads
-  Globals.Populate(total_agents);
   Globals.agent_number = agent_number;
   Globals.InTeam[agent_number] = true;
   Globals.local_ID[agent_number] = 0;
@@ -944,25 +941,10 @@ int main(int argc, char** argv)
     
     printf("#%d: %s \n", i, Globals.other_IP_strings[i]);
   }
+
   Globals.sync_message_wait_time = sync_message_wait_time;
   Globals.message_wait_time = message_wait_time;
   
-  // this agent has local id 0
-  if(Globals.start_coords[0].size() < 3)
-     Globals.start_coords[0].resize(3); 
-  Globals.start_coords[0][0] = robot_pose->x;
-  Globals.start_coords[0][1] = robot_pose->y;
-  Globals.start_coords[0][2] = robot_pose->alpha;
-  
-  if(Globals.goal_coords[0].size() < 3)
-     Globals.goal_coords[0].resize(3); 
-  Globals.goal_coords[0][0] = goal_pose->x;
-  Globals.goal_coords[0][1] = goal_pose->y;
-  Globals.goal_coords[0][2] = goal_pose->alpha;
-  
-  Globals.have_info[0] = 1;
-  Globals.agent_ready[0] = 1;
-          
   Globals.robot_radius = robot_radius;
   Globals.prob_at_goal = prob_at_goal;
   Globals.move_max = move_max;
@@ -971,18 +953,46 @@ int main(int argc, char** argv)
   Globals.angular_resolution = angular_resolution;         
   Globals.planning_border_width = planning_border_width;
   
-  printf("My IP: %s\n",Globals.my_IP);
-  printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
-  printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
-  
   // kick off communication threads
   pthread_t Listener_thread, Sender_thread;
   pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
   
-  // each of the following loops is a complete planning cycle
   while(!Globals.kill_master)
-  {
+  {   
+    // remember the start time
+    start_time = clock();
+    now_time = clock();
+    last_chop_t = clock();
+  
+    // this agent has local id 0
+    if((int)Globals.start_coords[0].size() < 3*Globals.team_size)
+      Globals.start_coords[0].resize( 3*Globals.team_size); 
+    Globals.start_coords[0][0] = robot_pose->x;
+    Globals.start_coords[0][1] = robot_pose->y;
+    Globals.start_coords[0][2] = robot_pose->alpha;
+  
+    if((int)Globals.goal_coords[0].size() < 3*Globals.team_size)
+      Globals.goal_coords[0].resize(3*Globals.team_size); 
+    Globals.goal_coords[0][0] = goal_pose->x;
+    Globals.goal_coords[0][1] = goal_pose->y;
+    Globals.goal_coords[0][2] = goal_pose->alpha;
+  
+    Globals.have_info.resize(0);
+    Globals.agent_ready.resize(0); 
+    Globals.have_info.resize(Globals.number_of_agents, 0);   // gets set to 1 when we get an agent's info
+    Globals.agent_ready.resize(Globals.number_of_agents, 0); // gets set to 1 when we get an agent's info
+    
+    Globals.have_info[0] = 1;
+    Globals.agent_ready[0] = 1;
+          
+    Globals.non_planning_yet = true;  
     Globals.master_reset = false;
+  
+    printf("My IP: %s\n",Globals.my_IP);
+    printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
+    printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
+  
+    // kick off sender thread
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
       
     // start-up phase loop (wait until we have min number of agents start and goal locations)
@@ -1243,6 +1253,11 @@ int main(int argc, char** argv)
   
     // now we just broadcast the final solution, in case other robots didn't get it
   
+    printf("ending clean \n");
+    Globals.kill_master = true; // shutdown listener thread
+    sleep(1);
+    return 0;
+    
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part
     {       
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
