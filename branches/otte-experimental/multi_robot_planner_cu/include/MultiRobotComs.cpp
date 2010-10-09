@@ -947,162 +947,157 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   
   char planning_message_buffer[max_message_size];
           
-  while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
-  {  
-    if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
-    {
-      printf("listining for start/goal from other agents \n");   
-      printf("so far, team includes: ");
-      for(int i = 0; i < G->team_size; i++)
-        printf("%d(%d), ", G->global_ID[i], G->have_info[G->global_ID[i]]);
-      printf("\n"); 
-    }
-    
-    memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
-    message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
-
-    //printf("here 11 %d\n", message_length);
-    
-    int message_ptr = 0;
-    if(message_length < 0) 
-      printf("had problems getting a message \n");
-    else  // the sending computer's info is in senders_address
-    {   
-      //printf("- here 1 \n");
-      //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
-        
-      bool overlapping = false;
-      if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
-      {
-        //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
-        overlapping = G->recover_data_from_buffer(planning_message_buffer);
-        
-        //printf("trying to recover data \n");
-        
-        message_ptr++;
-        while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
-          message_ptr++;
-        if(planning_message_buffer[message_ptr] == 'A')
-          message_ptr++;
-      }
-   
-      //    printf("here 22 \n");
-      
-      //printf("this is the message as it will be passed to other parts: \n%s", &(message_buffer[message_ptr]));
-      
-      //printf("this is the next chars: -1:%c, 0:%c, 1:%c, 2:%c, 3:%c \n", message_buffer[message_ptr-1], message_buffer[message_ptr], message_buffer[message_ptr+1], message_buffer[message_ptr+2], message_buffer[message_ptr+3]);
-        
-      if(planning_message_buffer[message_ptr] == '2') // it has planning data in it;
-      {
-        //printf("contains planning data \n");
-        message_ptr++;
-        int agent_sending;
-
-        if(sscanf(&(planning_message_buffer[message_ptr]),"%d", &agent_sending) < 1)
-          agent_sending = -1;        
-        else if( agent_sending < 10)       
-          message_ptr++;
-        else if( agent_sending < 100)       
-          message_ptr += 2;
-        else if( agent_sending < 1000)       
-          message_ptr += 3;
-        else
-          printf("error: agent id >= 1000 \n");
-     
-        //    printf("here 33 \n");
-
-        //printf("recieved message from agent %d:\n%s\n", agent_sending, &(planning_message_buffer[message_ptr]));
-        if(agent_sending < 0)
-        {
-           // don't know who sent the message, so ignore 
-        }
-        else if(!G->InTeam[agent_sending] && !JOIN_ON_OVERLAPPING_AREAS && overlapping)
-        {
-          // recieved a message from a robot that is not yet part of this team
-          // (if we do not join on overlapping areas, then we join on intersecting paths, so we want the message to be saved so we can check for this later)
-          // the final case above is because we can save time by automatically dropping from groups that do not overlap (as this is a precondition for intersection)
-          // printf("recieved a message from a robot that is not yet part of this team\n");  
-            
-          char this_file[100];
-          
-          if((MultiAgentSolution*)(G->MAgSln) == NULL)
-            continue;
-          
-          ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough
-          ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending] = 1;
-          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
-          
-          //printf("attempting to open: %s \n",this_file);      
-          FILE* ofp = fopen(this_file,"w");
-
-          if(ofp == NULL) // problem opening file
-          {
-            printf("cannot open message file for writing\n");
-            continue;
-          }
-              
-          fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
-          fclose(ofp);
-        }
-        else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
-        {
-           printf("waiting while things reset \n"); 
-        }
-        else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
-        { 
-          // put the message into a file             
-          // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
-           
-          char this_file[100];
-          sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
-          
-          //printf("attempting to open: %s \n",this_file);
-          //          printf("here 33.2 \n");
-                    
-          FILE* ofp = fopen(this_file,"w");
-          //               printf("here 33.3 \n");
-          if(ofp == NULL) // problem opening file
-          {
-            printf("cannot open message file for writing\n");
-            continue;
-          }
-          //    printf("here 44 \n");
-              
-          fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
-          fclose(ofp);
-          
-          if(G->local_ID[agent_sending] != -1)
-          {
-            // mark that this agent is planning
-            G->agent_ready[G->local_ID[agent_sending]] = 1;
-          }
-          //    printf("here 55 \n");
-        }
-      }
-      else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
-      {
-        //          printf("here 66 \n");
-        G->kill_master = true;
-      }
-      else if(planning_message_buffer[message_ptr] != '\0')
-          
-      {
-        printf("recieved unknown message type ---------------\n%s\n",  &(planning_message_buffer[message_ptr]));    
-      }
-        //      printf("here 77 \n");
-    }     
-       // printf("here 88 \n");
-  }
-     // printf("here 99 \n");
-  // this thread terminates
-  
-  
-  if(G->master_reset)
+  while(!G->kill_master)
   {
-    printf("listner thread exiting due to master reset 2 \n");
-    return NULL;
+    while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
+    {  
+      if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+      {
+        printf("listining for start/goal from other agents \n");   
+        printf("so far, team includes: ");
+        for(int i = 0; i < G->team_size; i++)
+          printf("%d(%d), ", G->global_ID[i], G->have_info[G->global_ID[i]]);
+        printf("\n"); 
+      }
+    
+      memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
+      message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
+
+      //printf("here 11 %d\n", message_length);
+    
+      int message_ptr = 0;
+      if(message_length < 0) 
+        printf("had problems getting a message \n");
+      else  // the sending computer's info is in senders_address
+      {   
+        //printf("- here 1 \n");
+        //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
+        
+        bool overlapping = false;
+        if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
+        {
+          //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
+          overlapping = G->recover_data_from_buffer(planning_message_buffer);
+        
+          //printf("trying to recover data \n");
+        
+          message_ptr++;
+          while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
+            message_ptr++;
+          if(planning_message_buffer[message_ptr] == 'A')
+            message_ptr++;
+        }
+   
+        //    printf("here 22 \n");
+      
+        //printf("this is the message as it will be passed to other parts: \n%s", &(message_buffer[message_ptr]));
+      
+        //printf("this is the next chars: -1:%c, 0:%c, 1:%c, 2:%c, 3:%c \n", message_buffer[message_ptr-1], message_buffer[message_ptr], message_buffer[message_ptr+1], message_buffer[message_ptr+2], message_buffer[message_ptr+3]);
+        
+        if(planning_message_buffer[message_ptr] == '2') // it has planning data in it;
+        {
+          //printf("contains planning data \n");
+          message_ptr++;
+          int agent_sending;
+
+          if(sscanf(&(planning_message_buffer[message_ptr]),"%d", &agent_sending) < 1)
+            agent_sending = -1;        
+          else if( agent_sending < 10)       
+            message_ptr++;
+          else if( agent_sending < 100)       
+            message_ptr += 2;
+          else if( agent_sending < 1000)       
+            message_ptr += 3;
+          else
+            printf("error: agent id >= 1000 \n");
+     
+          //    printf("here 33 \n");
+
+          //printf("recieved message from agent %d:\n%s\n", agent_sending, &(planning_message_buffer[message_ptr]));
+          if(agent_sending < 0)
+          {
+             // don't know who sent the message, so ignore 
+          }
+          else if(!G->InTeam[agent_sending] && !JOIN_ON_OVERLAPPING_AREAS && overlapping)
+          {
+            // recieved a message from a robot that is not yet part of this team
+            // (if we do not join on overlapping areas, then we join on intersecting paths, so we want the message to be saved so we can check for this later)
+            // the final case above is because we can save time by automatically dropping from groups that do not overlap (as this is a precondition for intersection)
+            // printf("recieved a message from a robot that is not yet part of this team\n");  
+            
+            char this_file[100];
+          
+            if((MultiAgentSolution*)(G->MAgSln) == NULL)
+              continue;
+          
+            ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough
+            ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending] = 1;
+            sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
+          
+            //printf("attempting to open: %s \n",this_file);      
+            FILE* ofp = fopen(this_file,"w");
+
+            if(ofp == NULL) // problem opening file
+            {
+              printf("cannot open message file for writing\n");
+              continue;
+            }
+              
+            fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
+            fclose(ofp);
+          }
+          else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
+          {
+            printf("waiting while things reset \n"); 
+          }
+          else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
+          { 
+            // put the message into a file             
+            // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
+           
+            char this_file[100];
+            sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
+          
+            //printf("attempting to open: %s \n",this_file);
+            //          printf("here 33.2 \n");
+                    
+            FILE* ofp = fopen(this_file,"w");
+            //               printf("here 33.3 \n");
+            if(ofp == NULL) // problem opening file
+            {
+              printf("cannot open message file for writing\n");
+              continue;
+            }
+            //    printf("here 44 \n");
+              
+            fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
+            fclose(ofp);
+          
+            if(G->local_ID[agent_sending] != -1)
+            {
+              // mark that this agent is planning
+              G->agent_ready[G->local_ID[agent_sending]] = 1;
+            }
+            //    printf("here 55 \n");
+          }
+        }
+        else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
+        {
+          //          printf("here 66 \n");
+          G->kill_master = true;
+        }
+        else if(planning_message_buffer[message_ptr] != '\0')   
+        {
+          printf("recieved unknown message type ---------------\n%s\n",  &(planning_message_buffer[message_ptr]));    
+        }
+          //      printf("here 77 \n");
+      }     
+        // printf("here 88 \n");
+    }
+       // printf("here 99 \n");
   }
   
+  // this thread terminates
   return NULL;
 }
 
@@ -1131,6 +1126,8 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     now_time = clock();
     while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
       now_time = clock(); 
+    
+    printf("waiting for agent start and goal coords (sending data) \n");
   }
   printf("we have min number of start and goal locations to start planning\n");  
   

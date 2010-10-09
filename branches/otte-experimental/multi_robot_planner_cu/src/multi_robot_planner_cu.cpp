@@ -524,7 +524,7 @@ void publish_obstacles(const NavScene& S)
     }
   }
 
-  //obstacles_pub.publish(msg); 
+  obstacles_pub.publish(msg); 
 }
 
 /*----------------------- ROS service functions -------------------------*/
@@ -955,7 +955,8 @@ int main(int argc, char** argv)
   
   // communication threads
   pthread_t Listener_thread, Sender_thread;
-  
+  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
+      
   while(!Globals.kill_master)
   {   
     // remember the start time
@@ -992,9 +993,8 @@ int main(int argc, char** argv)
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
     printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
   
-    // kick off sender and listener threads
+    // kick off sender threads
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
-    pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
       
     // start-up phase loop (wait until we have min number of agents start and goal locations)
     clock_t start_wait_t;
@@ -1259,10 +1259,10 @@ int main(int argc, char** argv)
   
     // now we just broadcast the final solution, in case other robots didn't get it
   
-    printf("ending clean \n");
-    Globals.kill_master = true; // shutdown listener thread
-    sleep(1);
-    return 0;
+//     printf("ending clean \n");
+//     Globals.kill_master = true; // shutdown listener thread
+//     sleep(1);
+//     return 0;
     
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part
     {       
