@@ -956,8 +956,7 @@ int main(int argc, char** argv)
   // communication threads
   pthread_t Listener_thread, Sender_thread;
   pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
-  Globals.planning_iteration[Globals.agent_number]--;     // becasue we ++ at top of loop
-  
+ 
   while(!Globals.kill_master)
   {   
     // remember the start time
@@ -965,20 +964,43 @@ int main(int argc, char** argv)
     now_time = clock();
     last_chop_t = clock();
     Globals.MAgSln = NULL;
+        
+    // check to see if start or goal have changed for this agent (this agent has local id 0)
+    bool stuff_has_changed = false;
+    if((int)Globals.start_coords[0].size() < 3)
+      Globals.start_coords[0].resize(3, 0); 
+    
+    vector<float> temp_vec(3,0);
+    temp_vec[0] = robot_pose->x;
+    temp_vec[1] = robot_pose->y;
+    temp_vec[2] = robot_pose->alpha;
+    
+    if(!equal_float_vector(temp_vec, Globals.start_coords[0], .01)) // start is different
+    {
+      Globals.start_coords[0][0] = robot_pose->x;
+      Globals.start_coords[0][1] = robot_pose->y;
+      Globals.start_coords[0][2] = robot_pose->alpha;
+      stuff_has_changed = true;
+    }
+    
+    if((int)Globals.goal_coords[0].size() < 3)
+      Globals.goal_coords[0].resize(3,0); 
+    
+    temp_vec[0] = goal_pose->x;
+    temp_vec[1] = goal_pose->y;
+    temp_vec[2] = goal_pose->alpha;
+    
+    if(!equal_float_vector(temp_vec, Globals.goal_coords[0], .01)) // start is different
+    {
+      Globals.goal_coords[0][0] = goal_pose->x;
+      Globals.goal_coords[0][1] = goal_pose->y;
+      Globals.goal_coords[0][2] = goal_pose->alpha;
+      stuff_has_changed = true;
+    }
+    
+    if(stuff_has_changed)
+      Globals.planning_iteration[Globals.agent_number]++;
             
-    // this agent has local id 0
-    if((int)Globals.start_coords[0].size() < 3*Globals.team_size)
-      Globals.start_coords[0].resize( 3*Globals.team_size); 
-    Globals.start_coords[0][0] = robot_pose->x;
-    Globals.start_coords[0][1] = robot_pose->y;
-    Globals.start_coords[0][2] = robot_pose->alpha;
-  
-    if((int)Globals.goal_coords[0].size() < 3*Globals.team_size)
-      Globals.goal_coords[0].resize(3*Globals.team_size); 
-    Globals.goal_coords[0][0] = goal_pose->x;
-    Globals.goal_coords[0][1] = goal_pose->y;
-    Globals.goal_coords[0][2] = goal_pose->alpha;
-  
     Globals.have_info.resize(0);
     Globals.agent_ready.resize(0); 
     Globals.have_info.resize(Globals.number_of_agents, 0);   // gets set to 1 when we get an agent's info
@@ -990,9 +1012,10 @@ int main(int argc, char** argv)
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
   
-    Globals.planning_iteration[Globals.agent_number]++;
-        
-    printf("my planning iteration : %d ------------------------------------------------ \n", Globals.planning_iteration[Globals.agent_number]);
+    printf("---------- all planning iterations: ");
+    for(uint i = 0; i < Globals.planning_iteration.size(); i++)
+      printf("%d, ", Globals.planning_iteration[i]);
+    printf("----------\n ");
     
     printf("My IP: %s\n",Globals.my_IP);
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);

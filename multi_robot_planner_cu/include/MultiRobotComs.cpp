@@ -347,8 +347,8 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
     int local_id_temp = local_ID[i];
     
     // agent id, start and goal
-    sprintf(temp,"%d %f %f %f %f %f %f\n", i, start_coords[local_id_temp][0], start_coords[local_id_temp][1], start_coords[local_id_temp][2], goal_coords[local_id_temp][0], goal_coords[local_id_temp][1], goal_coords[local_id_temp][2]); 
-    //printf("adding: %d %f %f %f %f %f %f\n", i, start_coords[local_id_temp][0], start_coords[local_id_temp][1], start_coords[local_id_temp][2], goal_coords[local_id_temp][0], goal_coords[local_id_temp][1], goal_coords[local_id_temp][2]);
+    sprintf(temp,"%d %d %f %f %f %f %f %f\n", i, planning_iteration[i], start_coords[local_id_temp][0], start_coords[local_id_temp][1], start_coords[local_id_temp][2], goal_coords[local_id_temp][0], goal_coords[local_id_temp][1], goal_coords[local_id_temp][2]); 
+    //printf("adding: %d %d %f %f %f %f %f %f\n", i, planning_iteration[i], start_coords[local_id_temp][0], start_coords[local_id_temp][1], start_coords[local_id_temp][2], goal_coords[local_id_temp][0], goal_coords[local_id_temp][1], goal_coords[local_id_temp][2]);
     strcat(buffer, temp);
   }
   sprintf(temp,"A");   
@@ -367,11 +367,11 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
 {
   bool overlap = false;
   if(buffer[0] == 'A') // message type 'A'  
-  {
+  { 
     int index = 0;
     int sending_agent = -1;
     int senders_planning_iteration = -1;
-    int an_id;
+    int an_id, ag_pln_it;
     float sx, sy, st, gx, gy, gt;
     int num = 0;
     bool team_includes_this_ag = false;
@@ -379,21 +379,14 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     // get sending agent id
     if(sscanf(buffer,"A %d,%d\n", &sending_agent,&senders_planning_iteration) < 2)
       return false;
-    
-    bool updated_planning_iteration = false;
+
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
     {
       printf("old problem --- %d %d\n", senders_planning_iteration, planning_iteration[sending_agent]);
       return false;
     }
-    else if(senders_planning_iteration > planning_iteration[sending_agent]) // keep data about sender current
-    {
-      planning_iteration[sending_agent] = senders_planning_iteration;
-      updated_planning_iteration = true;
-      printf("updated_planning_iteration \n"); 
-    }
-              
-    // printf("recieved message: %s \n", buffer);
+    
+    // printf("recovering message: %s \n", buffer);
     
     // get to start of next line
     while(buffer[index] != '\n' && buffer[index] != '\0') 
@@ -451,7 +444,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       
       index++;   
     }
-     
+
     if(buffer[index] == 'R')
     {
       // find out who is ready to plan  
@@ -492,8 +485,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       //printf("\n");
       index++;   
     }
-    
-    
+        
     if(buffer[index] == 'B')
     {
       // get message planning area bounds
@@ -507,20 +499,20 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     }
     else
       index--; // hack to make next buffer read a little easier in case planning area bounds not sent    
-    
+        
     // check if message planning bounds intersects with this agent's team's planning bounds
     if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
-
+            
     bool need_to_join_solutions = false;
     if(overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
       need_to_join_solutions = true;
     if(!InTeam[sending_agent] && team_includes_this_ag)   // need to join because the sending agent thinks we are in its team, but we currently don't think so
       need_to_join_solutions = true;
-          
+    
     if(need_to_join_solutions)    
     {
-      printf("\n\n----------------------- need to join teams -------------------------\n\n\n");
+      printf("----------------------- need to join teams -------------------------\n");
 
       for(uint k = 0; k < robots_in_senders_team.size(); k++)
       {
@@ -534,20 +526,15 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
           team_size++;
         } 
       }
-     
-      if(overlap && JOIN_ON_OVERLAPPING_AREAS && !master_reset)
-      {
-        // update the planning iteration of all agents in the new combined group (but us, we'll do that at the start of the main loop in main after we reset)
-        for(int j= 1; j < team_size; j++)
-          planning_iteration[global_ID[j]]++;
-      }
+      
+      planning_iteration[agent_number]++; // the problem has changed, so update our planning iteration number
       
       master_reset = true;   
 
       return overlap;
     }
-    
-    // if we are here then the solutions don;t need to be merged
+        
+    // if we are here then the solutions don't need to be merged
     while(true) // break out when done
     {
       // get to start of next line
@@ -560,9 +547,9 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         break;
       
       // read this data
-      if(sscanf(&(buffer[index]),"%d %f %f %f %f %f %f\n", &an_id, &sx, &sy, &st, &gx, &gy, &gt) < 7) 
+      if(sscanf(&(buffer[index]),"%d %d %f %f %f %f %f %f\n", &an_id, &ag_pln_it, &sx, &sy, &st, &gx, &gy, &gt) < 8) 
         continue;
-      //printf("read data: %d %f %f %f %f %f %f\n", an_id, sx, sy, st, gx, gy, gt);
+      //printf("read data: %d %d %f %f %f %f %f %f\n", an_id, ag_pln_it, sx, sy, st, gx, gy, gt);
       
       
       num++;
@@ -572,28 +559,58 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       //printf("local_an_id:%d \n", local_an_id);
       if(local_an_id != -1)
       {
-        if(InTeam[local_an_id] && have_info[local_an_id] == 0) // new data
-        {  
-          // if we get problems with different agents having different state from different start and goal then here is where we may want to put a check based on updated_planning_iteration and having diff start and goal by, say, more than .001 
+        if(InTeam[an_id]) // new data
+        {         
+          bool need_to_add_info = false;  
             
-          if(start_coords[local_an_id].size() < 3)
-            start_coords[local_an_id].resize(3); 
-          start_coords[local_an_id][0] = sx;
-          start_coords[local_an_id][1] = sy;
-          start_coords[local_an_id][2] = st;
+          if(have_info[local_an_id] == 0)
+          {
+            need_to_add_info = true;
+            planning_iteration[an_id] = ag_pln_it; 
+          }
+          else if(ag_pln_it > planning_iteration[an_id])
+          {
+            planning_iteration[an_id] = ag_pln_it; 
+            
+            vector<float> temp_vec(3);
+            temp_vec[0] = sx;
+            temp_vec[1] = sy;
+            temp_vec[2] = st;
+            
+            if(!equal_float_vector(temp_vec, start_coords[local_an_id], .01)) // start is different
+              need_to_add_info = true; 
+            
+            temp_vec[0] = gx;
+            temp_vec[1] = gy;
+            temp_vec[2] = gt;
+            
+            if(!equal_float_vector(temp_vec, goal_coords[local_an_id], .01)) // goal is different
+              need_to_add_info = true; 
+            
+            if(need_to_add_info) // start or goal of one of the agents has changed, so it is a new planning problem, update our planning iteration
+              planning_iteration[agent_number]++;
+          } 
+          if(need_to_add_info)
+          {
+            if(start_coords[local_an_id].size() < 3)
+              start_coords[local_an_id].resize(3); 
+            start_coords[local_an_id][0] = sx;
+            start_coords[local_an_id][1] = sy;
+            start_coords[local_an_id][2] = st;
         
-          if(goal_coords[local_an_id].size() < 3)
-            goal_coords[local_an_id].resize(3);
-          goal_coords[local_an_id][0] = gx;
-          goal_coords[local_an_id][1] = gy;
-          goal_coords[local_an_id][2] = gt;
+            if(goal_coords[local_an_id].size() < 3)
+              goal_coords[local_an_id].resize(3);
+            goal_coords[local_an_id][0] = gx;
+            goal_coords[local_an_id][1] = gy;
+            goal_coords[local_an_id][2] = gt;
       
-          have_info[local_an_id] = 1;     
+            have_info[local_an_id] = 1;     
         
-          printf("recieved new data from %d: \n", an_id);
-          printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
-          printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
-          //getchar();
+            printf("recieved new data from %d: \n", an_id);
+            printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
+            printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
+            //getchar();
+          }
         }
       }
     }
@@ -1083,7 +1100,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         printf("listining for start/goal from other agents \n");   
         printf("so far, team includes: ");
         for(int i = 0; i < G->team_size; i++)
-          printf("%d(%d), ", G->global_ID[i], G->have_info[G->global_ID[i]]);
+          printf("%d(%d), ", G->global_ID[i], G->have_info[i]);
         printf("\n"); 
       }
     
@@ -1097,13 +1114,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         printf("had problems getting a message \n");
       else  // the sending computer's info is in senders_address
       {   
-        //printf("- here 1 \n");
         //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
         
         bool overlapping = false;
         if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
         {
-          //printf("-Received start-up data from an agent:\n%s\n", message_buffer);
+          //printf("-Received start-up data from an agent:\n%s\n", planning_message_buffer);
           overlapping = G->recover_data_from_buffer(planning_message_buffer);
         
           //printf("trying to recover data \n");
@@ -1114,8 +1130,6 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           if(planning_message_buffer[message_ptr] == 'A')
             message_ptr++;
         }
-   
-        //    printf("here 22 \n");
       
         //printf("this is the message as it will be passed to other parts: \n%s", &(message_buffer[message_ptr]));
       
@@ -1138,9 +1152,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           else
             printf("error: agent id >= 1000 \n");
      
-          //    printf("here 33 \n");
-
-          //printf("recieved message from agent %d:\n%s\n", agent_sending, &(planning_message_buffer[message_ptr]));
+          //printf("recieved message from agent %d:\n%c\n", agent_sending, &(planning_message_buffer[message_ptr]));
           if(agent_sending < 0)
           {
              // don't know who sent the message, so ignore 
@@ -1243,9 +1255,8 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
   clock_t start_wait_t, now_time;
 
-  printf("waiting for agent start and goal coords (sending data) \n");  
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
-  {       
+  {           
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
@@ -1254,7 +1265,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
       now_time = clock(); 
     
-    printf("waiting for agent start and goal coords (sending data) \n");
+    printf("waiting for agent start and goal coords -(sending data)- \n");
   }
   printf("we have min number of start and goal locations to start planning\n");  
   
