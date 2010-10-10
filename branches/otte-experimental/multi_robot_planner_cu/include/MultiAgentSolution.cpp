@@ -665,10 +665,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
               Gbls->team_size++;
             }
           }
-            
-          // update the planning iteration of all agents in the new combined group (but us, we'll do that at the start of the main loop in main after we reset)
-          for(int j= 1; j < Gbls->team_size; j++)
-            Gbls->planning_iteration[Gbls->global_ID[j]]++;
+          
+          Gbls->planning_iteration[Gbls->agent_number]++; // the problem has changed, so we update our planning iteration
           
           Gbls->master_reset = true;
           
@@ -723,15 +721,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         
         print_float_vector(file_solution[0]);
         print_float_vector(start_config);
-        
-        
-//         if(equal_float_vector(file_solution[0], start_config, .1f))
-//         {
-//           printf("restart due to delta close starts \n");
-//           not close enough, but really close, this can happen after a master restart if the robots don't sync properly   
-//           Gbls->master_reset = true;  
-//         }
-        
+         
         fclose(ifp);
         break;
       }
@@ -743,15 +733,6 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         
         print_float_vector(file_solution[file_solution.size()-1]);
         print_float_vector(goal_config);
-        
-        
-//         if(equal_float_vector(file_solution[file_solution.size()-1], goal_config, .1f))
-//         {
-//           printf("restart due to delta close goals \n");
-//           // not close enough, but really close, this can happen after a master restart if the robots don't sync properly    
-//           Gbls->master_reset = true;  
-//         }
-        
         
         fclose(ifp);
         break;

@@ -55,7 +55,7 @@
 
   <group ns="multi_robot_planner_cu">
     <param name="agent_id" type="int" value="0" />
-    <param name="total_agents" type="int" value="2" />
+    <param name="total_agents" type="int" value="3" />
     <param name="min_clock_to_plan" type="double" value="10" />
     <param name="prob_message_success" type="double" value="1" />
     <param name="experiment_name" type="string" value="test" />
@@ -70,7 +70,7 @@
     <param name="rrt_resolution" type="double" value="0.03" />
     <param name="rrt_angular_resolution" type="double" value="0.3927" />
     <param name="planning_border_width" type="double" value="1" />
-    <param name="target_speed" type="double" value=".1" />
+    <param name="target_speed" type="double" value=".2" />
     <param name="target_turn" type="double" value="0.3927" />
   </group>
   <node name="multi_robot_planner_cu" pkg="multi_robot_planner_cu" type="multi_robot_planner_cu" cwd="node" respawn="false" output="screen" />
@@ -79,7 +79,7 @@
 
   <group ns="intercom_cu">
     <param name="my_id" type="int" value="0" />
-    <param name="num_agents" type="int" value="3" />
+    <param name="num_agents" type="int" value="4" />
     <param name="config_file" type="string" value="../config.xml" />
   </group>
   <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
