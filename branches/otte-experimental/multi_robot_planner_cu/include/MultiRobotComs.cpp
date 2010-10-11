@@ -568,7 +568,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
             need_to_add_info = true;
             planning_iteration[an_id] = ag_pln_it; 
           }
-          else if(ag_pln_it > planning_iteration[an_id])
+          else if(ag_pln_it >= planning_iteration[an_id]) //we already had info, but this is potentially new info
           {
             planning_iteration[an_id] = ag_pln_it; 
             
@@ -577,20 +577,24 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
             temp_vec[1] = sy;
             temp_vec[2] = st;
             
-            if(!equal_float_vector(temp_vec, start_coords[local_an_id], .01)) // start is different
+            if(!equal_float_vector(temp_vec, start_coords[local_an_id], change_plase_thresh)) // start is different
               need_to_add_info = true; 
             
             temp_vec[0] = gx;
             temp_vec[1] = gy;
             temp_vec[2] = gt;
             
-            if(!equal_float_vector(temp_vec, goal_coords[local_an_id], .01)) // goal is different
+            if(!equal_float_vector(temp_vec, goal_coords[local_an_id], change_plase_thresh)) // goal is different
               need_to_add_info = true; 
             
             if(need_to_add_info) // start or goal of one of the agents has changed, so it is a new planning problem, update our planning iteration
+            {
               planning_iteration[agent_number]++;
+              master_reset = true;
+            }
           } 
-          if(need_to_add_info)
+          
+          if(need_to_add_info && !master_reset)
           {
             if(start_coords[local_an_id].size() < 3)
               start_coords[local_an_id].resize(3); 
@@ -1193,7 +1197,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           { 
             // put the message into a file             
             // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
-           
+   
             char this_file[100];
             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
           

@@ -373,14 +373,16 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           fclose(ifp);
         }
+        printf("break 1 \n");
         break;
       }
       //printf("solution from file: %f \n",file_best_solution_length);
     
             
-      if(senders_planning_iteration < Gbls->planning_iteration[agent_id])
+      if(senders_planning_iteration < Gbls->planning_iteration[i])
       {
         fclose(ifp);
+        printf("break 2: ag:%d, %d < %d   \n",agent_id, senders_planning_iteration, Gbls->planning_iteration[i] );
         break;
       }
       
@@ -389,12 +391,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {
         // problems reading data
         fclose(ifp);
+        printf("break 3 \n");
         break;
       }
       else if(file_best_solution_agent < 0 || file_best_solution_agent >= num_agents)
       {
         // problems reading data (invalid agent id from file)
         fclose(ifp);
+        printf("break 4 \n");
         break;
       }
       //printf("corresponding agent: %d \n",file_best_solution_agent);
@@ -404,6 +408,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {
         // problems reading data
         fclose(ifp);
+        printf("break 5 \n");
         break;
       } 
       //printf("supporting agents: ");
@@ -415,6 +420,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           // this could happen if we get a message from an agent working on a different problem
           //printf("problems reading data (invalid agent id from file) \n");
+          printf("break 6 \n");
           break;
         }
         file_votes[this_s] = 1;  
@@ -423,6 +429,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       
       fscanf(ifp, "f:\n");
       
+      //printf("file_FinalSolutionSent: "); 
       // get list of flags indicating final solution
       for(int j = 0; j < num_agents; j++)
       {
@@ -438,19 +445,21 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         file_FinalSolutionSent[j] = this_s;
       }
       fscanf(ifp, "\n");
-      // printf("\n"); 
+      //printf("\n"); 
     
       // get number of points in the path 
       if(fscanf(ifp, "p:%d\n", &file_num_points) <= 0)
       {
         // problems reading data
         fclose(ifp);
+        printf("break 7 \n");
         break;
       }
       else if(file_num_points <= 0)
       {
         // problems reading data (invalid number of solution points)
         fclose(ifp);
+        printf("break 8 \n");
         break;
       }
       //printf("number of points in solution: %d \n",file_num_points);
@@ -461,12 +470,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {
         // problems reading data
         fclose(ifp);
+        printf("break 9 \n");
         break;
       }
       else if(file_dimensions <= 0)
       {
         // problems reading data (invalid number of solution dimensions)
         fclose(ifp);
+        printf("break 10 \n");
         break;
       }
       //printf("number of dimensions solution: %d \n",file_dimensions);
@@ -494,6 +505,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       if(!got_complete_offset)
       {
         fclose(ifp);
+        printf("break 11 \n");
         break;
       }
       
@@ -506,6 +518,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {
         printf("problems reading data (no mapping num) \n");  
         fclose(ifp);
+        printf("break 12 \n");
         break;  
       }
       //printf("%d :", solution_num_robots);
@@ -518,6 +531,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           printf("problems reading data (not enough mapping flags) \n");
           got_complete_mapping = false;
+          printf("break 13 \n");
           break;
         }  
 
@@ -530,6 +544,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       if(!got_complete_mapping)
       {
         fclose(ifp);
+        printf("break 14 \n");
         break;
       }
       
@@ -549,8 +564,11 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             same_group = false;
         
           if(!same_group)
+          {
+            printf("break 15 \n");
             break;
-        
+          }
+          
           int local_robot_id = Gbls->local_ID[global_robot_id];          // that robot's local id on this agent
           temp_mapping[k] = (local_robot_id*dims_per_robot) + (k - (message_robot_id*dims_per_robot)); // the dimension in the solution this goes into
         
@@ -672,12 +690,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           
           fclose(ifp);
           remove(this_file);
+          printf("break 16 \n");
           break;  
         }
           
         // don't need any more info about this solution
         fclose(ifp);
         remove(this_file);
+        printf("continue 1 \n");
         continue;
       }
       //if we are here then message is in the same group as this agent
@@ -695,6 +715,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           {
             // problems reading data (not enough path dimensions)
             successfull_path_get = false;
+            printf("break 17 \n");
             break;
           }
               
@@ -709,13 +730,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       if(!successfull_path_get)
       {
         fclose(ifp);
+        printf("break 18 \n");
         break;
       }   
           
       
       // make sure that this message is for this problem  
       // check start
-      if(! equal_float_vector(file_solution[0], start_config, .001f))
+      if(! equal_float_vector(file_solution[0], start_config, change_plase_thresh))
       {
         printf("---ignoring message for a different problem (the start is different)\n");   
         
@@ -723,11 +745,12 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         print_float_vector(start_config);
          
         fclose(ifp);
+        printf("break 19 \n");
         break;
       }
       
       // check goal
-      if(! equal_float_vector(file_solution[file_solution.size()-1], goal_config, .001f))
+      if(! equal_float_vector(file_solution[file_solution.size()-1], goal_config, change_plase_thresh))
       {
         printf("---ignoring message for a different problem (the goal is different)\n");   
         
@@ -766,6 +789,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {
         // problems reading data (invalid file move_flag)
         fclose(ifp);
+        printf("break 20 \n");
         break;
       }
       //printf("file move_flag: %d \n",file_move_flag);
@@ -775,6 +799,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       {      
         // problems reading data
         fclose(ifp);
+        printf("break 21 \n");
         break;
       }
       
@@ -884,14 +909,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }
       
       fclose(ifp);
-  
+      
       // if we are here than we successfully recieved a message
     
       in_msg_ctr[i]++;
       messages_sent_to_us[i] = (float)message_num;
       messages_recieved_by_us[i] = (float)(in_msg_ctr[i]);
          
-      // printf("recieved a message, moving_flag = %d, overall_prob:%f per %d sent\n",file_move_flag, messages_sent_to_us[i], message_num);
+      //printf("recieved a message, moving_flag = %d, overall_prob:%f per %d sent\n",file_move_flag, messages_sent_to_us[i], message_num);
       
       // get rid of message file
       remove(this_file);
@@ -902,7 +927,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         if(file_FinalSolutionSent[j] == 1)  
           FinalSolutionSent[j] = 1;
       }
-
+      
       bool have_everybodys_final_solution = true;
       for(int j = 0; j < num_agents; j++)
       {
@@ -1116,10 +1141,10 @@ void MultiAgentSolution::SendMessage(float send_prob) // sends a message contain
         fprintf(ofp, "%d,",j);   
     }
     fprintf(ofp, "\nf:\n");   
-     
+    
     for(int j = 0; j < num_agents; j++)
     {
-      fprintf(ofp, "%d, ",FinalSolutionSent[j]);   
+      fprintf(ofp, "%d, ", FinalSolutionSent[j]);   
     }
     fprintf(ofp, "\n");  
     
@@ -1351,7 +1376,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     }
     sprintf(temp_buffer,"\n");  
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);  
     
     // best path (meta data)
     int num_points = BestSolution.size();       
@@ -1553,11 +1578,8 @@ bool MultiAgentSolution::StartMoving()   // returns true if this agent can start
     // check if all agents vote for our path (given best info we have)
     for(int i = 0; i < Gbls->team_size; i++)
     {    
-      if(Gbls->InTeam[i])
-      {
-        if(Votes[i] != agent_id)
-          return false;
-      }
+      if(Votes[Gbls->global_ID[i]] != agent_id)
+        return false;
     }
   }
   else if(mode == 1) // ss
