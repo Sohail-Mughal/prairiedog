@@ -83,5 +83,7 @@ class GlobalVariables
    vector<float> team_bound_area_min;  // holds the minimum point in the hyper cube team bounding area  (note, this gets populated when NavSceen is populated)
    vector<float> team_bound_area_size; // holds the distance along each dimension of the hyper cube team bounding area (note, this gets populated when NavSceen is populated) 
    
+   
+   clock_t start_time; // this gets set at the beginning and then never changed
    void* MAgSln;   // pointer to the multi agent solution
 };

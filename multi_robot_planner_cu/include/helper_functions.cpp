@@ -225,6 +225,58 @@ void data_dump(const char* directory, float prob_success, float min_clock_to_pla
   
 }
 
+
+// appends info to a file per agent in directory 
+void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose)
+{   
+  char this_file[100];
+  sprintf(this_file, "../%s/agent_%d_team_stats.txt", directory, MultAgSln.agent_id);
+  
+  FILE* ofp = fopen(this_file,"a");
+  while(ofp == NULL)
+  {
+      ofp = fopen(this_file,"a");
+      printf("trying to open stats file in: %s\n",directory);
+      return;
+  }
+  
+  clock_t now_time = clock();
+  float time_elapsed = difftime_clock(now_time, start_time);
+
+  char sent_to_us[100];
+  char temp[20];
+  sprintf(sent_to_us,"s: ");  
+  for(int i = 0; i < G.number_of_agents; i++)
+  {  
+    sprintf(temp,"%f ", M.messages_sent_to_us[i]);  
+    strcat(sent_to_us, temp); 
+  }
+  
+  char recieved_by_us[100];
+  sprintf(recieved_by_us,"r: ");  
+  for(int i = 0; i < G.number_of_agents; i++)
+  {  
+    sprintf(temp,"%f ", M.messages_recieved_by_us[i]);  
+    strcat(recieved_by_us, temp); 
+  }
+  
+  char in_team[100];
+  sprintf(in_team,"t: ");  
+  for(int i = 0; i < G.number_of_agents; i++)
+  {  
+    if(G.InTeam[i])
+      sprintf(temp,"1 ");
+    else
+      sprintf(temp,"0 "); 
+    strcat(in_team, temp); 
+  }
+  
+  fprintf(ofp, "%d %f %f %f %f %f %d %d %s%s%s\n", G.agent_number, time_elapsed, M.best_solution_length, robot_pose->x, robot_pose->y, robot_pose->alpha, G.number_of_agents, G.team_size, sent_to_us, recieved_by_us, in_team);
+  
+  fclose(ofp);
+}
+
+
 #ifdef save_time_data
 void time_data_dump(const char* directory, float prob_success, float min_clock_to_plan)
 {   

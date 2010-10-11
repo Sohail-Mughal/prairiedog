@@ -87,6 +87,7 @@ void GlobalVariables::Populate(int num_of_agents)
   master_reset = false;
   kill_master = false;
   
+  start_time = clock();
   MAgSln = NULL;
 }
 
