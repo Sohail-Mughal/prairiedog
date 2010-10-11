@@ -78,6 +78,11 @@ using namespace std;
 // #define save_time_data    // when defined stats [time, best, path_length, nodes_in_tree] are saved (for entire run) after the final solution is found
 // #define use_kd_tree       // when defined a kd_tree is used for finding nearest neighbors (only useful with trees where this is allowed)  rrtrho, rrtfast
 
+struct POSE;
+typedef struct POSE POSE;
+
+struct UPDATE;
+typedef struct UPDATE UPDATE;
 
 #ifdef use_kd_tree
   #include "kd_tree.cpp"  
@@ -198,46 +203,6 @@ bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combi
 bool robot_is_moving = false;
 float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
-#include "helper_functions.cpp"
-#include "NavScene.cpp"
-#include "MultiRobotWorkspace.cpp"  
-#include "Workspace.cpp"
-#include "Cspace.cpp"
-#include "MultiAgentSolution.cpp"
-#include "MultiRobotComs.cpp" 
-#include "glut_functions.cpp"
-
-struct POSE;
-typedef struct POSE POSE;
-
-struct UPDATE;
-typedef struct UPDATE UPDATE;
-
-
-// stuff from original base_planner_cu
-float OBSTACLE_COST = 10000;         // the cost of an obstacle (of probability 1) note: this should be greater than the max path length
-float robot_radius = .2;             // (m), radius of the robot
-float safety_distance = .1;          // (m),  distance that must be maintained between robot and obstacles
-
-// global ROS subscriber handles
-ros::Subscriber pose_sub;
-ros::Subscriber goal_sub;
-
-// global ROS publisher handles
-ros::Publisher global_path_pub;
-ros::Publisher system_update_pub;
-ros::Publisher planning_area_pub;   
-ros::Publisher obstacles_pub; 
-
-// globals for robot and goal
-POSE* robot_pose = NULL;
-POSE* goal_pose = NULL;
-
-
-bool new_goal = false;       
-bool change_token_used = false;
-bool reload_map = false; 
-
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -304,6 +269,40 @@ void print_pose(POSE* pose)
     printf("\n");  
   } 
 }
+
+#include "helper_functions.cpp"
+#include "NavScene.cpp"
+#include "MultiRobotWorkspace.cpp"  
+#include "Workspace.cpp"
+#include "Cspace.cpp"
+#include "MultiAgentSolution.cpp"
+#include "MultiRobotComs.cpp" 
+#include "glut_functions.cpp"
+
+
+// stuff from original base_planner_cu
+float OBSTACLE_COST = 10000;         // the cost of an obstacle (of probability 1) note: this should be greater than the max path length
+float robot_radius = .2;             // (m), radius of the robot
+float safety_distance = .1;          // (m),  distance that must be maintained between robot and obstacles
+
+// global ROS subscriber handles
+ros::Subscriber pose_sub;
+ros::Subscriber goal_sub;
+
+// global ROS publisher handles
+ros::Publisher global_path_pub;
+ros::Publisher system_update_pub;
+ros::Publisher planning_area_pub;   
+ros::Publisher obstacles_pub; 
+
+// globals for robot and goal
+POSE* robot_pose = NULL;
+POSE* goal_pose = NULL;
+
+
+bool new_goal = false;       
+bool change_token_used = false;
+bool reload_map = false; 
         
 
 /*--------------------------- ROS callbacks -----------------------------*/
@@ -1088,9 +1087,7 @@ int main(int argc, char** argv)
     Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
     Cspc.Populate(startc, goalc, num_robots*world_dims);
     MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
-    
     MultAgSln.obstacles_pub = &obstacles_pub;
-    
     Globals.MAgSln = &MultAgSln;
 
     
@@ -1101,6 +1098,7 @@ int main(int argc, char** argv)
     // find at least one solution (between all robots), also does one round of message passing per loop
     while(!found_path && !Globals.master_reset)
     {  
+      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       // broadcast tf
       //broadcast_map_tf();  
       
@@ -1183,7 +1181,9 @@ int main(int argc, char** argv)
     
       int last_time_left_floor = (int)time_left_to_plan;
       while(this_time_to_plan > 0 && !Globals.master_reset)
-      {       
+      {    
+        data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
+          
         if(last_time_left_floor != (int)time_left_to_plan)
         {
           printf("\ntime left to plan: %f\n", time_left_to_plan);
@@ -1265,7 +1265,10 @@ int main(int argc, char** argv)
       phase_two_start_t = clock();
 
     while(!MultAgSln.StartMoving() && !Globals.master_reset)
-    {      
+    {    
+        
+      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      
       start_wait_t = clock();
       now_time = clock();
       while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
@@ -1303,14 +1306,17 @@ int main(int argc, char** argv)
     }
     
     float phase_two_time = difftime_clock(now_time,phase_two_start_t); // time since planning ended until this robot is aware of an agreement
-    float total_time = difftime_clock(now_time,start_time);
+    //float total_time = difftime_clock(now_time,start_time);
     printf("Done with communication phase, (which took %f secs)\n", phase_two_time); 
     printf("agent #%d found the best overall solution, with length %f \n", MultAgSln.best_solution_agent, MultAgSln.best_solution_length);
   
     // save this info to a file so we can look at stats later
-    if(total_agents > 1)
-      data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
+    //if(total_agents > 1)
+    //  data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
   
+    
+    data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+    
     // now we just broadcast the final solution, in case other robots didn't get it
   
 //     printf("ending clean \n");
@@ -1325,6 +1331,8 @@ int main(int argc, char** argv)
    
       //printf("----------------------\n");
   
+      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      
       start_wait_t = clock();
       now_time = clock();
       while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time)

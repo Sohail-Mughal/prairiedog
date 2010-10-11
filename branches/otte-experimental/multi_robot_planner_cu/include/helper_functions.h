@@ -23,6 +23,8 @@ float line_dist_to_point(float ax, float ay, float bx, float by, float cx, float
 
 void data_dump(const char* directory, float prob_success, float min_clock_to_plan, float phase_two_time, Cspace& C, MultiAgentSolution& M, float actual_clock_to_plan, float total_time); // appends info to a file per agent in directory
 
+void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose);  // appends info to a file per agent in directory 
+
 #ifdef save_time_data
 void time_data_dump(const char* directory, float prob_success, float min_clock_to_plan);
 #endif
