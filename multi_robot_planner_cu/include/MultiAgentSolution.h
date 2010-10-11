@@ -38,8 +38,8 @@ class MultiAgentSolution
     float best_solution_length;           // the length of the best solution
     int best_solution_agent;              // the agent with the best solution so far
     
-    vector<float> Votes;                  // each slot represents the coorisponding agent's vote for who has the best path
-    vector<int> FinalSolutionSent;        // each slot represents the coorisponding agent's status as to if they have sent out their final solution
+    vector<float> Votes;                  // each slot represents the coorisponding agent's vote for who has the best path, indexed using global id
+    vector<int> FinalSolutionSent;        // each slot represents the coorisponding agent's status as to if they have sent out their final solution, indexed using global id
     
     bool moving;                          // this starts as false, but switches to true when this robot starts moving. if a message with this as true is recieved, then it means that some robot has started moveng, and the attached path is the one to be used 
 

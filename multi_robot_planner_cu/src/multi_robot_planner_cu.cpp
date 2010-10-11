@@ -195,6 +195,8 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
+bool robot_is_moving = false;
+float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
 #include "helper_functions.cpp"
 #include "NavScene.cpp"
@@ -527,6 +529,7 @@ void publish_obstacles(const NavScene& S)
   obstacles_pub.publish(msg); 
 }
 
+
 /*----------------------- ROS service functions -------------------------*/
 
 bool load_pose()
@@ -681,6 +684,12 @@ int main(int argc, char** argv)
   //argv[15] = rrt_angular_resolution
   //argv[16] = planning_border_width
    
+
+  // remove old files from temp directory
+  char system_call[200];
+  sprintf(system_call,"rm -rf %s/*", message_dir); 
+  system(system_call);
+    
   ros::init(argc, argv, "base_planner_cu");
   ros::NodeHandle nh;
   ros::Rate loop_rate(100);
@@ -952,6 +961,7 @@ int main(int argc, char** argv)
   Globals.resolution = resolution;
   Globals.angular_resolution = angular_resolution;         
   Globals.planning_border_width = planning_border_width;
+  Globals.master_reset = false;
   
   // communication threads
   pthread_t Listener_thread, Sender_thread;
@@ -959,56 +969,58 @@ int main(int argc, char** argv)
  
   while(!Globals.kill_master)
   {   
+    if(Globals.master_reset && robot_is_moving == true)
+    {
+      system(system_call);  // remove old files
+      start_time = clock();
+      now_time = clock(); 
+      while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
+      {
+        publish_system_update(1); // if we've reset, then tell the controller
+        ros::spinOnce();  
+        now_time = clock(); 
+      }
+    }  
+    robot_is_moving = false;  
+      
     // remember the start time
     start_time = clock();
     now_time = clock();
     last_chop_t = clock();
     Globals.MAgSln = NULL;
         
-    // check to see if start or goal have changed for this agent (this agent has local id 0)
-    bool stuff_has_changed = false;
-    if((int)Globals.start_coords[0].size() < 3)
-      Globals.start_coords[0].resize(3, 0); 
+    Globals.start_coords.resize(0);
+    Globals.start_coords.resize(Globals.number_of_agents);
+    Globals.start_coords[0].resize(3, 0); 
     
-    vector<float> temp_vec(3,0);
-    temp_vec[0] = robot_pose->x;
-    temp_vec[1] = robot_pose->y;
-    temp_vec[2] = robot_pose->alpha;
+    Globals.start_coords[0][0] = robot_pose->x;
+    Globals.start_coords[0][1] = robot_pose->y;
+    Globals.start_coords[0][2] = robot_pose->alpha;
+
+    Globals.goal_coords.resize(0);
+    Globals.goal_coords.resize(Globals.number_of_agents);
+      
+    Globals.goal_coords[0].resize(3,0); 
+    Globals.goal_coords[0][0] = goal_pose->x;
+    Globals.goal_coords[0][1] = goal_pose->y;
+    Globals.goal_coords[0][2] = goal_pose->alpha;
     
-    if(!equal_float_vector(temp_vec, Globals.start_coords[0], .01)) // start is different
-    {
-      Globals.start_coords[0][0] = robot_pose->x;
-      Globals.start_coords[0][1] = robot_pose->y;
-      Globals.start_coords[0][2] = robot_pose->alpha;
-      stuff_has_changed = true;
-    }
-    
-    if((int)Globals.goal_coords[0].size() < 3)
-      Globals.goal_coords[0].resize(3,0); 
-    
-    temp_vec[0] = goal_pose->x;
-    temp_vec[1] = goal_pose->y;
-    temp_vec[2] = goal_pose->alpha;
-    
-    if(!equal_float_vector(temp_vec, Globals.goal_coords[0], .01)) // start is different
-    {
-      Globals.goal_coords[0][0] = goal_pose->x;
-      Globals.goal_coords[0][1] = goal_pose->y;
-      Globals.goal_coords[0][2] = goal_pose->alpha;
-      stuff_has_changed = true;
-    }
-    
-    if(stuff_has_changed)
-      Globals.planning_iteration[Globals.agent_number]++;
+    Globals.planning_iteration[Globals.agent_number]++;
             
     Globals.have_info.resize(0);
-    Globals.agent_ready.resize(0); 
     Globals.have_info.resize(Globals.number_of_agents, 0);   // gets set to 1 when we get an agent's info
+        
+    Globals.agent_ready.resize(0); 
     Globals.agent_ready.resize(Globals.number_of_agents, 0); // gets set to 1 when we get an agent's info
     
     Globals.have_info[0] = 1;
     Globals.agent_ready[0] = 1;
           
+    Globals.last_update_time.resize(0);
+    Globals.last_update_time.resize(Globals.number_of_agents);
+    Globals.planning_time_remaining.resize(0);
+    Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
+
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
   
@@ -1270,6 +1282,14 @@ int main(int argc, char** argv)
    
       printf(" waiting, not moving\n");
     
+      
+      printf("final solution sent:  -->");
+      for(uint i = 0; i < MultAgSln.FinalSolutionSent.size(); i++)
+        printf("%d, ", MultAgSln.FinalSolutionSent[i]);
+      printf("  <---\n");
+      
+      
+      
       publish_planning_area(Scene);
       publish_obstacles(Scene);
       ros::spinOnce();
@@ -1336,7 +1356,8 @@ int main(int argc, char** argv)
       //getchar();
 
       publish_global_path(ThisAgentsPath, Parametric_Times); 
-
+      robot_is_moving = true;
+              
       publish_planning_area(Scene);
       publish_obstacles(Scene);
 
@@ -1345,6 +1366,11 @@ int main(int argc, char** argv)
       //printf("sleeping \n");
       loop_rate.sleep();
       // printf("moving\n");
+
+      if(Globals.master_reset)
+      {
+        break;  // problem has been changed
+      }
     }
 
     if(Globals.master_reset)
