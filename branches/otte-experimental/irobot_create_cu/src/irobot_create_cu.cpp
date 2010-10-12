@@ -628,13 +628,68 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
       float start_time = p[i-1][3];
       float end_time = p[i][3];
       
-      float alpha_start = p[i-1][2]; // should already be beprint_2d_float_vector(trajectory);tween -PI and PI
+      float alpha_start = p[i-1][2]; // should already be between -PI and PI
       float alpha_end = p[i][2];     // should already be between -PI and PI
       
-      if(alpha_end > alpha_start && alpha_end - alpha_start > PI) // it is easier to go in the other direction
-        alpha_end -= 2*PI;
-      else if(alpha_start > alpha_end && alpha_start - alpha_end > PI) // it is easier to go in the other direction
+      // in case it is not
+      
+      while(alpha_start < 0)
+        alpha_start += 2*PI;
+      while(alpha_start > 2*PI)
         alpha_start -= 2*PI;
+      
+      while(alpha_end < 0)
+        alpha_end += 2*PI;
+      while(alpha_end > 2*PI)
+        alpha_end -= 2*PI;
+      
+      // now start and goal are both between 0 and 2 PI
+      
+      float delta_alpha = alpha_end - alpha_start;
+
+      if(delta_alpha <= PI && delta_alpha >= 0) // end is ahead of start, but the difference is less than PI, so nothing needs to be done
+      {
+          
+      }
+      else if(delta_alpha >= -PI &&  delta_alpha <= 0) // start is ahead of end, but the magnitude of the difference is less than PI, so nothing needs to be done
+      {
+      
+      }
+      else if(delta_alpha >= 0) // (otherwise) it is better to go in the other direction and currently end is ahead of start, so we want to make end behind start
+      {
+        alpha_end -= 2*PI;  
+      }
+      else // delta_alpha <= 0 // (otherwise) it is better to go in the other direction and currently start is ahead of end, so we want to make end ahead of start
+      {
+        alpha_end += 2*PI;    
+      }
+          
+//       while(delta_alpha < -PI)
+//         delta_alpha += 2*PI;
+//       while(delta_alpha > PI)
+//         delta_alpha -= 2*PI;
+//       
+//       // now delta alpha is between -PI and PI
+//       printf("delta alpha: %f \n", delta_alpha);
+//       
+//       if(delta_alpha < 0) // should have decreasing coords
+//       {
+//         while(alpha_start < alpha_end)
+//           alpha_end -= 2*PI; 
+//           
+//       }
+//       else // should have increasing coords
+//       {
+//         while(alpha_start > alpha_end)
+//           alpha_end += 2*PI;  
+//           
+//       }
+      
+      
+//       if(alpha_end > alpha_start && alpha_end - alpha_start > 0) // it is easier to go in the other direction
+//         alpha_end -= 2*PI;
+//       else if(alpha_start > alpha_end && alpha_start - alpha_end > 0) // it is easier to go in the other direction
+//         alpha_start -= 2*PI;
           
       vector<float> this_path_point(4);
       for(float this_time = start_time + time_granularity; this_time < end_time; this_time += time_granularity)
@@ -651,11 +706,11 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
           this_path_point[2] = p[i-1][2];  // assuming that alpha of point i points the correct direction along segment {i,i+1}
         else // location has not changed, so need to worry about alpha     
         {
-          this_path_point[2] = p[i-1][2] + (p[i][2] - p[i-1][2])*percentage_through;  // alpha
-          while(this_path_point[2] < -PI)
-            this_path_point[2] += 2*PI;
-          while(this_path_point[2] > PI)
-            this_path_point[2] -= 2*PI;
+          this_path_point[2] = alpha_start + (alpha_end - alpha_start)*percentage_through;  // alpha
+//           while(this_path_point[2] < -PI)
+//             this_path_point[2] += 2*PI;
+//           while(this_path_point[2] > PI)
+//             this_path_point[2] -= 2*PI;
         }
         
         //printf("alpha %f \n", this_path_point[2]);
