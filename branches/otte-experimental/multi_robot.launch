@@ -55,7 +55,7 @@
 
   <group ns="multi_robot_planner_cu">
     <param name="agent_id" type="int" value="0" />
-    <param name="total_agents" type="int" value="3" />
+    <param name="total_agents" type="int" value="5" />
     <param name="min_clock_to_plan" type="double" value="10" />
     <param name="prob_message_success" type="double" value="1" />
     <param name="experiment_name" type="string" value="test" />
@@ -79,7 +79,7 @@
 
   <group ns="intercom_cu">
     <param name="my_id" type="int" value="0" />
-    <param name="num_agents" type="int" value="4" />
+    <param name="num_agents" type="int" value="6" />
     <param name="config_file" type="string" value="../config.xml" />
   </group>
   <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
