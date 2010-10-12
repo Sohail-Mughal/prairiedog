@@ -1085,7 +1085,12 @@ int main(int argc, char** argv)
     dist_threshold = map_resolution;
     
     Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
-    Cspc.Populate(startc, goalc, num_robots*world_dims);
+    if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
+    {
+      Globals.master_reset = true;
+      continue;
+    }
+    
     MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
     MultAgSln.obstacles_pub = &obstacles_pub;
     Globals.MAgSln = &MultAgSln;
@@ -1288,7 +1293,12 @@ int main(int argc, char** argv)
       
       printf("final solution sent:  -->");
       for(uint i = 0; i < MultAgSln.FinalSolutionSent.size(); i++)
-        printf("%d, ", MultAgSln.FinalSolutionSent[i]);
+      {
+        if(Globals.InTeam[i])
+          printf("%d, ", MultAgSln.FinalSolutionSent[i]);
+        else
+          printf("-, ");
+      }
       printf("  <---\n");
       
       

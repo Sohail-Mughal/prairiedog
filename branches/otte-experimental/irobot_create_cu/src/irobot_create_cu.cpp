@@ -403,7 +403,7 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
   
   if(multi_robot_mode) 
   {     
-    if(!recieved_first_path)
+    if(!recieved_first_path || safe_path_exists == 0)
     {
       move_start_time = ros::Time::now();
       recieved_first_path = true;

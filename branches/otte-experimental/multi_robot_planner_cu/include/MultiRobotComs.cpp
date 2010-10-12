@@ -381,6 +381,8 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     if(sscanf(buffer,"A %d,%d\n", &sending_agent,&senders_planning_iteration) < 2)
       return false;
 
+    //printf("parsing header from %d \n", sending_agent);
+    
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
     {
       printf("old problem --- %d %d\n", senders_planning_iteration, planning_iteration[sending_agent]);
@@ -1161,6 +1163,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           if(agent_sending < 0)
           {
              // don't know who sent the message, so ignore 
+             //printf("s:%d (b)\n", agent_sending);
           }
           else if(!G->InTeam[agent_sending] && !JOIN_ON_OVERLAPPING_AREAS && overlapping)
           {
@@ -1169,12 +1172,16 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             // the final case above is because we can save time by automatically dropping from groups that do not overlap (as this is a precondition for intersection)
             // printf("recieved a message from a robot that is not yet part of this team\n");  
             
+            //printf("s:%d (c)\n", agent_sending);
+              
             char this_file[100];
           
             if((MultiAgentSolution*)(G->MAgSln) == NULL)
               continue;
           
-            ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough
+            if(agent_sending >= (int)((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.size())
+              ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough -- not sure why I thought this
+            
             ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending] = 1;
             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
           
@@ -1199,6 +1206,8 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             // put the message into a file             
             // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
    
+            //printf("filing message from %d \n", agent_sending);  
+              
             char this_file[100];
             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
           
@@ -1224,6 +1233,8 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             }
             //    printf("here 55 \n");
           }
+          //else
+            //printf("s:%d (d)  <?   %d \n", agent_sending, (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size()));
         }
         else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
         {

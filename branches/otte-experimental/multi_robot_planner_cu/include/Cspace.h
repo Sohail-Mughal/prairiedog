@@ -7,7 +7,7 @@ class Cspace
     Cspace(const Cspace& C);     // copy constructor
     ~Cspace();                   // destructor 
     
-    void Populate(vector<float> the_start, vector<float> the_goal, int dimensions); // populates or re-populates the structure
+    bool Populate(vector<float> the_start, vector<float> the_goal, int dimensions); // populates or re-populates the structure, returns true on success
     void ChopTree();                                                                // removes all nodes but root     
     
     int AddNeighbor(const vector<float>& new_configuration, int neighbor_index, float safe_dist, float dist_to_goal, float est_dist_to_start);  // this adds the new point in configuration space as a neighbor of the point refered to by neighbor_index, returns the new index of the new configuration
