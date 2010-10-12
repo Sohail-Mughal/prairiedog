@@ -343,6 +343,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }   
       //printf("in file %s\n",this_file);
       
+      //printf("parsing file message from %d \n", i);
+      
       float file_best_solution_length;
       int file_best_solution_agent;
       vector<int> file_votes(num_agents,0);
@@ -373,7 +375,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           fclose(ifp);
         }
-        printf("break 1 \n");
+        //printf("break 1 \n");
         break;
       }
       //printf("solution from file: %f \n",file_best_solution_length);
@@ -382,6 +384,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       if(senders_planning_iteration < Gbls->planning_iteration[i])
       {
         fclose(ifp);
+        remove(this_file);
         printf("break 2: ag:%d, %d < %d   \n",agent_id, senders_planning_iteration, Gbls->planning_iteration[i] );
         break;
       }
@@ -429,24 +432,28 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       
       fscanf(ifp, "f:\n");
       
-      //printf("file_FinalSolutionSent: "); 
       // get list of flags indicating final solution
       for(int j = 0; j < num_agents; j++)
       {
         if(fscanf(ifp, "%d, ", &this_s) <= 0) 
-        {
-          //printf("[%d, ]\n", this_s);  
-            
+        { 
           printf("problems reading data (not enough agent solution flags) \n");
           break;
         }  
-        //printf("%d, ", this_s); 
         
         file_FinalSolutionSent[j] = this_s;
       }
       fscanf(ifp, "\n");
       //printf("\n"); 
     
+//       ////////////////  for debugging  
+//       printf("recieved:  >>>");
+//       for(uint j = 0; j < num_agents; j++)
+//         printf("%d, ", file_FinalSolutionSent[j]);
+//       printf("  <<<\n");
+//       ////////////////
+      
+      
       // get number of points in the path 
       if(fscanf(ifp, "p:%d\n", &file_num_points) <= 0)
       {
@@ -565,7 +572,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         
           if(!same_group)
           {
-            printf("break 15 \n");
+            //printf("break 15 \n");
             break;
           }
           
@@ -697,7 +704,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         // don't need any more info about this solution
         fclose(ifp);
         remove(this_file);
-        printf("continue 1 \n");
+        //printf("continue 1 \n");
         continue;
       }
       //if we are here then message is in the same group as this agent
@@ -1377,6 +1384,14 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     }
     sprintf(temp_buffer,"\n");  
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);  
+    
+    
+//     // just for debugging    
+//     printf("sending:  xx>");
+//     for(int j = 0; j < num_agents; j++)
+//       printf("%d, ", FinalSolutionSent[j]);
+//     printf("  <xx\n");
+    
     
     // best path (meta data)
     int num_points = BestSolution.size();       

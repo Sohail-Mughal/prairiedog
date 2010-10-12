@@ -79,19 +79,24 @@ Cspace::~Cspace() // destructor
   #endif
 }
 
-void Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimensions) // populates or re-populates the structure
+bool Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimensions) // populates or re-populates the structure, returns true on success
 {
   dims = dimensions;
   num_points = 0;
   
   // check to make sure both start and goal are valid configs
   if(W.PointValid(the_start) < 0)
+  {
     printf("error: invalid start configuration, %f \n", W.PointValid(the_start));
-
+    return false;
+  }
+  
   float goal_dist = W.PointValid(the_goal);
   if(goal_dist < 0)
+  {
     printf("error: invalid goal configuration, %f \n",goal_dist);
-
+    return false;
+  }
   // save start and goal
   start.resize(dims);
   for(int i = 0; i < dims; i++)
@@ -135,6 +140,7 @@ void Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimen
   redude_3_to_2(the_goal, V2Temp);
   T->insertNode(0, V2Temp);
   #endif
+  return true;
 }
 
 void Cspace::ChopTree()  // removes all nodes but root
