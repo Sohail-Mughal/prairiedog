@@ -664,33 +664,6 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
         alpha_end += 2*PI;    
       }
           
-//       while(delta_alpha < -PI)
-//         delta_alpha += 2*PI;
-//       while(delta_alpha > PI)
-//         delta_alpha -= 2*PI;
-//       
-//       // now delta alpha is between -PI and PI
-//       printf("delta alpha: %f \n", delta_alpha);
-//       
-//       if(delta_alpha < 0) // should have decreasing coords
-//       {
-//         while(alpha_start < alpha_end)
-//           alpha_end -= 2*PI; 
-//           
-//       }
-//       else // should have increasing coords
-//       {
-//         while(alpha_start > alpha_end)
-//           alpha_end += 2*PI;  
-//           
-//       }
-      
-      
-//       if(alpha_end > alpha_start && alpha_end - alpha_start > 0) // it is easier to go in the other direction
-//         alpha_end -= 2*PI;
-//       else if(alpha_start > alpha_end && alpha_start - alpha_end > 0) // it is easier to go in the other direction
-//         alpha_start -= 2*PI;
-          
       vector<float> this_path_point(4);
       for(float this_time = start_time + time_granularity; this_time < end_time; this_time += time_granularity)
       {
@@ -707,10 +680,7 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
         else // location has not changed, so need to worry about alpha     
         {
           this_path_point[2] = alpha_start + (alpha_end - alpha_start)*percentage_through;  // alpha
-//           while(this_path_point[2] < -PI)
-//             this_path_point[2] += 2*PI;
-//           while(this_path_point[2] > PI)
-//             this_path_point[2] -= 2*PI;
+
         }
         
         //printf("alpha %f \n", this_path_point[2]);
@@ -1532,6 +1502,12 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     TARGET_TURN = diff_direction; 
   }
     
+  
+  if(TARGET_TURN > DEFAULT_TURN*2)
+    TARGET_TURN = DEFAULT_TURN*2;
+  if(TARGET_TURN < -DEFAULT_TURN*2)
+    TARGET_TURN = -DEFAULT_TURN*2;
+  
   setSpeed(TARGET_SPEED);
   setTurn(TARGET_TURN);   
   return 0;  
