@@ -8,7 +8,7 @@ Cspace::Cspace() // default constructor
   num_valid_points = 0;
 }
 
-Cspace::Cspace(vector<float> the_start, vector<float> the_goal, int dimensions) // constructor
+Cspace::Cspace(const vector<float>& the_start, const vector<float>& the_goal, int dimensions) // constructor
 {
   Populate(the_start, the_goal, dimensions);
 }
@@ -79,7 +79,7 @@ Cspace::~Cspace() // destructor
   #endif
 }
 
-bool Cspace::Populate(vector<float> the_start, vector<float> the_goal, int dimensions) // populates or re-populates the structure, returns true on success
+bool Cspace::Populate(const vector<float>& the_start, const vector<float>& the_goal, int dimensions) // populates or re-populates the structure, returns true on success
 {
   dims = dimensions;
   num_points = 0;
@@ -733,8 +733,12 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
     }
     
     // randomly pick a new configuration  
+    #ifdef pre_calculated_free_space
+    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+    #else
     W.RandMove3(new_configuration, prob_at_goal, start);
-      
+    #endif
+    
     // test the new configuration to make sure it could possible lead to a better solution given goal and start
     if(best_total_path_length < W.Dist(goal, new_configuration) + W.Dist(new_configuration, start))
     {
@@ -946,6 +950,7 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
       }
     }
     now_t = clock(); 
+    
   } // end of loop to find a single new and better solution
   
   return false;
@@ -1015,8 +1020,12 @@ bool Cspace::BuildTreeV2rho(clock_t start_t, double clock_to_plan, int& steps, f
     steps--;   
 
     // randomly pick a new configuration (completely randomly)
-    W.RandMove3(new_configuration, prob_at_goal, start); // more like my version of the shortest path rrt than above
-   
+    #ifdef pre_calculated_free_space
+    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+    #else
+    W.RandMove3(new_configuration, prob_at_goal, start);
+    #endif
+            
     float this_dist_to_obstacle_point;
     
     // go through all nodes and find the node that helps the new one connect back to goal in the least ammount of distance
@@ -1414,7 +1423,11 @@ bool Cspace::BuildRRT(clock_t start_t, double clock_to_plan, int& steps, float p
     steps--;   
  
     // randomly pick a new configuration (completely randomly)
-    W.RandMove3(new_configuration, prob_at_goal, start); // pick random point in space
+    #ifdef pre_calculated_free_space
+    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+    #else
+    W.RandMove3(new_configuration, prob_at_goal, start);
+    #endif
     
     if(best_total_path_length != LARGE) // if not first tree
     {
@@ -1598,7 +1611,11 @@ bool Cspace::BuildRRTRho(clock_t start_t, double clock_to_plan, int& steps, floa
     steps--;   
  
     // randomly pick a new configuration (completely randomly)
-    W.RandMove3(new_configuration, prob_at_goal, start); // pick random point in space
+    #ifdef pre_calculated_free_space
+    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+    #else
+    W.RandMove3(new_configuration, prob_at_goal, start);
+    #endif
     
     
     float this_dist_to_obstacle_point;  
@@ -1811,7 +1828,11 @@ bool Cspace::BuildRRTFast(clock_t start_t, double clock_to_plan, int& steps, flo
     steps--;   
 
     // randomly pick a new configuration (completely randomly)
-    W.RandMove3(new_configuration, prob_at_goal, start); // pick random point in space
+    #ifdef pre_calculated_free_space
+    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+    #else
+    W.RandMove3(new_configuration, prob_at_goal, start);
+    #endif
     
     
     float this_dist_to_obstacle_point;  

@@ -587,6 +587,33 @@ void MultiRobotWorkspace::RandMove3(vector<float>& new_config, float prob_at_goa
   } 
 }
 
+
+void MultiRobotWorkspace::RandMove4(vector<float>& new_config, float prob_at_goal, const vector<float>& the_goal, const vector<vector<float> >& f_space) // calculates a new configuration point that is drawn randomly from the configuration space, defined by f_space, but with prob_at_goal a copy of the goal configuration the_goal is chosen
+{
+  int x_ind, y_ind, theta_ind;
+  if(((float)rand_int(0, 100000))/100000 < prob_at_goal) // want to move directly at the goal configuration (which is where robots start)
+  {
+    new_config = the_goal;
+    return;
+  }
+  else
+  {
+    for(int r = 0; r < num_robots; r++)
+    {      
+      x_ind = r*dims;
+      y_ind = x_ind+1;
+      theta_ind = y_ind + 1;  
+      
+      int f_ind = rand_int(0, f_space.size()-1);
+      
+      new_config[x_ind] = f_space[f_ind][0] - Gbls->team_bound_area_min[0];
+      new_config[y_ind] = f_space[f_ind][1] - Gbls->team_bound_area_min[1];
+      new_config[theta_ind] =  f_space[f_ind][2] - Gbls->team_bound_area_min[2];
+    }
+  } 
+}
+
+
 void MultiRobotWorkspace::MoveToward(const vector<float>& old_config_from, const vector<float>& old_config_to, vector<float>& new_config, float move_dist) // new_config is move_dist from old_config_from to old_config_to 
 {
   int x_ind, y_ind, theta_ind;

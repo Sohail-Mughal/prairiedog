@@ -28,7 +28,7 @@
   <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
 
   <group ns="visualization_cu">
-    <param name="num_robots" type="int" value="3" />
+    <param name="num_robots" type="int" value="5" />
   </group>
   <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
 

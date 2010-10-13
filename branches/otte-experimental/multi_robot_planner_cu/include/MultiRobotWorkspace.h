@@ -19,7 +19,8 @@ class MultiRobotWorkspace
     void RandMove(const vector<float>& old_config, vector<float>& new_config, float safe_dist, float max_dist, float max_theta, float prob_at_goal, const vector<float>& the_goal); // calculates a new configuration point that is whithin max_dist of the old point, but with prob_at_goal moves directly at the goal (often the goal will be the start), safe_dist is the believed safe distance to move
     void RandMove2(const vector<float>& old_config, vector<float>& new_config, float safe_dist, float max_dist, float max_theta, float prob_at_goal, const vector<float>& the_goal); // calculates a new configuration point that is whithin max_dist of the old point, but with prob_at_goal moves directly at the goal (often the goal will be the start), safe_dist is the believed safe distance to move, same as above but rand happens on granularity of a robot
     void RandMove3(vector<float>& new_config, float prob_at_goal, const vector<float>& the_goal); // calculates a new configuration point that is drawn randomly from the configuration space, but with prob_at_goal a copy of the goal configuration the_goal is chosen
-
+    void RandMove4(vector<float>& new_config, float prob_at_goal, const vector<float>& the_goal, const vector<vector<float> >& f_space); // calculates a new configuration point that is drawn randomly from the configuration space, defined by f_space, but with prob_at_goal a copy of the goal configuration the_goal is chosen
+    
     void MoveToward(const vector<float>& old_config_from, const vector<float>& old_config_to, vector<float>& new_config, float move_dist); // new_config is move_dist from old_config_from to old_config_to 
     
     float PointValid(const vector<float>& P); // checks the point P in the Workspace for validity, returns min distance to collision
@@ -38,4 +39,6 @@ class MultiRobotWorkspace
     
     int dims; // NOTE: this is the dimensionality of the workspace, not the configuration space
     vector<float> dim_max; // workspace goes from 0 to this value along each dimension
+    
+    GlobalVariables* Gbls;
 };

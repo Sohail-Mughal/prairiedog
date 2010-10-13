@@ -96,6 +96,8 @@ typedef struct UPDATE UPDATE;
 #include "glut_functions.h"
 #include "helper_functions.h"
 
+#define pre_calculated_free_space
+        
 bool want_clean_start = true;  // if true, we wait for other ros procs to start and also until pose and goal are recieved before doing anything else
 
 float lookup_sum = 0;
@@ -203,6 +205,9 @@ bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combi
 bool robot_is_moving = false;
 float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
+#ifdef pre_calculated_free_space
+vector<vector<float> > free_space;  // holds freespace points to resolution of bitmap map
+#endif
 
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
@@ -409,7 +414,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 
 
 /*---------------------- ROS Publisher Functions ------------------------*/
-void publish_global_path(vector<vector<float> > path, vector<float> times_p)
+void publish_global_path(const vector<vector<float> >& path, const vector<float>& times_p)
 {   
    //printf("--- 3 \n");   
     
@@ -646,6 +651,68 @@ bool load_goal()
 }
 
 
+
+
+// requests the map from the mapping system, stores free locations in a global list 
+bool load_map(vector<vector<float> >& global_list)
+{
+  nav_msgs::GetMap::Request  req;
+  nav_msgs::GetMap::Response resp;
+  ROS_INFO("Requesting the map...\n");
+  if( !ros::service::call("/cu/get_map_cu", req, resp) )
+  {
+    ROS_INFO("request failed\n");
+    return NULL;
+  }
+  
+  ROS_INFO("Received a %d X %d map @ %.3f m/pix\n", resp.map.info.width, resp.map.info.height, resp.map.info.resolution);
+
+  printf("pre-calculating free space \n");
+  
+  if (resp.map.info.width == 0 && resp.map.info.height == 0)
+    return false;
+  
+
+  global_list.resize(0);
+
+  float map_resolution = resp.map.info.resolution;
+  int map_width = resp.map.info.width;
+  int map_height = resp.map.info.height;
+
+  for(int i = 0; i < map_height; i+=2)
+  {
+    for(int j = 0; j < map_width; j+=2)
+    {
+      if(resp.map.data[i*map_width+j] < 50)  // less than 50% chance of obstacles here
+      {
+          
+          
+          
+         vector<float> temp_vec(3,0);
+         
+         temp_vec[0] = ((float)j)*map_resolution;
+         temp_vec[1]  = ((float)i)*map_resolution;
+         // temp_vec[2] = 0;  // already set, note ignoring theta
+         
+         global_list.push_back(temp_vec);
+      }
+      
+      
+    }
+  }
+  return true;
+}
+
+
+
+
+
+
+
+
+
+
+
 /*---------------------------- ROS tf functions -------------------------*/
 void broadcast_map_tf()
 {
@@ -693,9 +760,17 @@ int main(int argc, char** argv)
   ros::NodeHandle nh;
   ros::Rate loop_rate(100);
     
+  #ifdef pre_calculated_free_space
   // wait until the map service is provided (we need its tf /world_cu -> /map_cu to be broadcast)
-  //if(want_clean_start)
-  //  ros::service::waitForService("/cu/get_map_cu", -1);
+  ros::service::waitForService("/cu/get_map_cu", -1);
+  
+  // wait for a map --- using this to get list of free space
+  while(!load_map(free_space) && ros::ok())
+  {
+    ros::spinOnce();
+    loop_rate.sleep(); 
+  }
+  #endif
   
   // set up ROS topic subscriber callbacks
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -852,6 +927,53 @@ int main(int argc, char** argv)
     // wait until we have a goal and a robot pose
     while((goal_pose == NULL || robot_pose == NULL) && ros::ok())
     {
+        
+        
+        
+        
+// 
+//     int num = free_space.size();
+//   if(num > 2000)
+//       num = 2000;
+// 
+//   multi_robot_planner_cu::PolygonArray msg;
+// 
+//   msg.header.frame_id = "/map_cu";
+//   msg.polygons.resize(1);
+// 
+//   int num_points = num;
+//   msg.polygons[0].points.resize(num_points);
+//     
+// 
+//   for(int j = 0; j < num_points; j++)
+//   {
+//     msg.polygons[0].points[j].x = free_space[j][0];
+//     msg.polygons[0].points[j].y = free_space[j][1];
+//     msg.polygons[0].points[j].z = 0;        
+//   }
+// 
+//   obstacles_pub.publish(msg); 
+// 
+//   
+//   
+  
+  
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
       printf("waiting for goal and/or pose \n");
       if(goal_pose == NULL)
       {
@@ -1085,6 +1207,8 @@ int main(int argc, char** argv)
     dist_threshold = map_resolution;
     
     Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
+    Cspc.W.Gbls = &Globals;
+    
     if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
     {
       Globals.master_reset = true;
@@ -1158,11 +1282,61 @@ int main(int argc, char** argv)
       now_time = clock();
     
       publish_planning_area(Scene);
-      publish_obstacles(Scene);
+      //publish_obstacles(Scene);
+      
+      
+      
+      
+//       
+//       
+//           int num = Cspc.ValidConfigs.size();
+//   if(num > 2000)
+//       num = 2000;
+// 
+//   multi_robot_planner_cu::PolygonArray msg;
+// 
+//   msg.header.frame_id = "/map_cu";
+//   msg.polygons.resize(1);
+// 
+//   int num_points = num;
+//   msg.polygons[0].points.resize(num_points);
+//     
+// 
+//   for(int j = 0; j < num_points; j++)
+//   {
+//     msg.polygons[0].points[j].x = Cspc.ValidConfigs[j][0] + Globals.team_bound_area_min[0];
+//     msg.polygons[0].points[j].y = Cspc.ValidConfigs[j][1] + Globals.team_bound_area_min[1];
+//     msg.polygons[0].points[j].z = 0;        
+//   }
+// 
+//   obstacles_pub.publish(msg); 
+// 
+//   
+//   
+//       
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
       ros::spinOnce();
     }
     float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
   
+    printf("found first path \n");
+    
     if(Globals.master_reset)
     {
       printf("restarting planning 1\n");
@@ -1304,7 +1478,49 @@ int main(int argc, char** argv)
       
       
       publish_planning_area(Scene);
-      publish_obstacles(Scene);
+     // publish_obstacles(Scene);
+      
+      
+      
+      
+      
+      
+      
+      
+            
+//       
+//       
+//           int num = Cspc.ValidConfigs.size();
+//   if(num > 2000)
+//       num = 2000;
+// 
+//   multi_robot_planner_cu::PolygonArray msg;
+// 
+//   msg.header.frame_id = "/map_cu";
+//   msg.polygons.resize(1);
+// 
+//   int num_points = num;
+//   msg.polygons[0].points.resize(num_points);
+//     
+// 
+//   for(int j = 0; j < num_points; j++)
+//   {
+//     msg.polygons[0].points[j].x = Cspc.ValidConfigs[j][0] + Globals.team_bound_area_min[0];
+//     msg.polygons[0].points[j].y = Cspc.ValidConfigs[j][1] + Globals.team_bound_area_min[1];
+//     msg.polygons[0].points[j].z = 0;        
+//   }
+// 
+//   obstacles_pub.publish(msg); 
+// 
+//   
+//       
+      
+      
+      
+      
+      
+      
+      
       ros::spinOnce();
     }
     now_time = clock();
