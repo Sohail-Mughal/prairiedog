@@ -596,8 +596,8 @@ void draw_point_list_2D_lines(const vector<vector<float> >& pl, float* color, fl
     
   if(pl.size() > 0)
   {
-    glBegin(GL_POINTS);
-    //glBegin(GL_LINE_STRIP);
+    //glBegin(GL_POINTS);
+    glBegin(GL_LINE_STRIP);
     glColor3f(color[0], color[1], color[2]); 
     
     int length = pl.size();
