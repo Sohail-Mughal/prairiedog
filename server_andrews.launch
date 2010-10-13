@@ -1,0 +1,35 @@
+<launch>
+  <group ns="prairiedog">
+    <param name="using_tf" type="bool" value="true" />
+  </group>
+
+    <group ns="intercom_cu">
+    <param name="my_id" type="int" value="5" />
+    <param name="num_agents" type="int" value="6" />
+    <param name="config_file" type="string" value="../config.xml" />
+  </group>
+  <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="false" output="screen"/>
+
+  <group ns="mapper_cu">
+    <param name="global_map_x_offset" type="double" value="0" />
+    <param name="global_map_y_offset" type="double" value="0" />
+    <param name="global_map_theta_offset" type="double" value="0" />
+    <param name="map_x_size" type="double" value="60" />
+    <param name="map_y_size" type="double" value="25" />
+    <param name="map_resolution" type="double" value="0.08" />
+    <param name="obstacle_prior" type="double" value="0.2" />
+    <param name="map_attention_span" type="int" value="100" />
+    <param name="scanner_range" type="double" value="5.5" />
+    <param name="bumper_obstacle_posterior" type="double" value="1.0" />
+    <param name="robot_radius" type="double" value="0.2" />
+    <param name="map_file" type="string" value="../andrews3a.bmp" />
+    <param name="vis_mode" type="bool" value="true" />
+  </group>
+  <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
+
+  <group ns="visualization_cu">
+    <param name="num_robots" type="int" value="5" />
+  </group>
+  <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+</launch>
