@@ -1,0 +1,85 @@
+<launch>
+  <group ns="prairiedog">
+    <param name="using_tf" type="bool" value="true" />
+  </group>
+
+  <group ns="irobot_create_rustic">
+    <param name="serial_port" type="string" value="/dev/create" />
+  </group>
+  <node name="driver_brown" pkg="irobot_create_rustic" type="driver" respawn="true" output="screen" />
+
+  <group ns="irobot_create_cu">
+    <param name="bumper_backup_distance" type="double" value="0.015" />
+    <param name="backup_speed" type="double" value="-0.2" />
+    <param name="bumper_theta_offset" type="double" value="0.523599" />
+    <param name="bumper_distance" type="double" value="0.35" />
+  </group>
+  <node name="irobot_create_cu" pkg="irobot_create_cu" type="irobot_create_cu" respawn="true" output="screen" />
+
+  <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../andrews_3.xml" respawn="true" output="screen" />
+
+  <group ns="localization_cu">
+    <param name="max_pose_jump_ratio" type="double" value="2.0" />
+    <param name="using_gps" type="bool" value="true" />
+    <param name="odometer_pose_x_init" type="double" value="0" />
+    <param name="odometer_pose_y_init" type="double" value="0" />
+    <param name="odometer_pose_theta_init" type="double" value="0" />
+    <param name="posterior_pose_x_init" type="double" value="0" />
+    <param name="posterior_pose_y_init" type="double" value="0" />
+    <param name="posterior_pose_theta_init" type="double" value="0" />
+  </group>
+  <node name="localization_cu" pkg="localization_cu" type="localization_cu" respawn="true" output="screen" />
+
+  <group ns="_goal_server_cu">
+    <param name="goal_pose_x_init" type="double" value="0" />
+    <param name="goal_pose_y_init" type="double" value="0" />
+    <param name="goal_pose_theta_init" type="double" value="0" />
+  </group>
+  <node name="goal_server_cu" pkg="goal_server_cu" type="goal_server_cu" output="screen" />
+
+  <group ns="mapper_cu">
+    <param name="global_map_x_offset" type="double" value="0" />
+    <param name="global_map_y_offset" type="double" value="0" />
+    <param name="global_map_theta_offset" type="double" value="0" />
+    <param name="map_x_size" type="double" value="60" />
+    <param name="map_y_size" type="double" value="25" />
+    <param name="map_resolution" type="double" value="0.08" />
+    <param name="obstacle_prior" type="double" value="0.2" />
+    <param name="map_attention_span" type="int" value="100" />
+    <param name="scanner_range" type="double" value="5.5" />
+    <param name="bumper_obstacle_posterior" type="double" value="1.0" />
+    <param name="robot_radius" type="double" value="0.2" />
+    <param name="map_file" type="string" value="../andrews3a.bmp" />
+  </group>
+  <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
+
+  <group ns="multi_robot_planner_cu">
+    <param name="agent_id" type="int" value="0" />
+    <param name="total_agents" type="int" value="5" />
+    <param name="min_clock_to_plan" type="double" value="10" />
+    <param name="prob_message_success" type="double" value="1" />
+    <param name="experiment_name" type="string" value="test" />
+    <param name="message_wait_time" type="double" value="0.25" />
+    <param name="sync_message_wait_time" type="double" value=".125" />
+    <param name="base_ip" type="string" value="192.168.22" />
+    <param name="robot_radius" type="double" value="0.2" />
+    <param name="safety_distance" type="double" value="0.1" />
+    <param name="rrt_prob_at_goal" type="double" value="0.05" />
+    <param name="rrt_resolution" type="double" value="0.01" />
+    <param name="rrt_angular_resolution" type="double" value="0.3927" />
+    <param name="planning_border_width" type="double" value="10" />
+    <param name="target_speed" type="double" value=".2" />
+    <param name="target_turn" type="double" value="0.3927" />
+  </group>
+  <node name="multi_robot_planner_cu" pkg="multi_robot_planner_cu" type="multi_robot_planner_cu" cwd="node" respawn="false" output="screen" />
+
+  <inode name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
+
+  <group ns="intercom_cu">
+    <param name="my_id" type="int" value="0" />
+    <param name="num_agents" type="int" value="6" />
+    <param name="config_file" type="string" value="../config.xml" />
+  </group>
+  <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="true" output="screen"/>
+
+</launch>
