@@ -97,6 +97,7 @@ typedef struct UPDATE UPDATE;
 #include "helper_functions.h"
 
 #define pre_calculated_free_space
+//#define drop_old_robots_from_teams
         
 bool want_clean_start = true;  // if true, we wait for other ros procs to start and also until pose and goal are recieved before doing anything else
 
@@ -200,7 +201,7 @@ GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotCom
 vector<vector<float> > ThisAgentsPath; // holds this agents path of the best solution
 vector<float> Parametric_Times; // holds time parametry of best solution
   
-bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
+bool JOIN_ON_OVERLAPPING_AREAS = true; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
 float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
@@ -1151,6 +1152,7 @@ int main(int argc, char** argv)
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
     
+    #ifdef drop_old_robots_from_teams
     // get rid of outdated team members
     for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
     {
@@ -1171,7 +1173,7 @@ int main(int argc, char** argv)
         Globals.global_ID.resize(Globals.team_size);
       }
     }
-    
+    #endif
     
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;

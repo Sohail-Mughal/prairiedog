@@ -1040,7 +1040,7 @@ void draw_planning_areas(const vector<POINT_LIST*>& p_areas) // draws the planni
       if(i == current_robot)
         draw_point_list_2D_lines(p_areas[i], ORANGE, .99);
       else
-        draw_point_list_2D_lines(p_areas[i], BLACK, .99);   
+        draw_point_list_2D_lines(p_areas[i], BLUE, .99);   
     }
   }
 }
