@@ -202,6 +202,9 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
+float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
+float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
+
 bool robot_is_moving = false;
 float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
@@ -1036,7 +1039,10 @@ int main(int argc, char** argv)
   Globals.InTeam[agent_number] = true;
   Globals.local_ID[agent_number] = 0;
   Globals.global_ID.push_back(agent_number);
-  Globals.team_size = 1;
+  Globals.team_size = 1;  
+  Globals.robot_pose = robot_pose;
+  Globals.combine_dist = team_combine_dist;
+  Globals.drop_dist = team_drop_dist;
   
   if(min_num_agents < 0)
     Globals.min_team_size = total_agents;
@@ -1141,7 +1147,7 @@ int main(int argc, char** argv)
     Globals.last_update_time.resize(Globals.number_of_agents);
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
-
+    
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
   
@@ -1225,6 +1231,7 @@ int main(int argc, char** argv)
     clock_t phase_two_start_t = clock();
     
     // find at least one solution (between all robots), also does one round of message passing per loop
+    found_path = false;
     while(!found_path && !Globals.master_reset)
     {  
       data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);

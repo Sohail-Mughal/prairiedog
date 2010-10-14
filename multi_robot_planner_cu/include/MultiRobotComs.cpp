@@ -285,7 +285,7 @@ void GlobalVariables::recover_ips_from_buffer(char* buffer) // gets everybody's 
 int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents ip, start, and goal positions into the buffer, returns the index of '\0' end of the message
 {
   char temp[2000];
-  sprintf(buffer, "A %d,%d\n", agent_number, planning_iteration[agent_number]);  // message type 'A' from this agent
+  sprintf(buffer, "A %d,%d,%f,%f\n", agent_number, planning_iteration[agent_number], robot_pose->x, robot_pose->y);  // message type 'A' from this agent, who is at this pose
   
 
   char temptemp[500];
@@ -374,11 +374,12 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     int senders_planning_iteration = -1;
     int an_id, ag_pln_it;
     float sx, sy, st, gx, gy, gt;
+    float sender_pose_x, sender_pose_y;
     int num = 0;
     bool team_includes_this_ag = false;
     
     // get sending agent id
-    if(sscanf(buffer,"A %d,%d\n", &sending_agent,&senders_planning_iteration) < 2)
+    if(sscanf(buffer,"A %d,%d,%f,%f\n", &sending_agent,&senders_planning_iteration, &sender_pose_x, &sender_pose_y) < 4)
       return false;
 
     //printf("parsing header from %d \n", sending_agent);
@@ -561,9 +562,9 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       
       //printf("local_an_id:%d \n", local_an_id);
       if(local_an_id != -1)
-      {
-        if(InTeam[an_id]) // new data
-        {         
+      {  
+        if(InTeam[an_id])// new data
+        {       
           bool need_to_add_info = false;  
             
           if(have_info[local_an_id] == 0)
@@ -621,10 +622,24 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
         }
       }
     }
+    
+    if(!InTeam[sending_agent])
+    {
+      // the sending agent is not in our team, if the robots are far away from each other, then we'll say that they do not overlap, even if they do--- chances of collision small, we'll deal with it when they get closer to each other, this reduces complexity considerably
+          
+      float d_x = robot_pose->x - sender_pose_x;
+      float d_y = robot_pose->y - sender_pose_y;
+            
+      if(sqrt((d_x*d_x) + (d_y*d_y)) > combine_dist )
+        overlap = false;    
+      
+      //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %f >? %f \n", sqrt((d_x*d_x) + (d_y*d_y)),  combine_dist );
+      
+    }
   }
   else
     printf("asked to parse unknown message type \n");
-  
+   
   return overlap;
 }
 
@@ -1079,23 +1094,6 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   
   senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
 
-//   while(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
-//   {
-//     printf("listining for start/goal from other agents \n"); 
-//     memset(&message_buffer,'\0',sizeof(message_buffer)); 
-//     message_length = recvfrom(in_socket, message_buffer, sizeof(message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved 
-//     
-//     if(message_length < 0) 
-//       printf("had problems getting a message \n");
-//     else  // the sending computers info is in senders_address
-//     {   
-//       printf("Received start-up data from an agent\n");
-//       G->recover_data_from_buffer(message_buffer);
-//     }        
-//   }  
-//  
-//   // now we have the min number of agent start/goal locations, prepare to start recieving planning messages
-  
   char planning_message_buffer[max_message_size];
           
   while(!G->kill_master)
@@ -1174,6 +1172,8 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             
             //printf("s:%d (c)\n", agent_sending);
               
+            // printf(" <<<<<<<<<<<<<<<<<<<<<<< == \n");
+              
             char this_file[100];
           
             if((MultiAgentSolution*)(G->MAgSln) == NULL)
@@ -1201,12 +1201,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           {
             printf("waiting while things reset \n"); 
           }
-          else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // first case handels non-members (-1), last case checks for when messages are recieved before MultAgSln is populated
+          //else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
+          else if(G->InTeam[agent_sending] && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
           { 
             // put the message into a file             
             // printf("((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]: %d\n", ((MultiAgentSolution*)G->MAgSln)->in_msg_ctr[agent_sending]);
    
-            //printf("filing message from %d \n", agent_sending);  
+            //printf("filing message from %d +++++++++++++++++++++++++++++++++++++\n", agent_sending);  
               
             char this_file[100];
             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
