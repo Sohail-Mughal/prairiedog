@@ -1453,9 +1453,12 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     float temp_x = T[carrot_index+1][0] - T[carrot_index][0];
     float temp_y = T[carrot_index+1][1] - T[carrot_index][1];
     float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
-            
+      
     TARGET_SPEED = (dist_diff/delta_time)*(1-sin(time_ahead_factor*PI/2));   // first factor is expected speed, second factor adjusts based on if we are ahead or behind schedual
-  
+
+    if(too_far_away)
+      TARGET_SPEED *= 0.8;
+            
     diverging = is_diverging(robot_pose, T[carrot_index], T[carrot_index+1]); 
   }
     
@@ -1507,6 +1510,13 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     TARGET_TURN = DEFAULT_TURN*2;
   if(TARGET_TURN < -DEFAULT_TURN*2)
     TARGET_TURN = -DEFAULT_TURN*2;
+  
+  
+//   if(TARGET_SPEED > DEFAULT_SPEED*2)
+//     TARGET_SPEED = DEFAULT_SPEED*2;
+//   if(TARGET_SPEED < -DEFAULT_SPEED*2)
+//     TARGET_SPEED = -DEFAULT_SPEED*2;
+  
   
   setSpeed(TARGET_SPEED);
   setTurn(TARGET_TURN);   
