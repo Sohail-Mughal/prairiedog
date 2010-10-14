@@ -620,6 +620,10 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {   
           for(int r = 0; r < solution_num_robots && successfull_path_get; r++)
           {
+              
+          //  printf("%d \n", temp_polygon_list[r].size()) ;
+           // printf("%d \n", temp_polygon_list[r][j].size());
+                    
             temp_polygon_list[r][j].resize(dims_per_robot);
             
             for(int d = 0; d < dims_per_robot && successfull_path_get; d++)   
@@ -648,84 +652,51 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           printf("problems building obstacle array from other team's solution \n");
           remove(this_file);
           break;
-        }  
-            
-          
-//          //////////////////////////  used to visualize what this robot is seeing as the other robot's path
-//          multi_robot_planner_cu::PolygonArray msg;
-// 
-//          int num_polygons = temp_polygon_list.size();
-//   
-//          msg.header.frame_id = "/map_cu";
-//          msg.polygons.resize(num_polygons);
-// 
-//          for(int l = 0; l < num_polygons; l++)
-//          {
-//            int num_points = temp_polygon_list[l].size();
-//            msg.polygons[l].points.resize(num_points);
-//     
-//            for(int p = 0; p < num_points; p++)
-//            {
-//              msg.polygons[l].points[p].x = temp_polygon_list[l][p][0] + temp_team_bound_area_min[0];
-//              msg.polygons[l].points[p].y = temp_polygon_list[l][p][1] + temp_team_bound_area_min[1];
-//              msg.polygons[l].points[p].z = 0;        
-//            }
-//          }
-//          obstacles_pub->publish(msg); 
-//          //////////////////////////   
-         
+        }           
         
-        
+        #ifdef drop_old_robots_from_teams
         if(Globals.done_planning &&  Globals.InTeam[i] && Globals.last_known_dist[i] > Globals.drop_dist)
         {
             // this agent's robot is currently moving, sending agent used to be this agent's team, but now has joined another group, but it is far enough away that we won't worry about it
             
             
         }
-        else if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
+        else  
+        #endif
+        if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
         {
           // they do intersect (and they are close enough), so we need to add all robot members of the team from the solution in the file to our team
           printf("found a different group who's solution intersects with ours \n");
           printf("++++++++++++++++ need to join teams !!! ++++++++++++++++++++++++++++++\n");
           
           
-// commented out to just add the one guy we intersected with, and then let him tell us the other members of his team later
-//           for(int j = 0; j < solution_num_robots; j++)
-//           {  
-//             int an_id = file_DimensionMapping[j];
-//             
-//             if(!Gbls->InTeam[an_id])
-//             {
-//               //not in team yet
-//               Gbls->InTeam[an_id] = true;
-//         
-//               Gbls->local_ID[an_id] = Gbls->team_size;
-//               Gbls->global_ID.push_back(an_id);
-//               Gbls->team_size++;
-//             }
-//           }
-          
-          
-          
-          
-          
-         
-
-            if(!Gbls->InTeam[i])
+//commented out to just add the one guy we intersected with, and then let him tell us the other members of his team later
+          for(int j = 0; j < solution_num_robots; j++)
+          {  
+            int an_id = file_DimensionMapping[j];
+            
+            if(!Gbls->InTeam[an_id])
             {
               //not in team yet
-              Gbls->InTeam[i] = true;
+              Gbls->InTeam[an_id] = true;
         
-              Gbls->local_ID[i] = Gbls->team_size;
-              Gbls->global_ID.push_back(i);
+              Gbls->local_ID[an_id] = Gbls->team_size;
+              Gbls->global_ID.push_back(an_id);
               Gbls->team_size++;
             }
+          }
           
           
-          
-          
-          
-          
+
+//           if(!Gbls->InTeam[i])
+//           {
+//             //not in team yet
+//             Gbls->InTeam[i] = true;
+//         
+//             Gbls->local_ID[i] = Gbls->team_size;
+//             Gbls->global_ID.push_back(i);
+//             Gbls->team_size++;
+//           }
           
           
           

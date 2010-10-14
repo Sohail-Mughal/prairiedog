@@ -610,12 +610,14 @@ printf(" ---- a \n");
             if(!equal_float_vector(temp_vec, goal_coords[local_an_id], change_plase_thresh)) // goal is different
               need_to_add_info = true; 
             
+            #ifdef drop_old_robots_from_teams
             if(difftime_clock(clock(), last_known_time[an_id]) > drop_time || last_known_dist[an_id] > drop_dist)
             {
               // either the drop distance or time has been reached, so drop this agent from our team
               need_to_add_info = false; 
             }
-            
+            #endif
+                    
             if(need_to_add_info) // start or goal of one of the agents has changed (and the robots are still close enough to matter), so it is a new planning problem, update our planning iteration
             {
               planning_iteration[agent_number]++;
@@ -660,6 +662,7 @@ printf(" ---- a \n");
      // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %f >? %f \n", dist_to_sender,  combine_dist );
       
     }
+    #ifdef drop_old_robots_from_teams
     else // sending agent is in our team
     {   
       if(done_planning) // (i.e. not in the middle of calculating a solution)
@@ -670,6 +673,7 @@ printf(" ---- a \n");
         }
       }
     }
+    #endif
   }
   else
     printf("asked to parse unknown message type \n");
