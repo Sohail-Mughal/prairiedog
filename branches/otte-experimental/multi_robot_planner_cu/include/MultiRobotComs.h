@@ -83,7 +83,11 @@ class GlobalVariables
    vector<float> team_bound_area_min;  // holds the minimum point in the hyper cube team bounding area  (note, this gets populated when NavSceen is populated)
    vector<float> team_bound_area_size; // holds the distance along each dimension of the hyper cube team bounding area (note, this gets populated when NavSceen is populated) 
    
+   POSE* robot_pose;  // most recent pose of the robot
    
+   float combine_dist;   // if paths intetsect, then we must be this close to the robot of the other path to join their team
+   float drop_dist;      // after we know a robot is this far away from us, we can drop them from our team (note: combine_dist < drop_dist)
+  
    clock_t start_time; // this gets set at the beginning and then never changed
    void* MAgSln;   // pointer to the multi agent solution
 };
