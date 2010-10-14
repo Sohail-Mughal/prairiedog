@@ -73,6 +73,9 @@ void GlobalVariables::Populate(int num_of_agents)
   planning_time_remaining.resize(number_of_agents, LARGE);
   last_update_time.resize(number_of_agents);
   
+  last_known_dist.resize(number_of_agents, LARGE);
+  last_known_time.resize(number_of_agents, clock());
+  
   sync_message_wait_time = 1;
   message_wait_time = 1;
   
@@ -86,6 +89,7 @@ void GlobalVariables::Populate(int num_of_agents)
   
   master_reset = false;
   kill_master = false;
+  done_planning = false;
   
   start_time = clock();
   MAgSln = NULL;
@@ -366,6 +370,11 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
 
 bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution
 {
+    
+ if(master_reset)
+   return false;
+    
+    
   bool overlap = false;
   if(buffer[0] == 'A') // message type 'A'  
   { 
@@ -382,6 +391,12 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     if(sscanf(buffer,"A %d,%d,%f,%f\n", &sending_agent,&senders_planning_iteration, &sender_pose_x, &sender_pose_y) < 4)
       return false;
 
+    float d_x = robot_pose->x - sender_pose_x;
+    float d_y = robot_pose->y - sender_pose_y;     
+    float dist_to_sender = sqrt((d_x*d_x) + (d_y*d_y));   
+    last_known_dist[sending_agent] = dist_to_sender;
+    last_known_time[sending_agent] = clock();
+    
     //printf("parsing header from %d \n", sending_agent);
     
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
@@ -511,8 +526,12 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     bool need_to_join_solutions = false;
     if(overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
       need_to_join_solutions = true;
-    if(!InTeam[sending_agent] && team_includes_this_ag)   // need to join because the sending agent thinks we are in its team, but we currently don't think so
-      need_to_join_solutions = true;
+    if(!InTeam[sending_agent] && team_includes_this_ag && senders_planning_iteration > planning_iteration[sending_agent])   // need to join because the sending agent thinks we are in its team, but we currently don't think so, and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
+    {
+       printf("here here here %d >? %d, %d\n", senders_planning_iteration, planning_iteration[sending_agent], sending_agent);
+        need_to_join_solutions = true;
+    
+    }
     
     if(need_to_join_solutions)    
     {
@@ -534,7 +553,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
       planning_iteration[agent_number]++; // the problem has changed, so update our planning iteration number
       
       master_reset = true;   
-
+printf(" ---- a \n");
       return overlap;
     }
         
@@ -591,10 +610,19 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
             if(!equal_float_vector(temp_vec, goal_coords[local_an_id], change_plase_thresh)) // goal is different
               need_to_add_info = true; 
             
-            if(need_to_add_info) // start or goal of one of the agents has changed, so it is a new planning problem, update our planning iteration
+            if(difftime_clock(clock(), last_known_time[an_id]) > drop_time || last_known_dist[an_id] > drop_dist)
+            {
+              // either the drop distance or time has been reached, so drop this agent from our team
+              need_to_add_info = false; 
+            }
+            
+            if(need_to_add_info) // start or goal of one of the agents has changed (and the robots are still close enough to matter), so it is a new planning problem, update our planning iteration
             {
               planning_iteration[agent_number]++;
               master_reset = true;
+              
+                  printf("--- b \n");
+              
             }
           } 
           
@@ -625,16 +653,22 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     
     if(!InTeam[sending_agent])
     {
-      // the sending agent is not in our team, if the robots are far away from each other, then we'll say that they do not overlap, even if they do--- chances of collision small, we'll deal with it when they get closer to each other, this reduces complexity considerably
-          
-      float d_x = robot_pose->x - sender_pose_x;
-      float d_y = robot_pose->y - sender_pose_y;
-            
-      if(sqrt((d_x*d_x) + (d_y*d_y)) > combine_dist )
+      // the sending agent is not in our team, if the robots are far away from each other, then we'll say that they do not overlap, even if they do--- chances of collision small, we'll deal with it when they get closer to each other, this reduces complexity considerably      
+      if(dist_to_sender > combine_dist )
         overlap = false;    
       
-      //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %f >? %f \n", sqrt((d_x*d_x) + (d_y*d_y)),  combine_dist );
+     // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %f >? %f \n", dist_to_sender,  combine_dist );
       
+    }
+    else // sending agent is in our team
+    {   
+      if(done_planning) // (i.e. not in the middle of calculating a solution)
+      {  
+        if(dist_to_sender > drop_dist )  // the two agents are far enough away that they are no longer in the same team
+        { 
+          overlap = false;    
+        }
+      }
     }
   }
   else

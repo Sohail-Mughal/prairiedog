@@ -43,12 +43,12 @@ class MultiAgentSolution
     
     bool moving;                          // this starts as false, but switches to true when this robot starts moving. if a message with this as true is recieved, then it means that some robot has started moveng, and the attached path is the one to be used 
 
-    vector<int> in_msg_ctr;               // used to help keep track of message queue
-    vector<int> out_msg_ctr;              // used to help keep track of message queue
+    vector<int> in_msg_ctr;               // used to help keep track of message queue   (global id)
+    vector<int> out_msg_ctr;              // used to help keep track of message queue   (global id)
       
-    vector<int> message_send_attempts;    // stats on how well we send to other robots
-    vector<float> messages_sent_to_us;    // stats on how well we recieve messages from other robots
-    vector<float> messages_recieved_by_us;// stats on how well we recieve messages from other robots
+    vector<int> message_send_attempts;    // stats on how well we send to other robots  (global id)
+    vector<float> messages_sent_to_us;    // stats on how well we recieve messages from other robots  (global id)
+    vector<float> messages_recieved_by_us;// stats on how well we recieve messages from other robots  (global id)
     
     // the following are only of relivance when uni_tree_build == 1
     int total_nodes_added;

@@ -635,6 +635,10 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
               temp_polygon_list[r][j][d] = this_value + file_DimensionOffset[d] - temp_team_bound_area_min[d]; // adjusted for both agents' transforms vs. the world
             }
           }
+          
+          // instead of worrying about all paths in solution, only worry about that of the sending robot  (guarenteed to be in position 0)
+          temp_polygon_list.resize(1); 
+          
           fscanf(ifp, "\n");
           //printf("\n");
         }
@@ -671,28 +675,63 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
 //          //////////////////////////   
          
         
-        if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
+        
+        if(Globals.done_planning &&  Globals.InTeam[i] && Globals.last_known_dist[i] > Globals.drop_dist)
         {
-          // they do intersect, so we need to add all robot members of the team from the solution in the file to our team
+            // this agent's robot is currently moving, sending agent used to be this agent's team, but now has joined another group, but it is far enough away that we won't worry about it
+            
+            
+        }
+        else if(!SolutionSafe(BestSolution, temp_polygon_list, Gbls->robot_radius, dims_per_robot))
+        {
+          // they do intersect (and they are close enough), so we need to add all robot members of the team from the solution in the file to our team
           printf("found a different group who's solution intersects with ours \n");
           printf("++++++++++++++++ need to join teams !!! ++++++++++++++++++++++++++++++\n");
-          for(int j = 0; j < solution_num_robots; j++)
-          {  
-            int an_id = file_DimensionMapping[j];
-            
-            if(!Gbls->InTeam[an_id])
+          
+          
+// commented out to just add the one guy we intersected with, and then let him tell us the other members of his team later
+//           for(int j = 0; j < solution_num_robots; j++)
+//           {  
+//             int an_id = file_DimensionMapping[j];
+//             
+//             if(!Gbls->InTeam[an_id])
+//             {
+//               //not in team yet
+//               Gbls->InTeam[an_id] = true;
+//         
+//               Gbls->local_ID[an_id] = Gbls->team_size;
+//               Gbls->global_ID.push_back(an_id);
+//               Gbls->team_size++;
+//             }
+//           }
+          
+          
+          
+          
+          
+         
+
+            if(!Gbls->InTeam[i])
             {
               //not in team yet
-              Gbls->InTeam[an_id] = true;
+              Gbls->InTeam[i] = true;
         
-              Gbls->local_ID[an_id] = Gbls->team_size;
-              Gbls->global_ID.push_back(an_id);
+              Gbls->local_ID[i] = Gbls->team_size;
+              Gbls->global_ID.push_back(i);
               Gbls->team_size++;
             }
-          }
+          
+          
+          
+          
+          
+          
+          
+          
           
           Gbls->planning_iteration[Gbls->agent_number]++; // the problem has changed, so we update our planning iteration
           
+          printf(" --- h \n");
           Gbls->master_reset = true;
           
           fclose(ifp);
