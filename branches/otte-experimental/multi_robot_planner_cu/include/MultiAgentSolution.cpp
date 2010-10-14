@@ -577,14 +577,19 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           }
           
           int local_robot_id = Gbls->local_ID[global_robot_id];          // that robot's local id on this agent
+          
           temp_mapping[k] = (local_robot_id*dims_per_robot) + (k - (message_robot_id*dims_per_robot)); // the dimension in the solution this goes into
         
           if(temp_mapping[k] > file_dimensions || temp_mapping[k] < 0)
+          {
             successfull_path_get = false;
+            
+            printf(" here ::::::::: %d %d \n", temp_mapping[k], file_dimensions);
+          }
         }
         if(!successfull_path_get)
         {
-          printf("---ignoring message for a different problem (maps to higher dimension than we have)\n"); 
+          printf("---ignoring message for a different problem (maps to higher dimension than we have %d)\n"); 
           fclose(ifp);
           break; 
         }
@@ -595,7 +600,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         same_group = false;
       }
           
-      if(!same_group)
+      if(!same_group && !JOIN_ON_OVERLAPPING_AREAS)
       {
         // the problem we recieved is for a different problem, but if we recieved this message (i.e. it was saved in the file)
         // then the bounding boxes for the problem intersect with our's, therefore we need to check if the two solutions conflict
@@ -717,6 +722,15 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         //printf("continue 1 \n");
         continue;
       }
+      else if(!same_group)
+      { 
+         // don't need any more info about this solution
+        fclose(ifp);
+        remove(this_file);
+        //printf("continue 1 \n");
+        continue;      
+      }
+      
       //if we are here then message is in the same group as this agent
 
       //extract the path;
@@ -1299,9 +1313,7 @@ void MultiAgentSolution::SendMessage(float send_prob) // sends a message contain
 
 void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above function just uses a file, this uses UDP
 {    
-  if(BestSolution.size() < 1)
-    return;
-    
+
   //printf("%d %d, %d %d\n", pctr, ectr, pctr_all, ectr_all);  
   pctr = 0;
   ectr = 0;
@@ -1359,6 +1371,14 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     
     // add header data about robot start and goal locations
     int sp = Gbls->populate_buffer_with_data(out_buffer); // sp points to the current position in the string
+    
+    
+    if(BestSolution.size() < 1)
+    {
+      //printf(" sending here ! \n");
+      Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
+      return;
+    }
     
     sprintf(temp_buffer,"2%d",agent_id);
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);

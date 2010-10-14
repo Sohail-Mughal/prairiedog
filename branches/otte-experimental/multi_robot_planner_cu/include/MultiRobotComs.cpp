@@ -291,7 +291,8 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   char temp[2000];
   sprintf(buffer, "A %d,%d,%f,%f\n", agent_number, planning_iteration[agent_number], robot_pose->x, robot_pose->y);  // message type 'A' from this agent, who is at this pose
   
-
+  //printf("populating buffer \n");
+  
   char temptemp[500];
   
   // add the team members
@@ -398,6 +399,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     last_known_time[sending_agent] = clock();
     
     //printf("parsing header from %d \n", sending_agent);
+
     
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
     {
@@ -523,8 +525,13 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents i
     if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
             
+    
+    if(dist_to_sender > combine_dist ) ///////////////////
+     overlap = false;   
+    
+    
     bool need_to_join_solutions = false;
-    if(overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
+    if(!InTeam[sending_agent] && overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
       need_to_join_solutions = true;
     if(!InTeam[sending_agent] && team_includes_this_ag && senders_planning_iteration > planning_iteration[sending_agent])   // need to join because the sending agent thinks we are in its team, but we currently don't think so, and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
     {

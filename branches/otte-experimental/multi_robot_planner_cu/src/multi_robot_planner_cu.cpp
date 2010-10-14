@@ -1119,7 +1119,8 @@ int main(int argc, char** argv)
     now_time = clock();
     last_chop_t = clock();
     Globals.MAgSln = NULL;
-        
+    Globals.start_time = start_time;
+    
     Globals.start_coords.resize(0);
     Globals.start_coords.resize(Globals.number_of_agents);
     Globals.start_coords[0].resize(3, 0); 
@@ -1148,7 +1149,7 @@ int main(int argc, char** argv)
     Globals.agent_ready[0] = 1;
           
     Globals.last_update_time.resize(0);
-    Globals.last_update_time.resize(Globals.number_of_agents);
+    Globals.last_update_time.resize(Globals.number_of_agents, clock());
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
     
@@ -1269,24 +1270,39 @@ int main(int argc, char** argv)
       last_time = clock();
       if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0)) // a planning agent
       {
+        now_time = clock();
+        
+        printf("pulse num_ag=%d  :  ", Globals.number_of_agents);
+        
+        for(int a = 0; a < Globals.number_of_agents ; a++)
+        {
+          if(!Globals.InTeam[a])
+            printf("--- ");
+          else
+          {
+            printf("%d(%d,%d) ", a, Globals.have_info[Globals.local_ID[a]], Globals.agent_ready[Globals.local_ID[a]]);
+          } 
+        }
+        printf(" \n");
+        
         #ifdef treev2
-        if(Cspc.BuildTreeV2(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+        if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
         #elif defined(treev3)
-        if(Cspc.BuildTreeV3(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+        if(Cspc.BuildTreeV3(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
         #elif defined(treev4)
         if(Cspc.BuildTreeV4(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
         #elif defined(treev2rho)
-        if(Cspc.BuildTreeV2rho(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+        if(Cspc.BuildTreeV2rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
         #elif defined(treev3rho)
-        if(Cspc.BuildTreeV3rho(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+        if(Cspc.BuildTreeV3rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
         #elif defined(rrt)
-        if(Cspc.BuildRRT(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+        if(Cspc.BuildRRT(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
         #elif defined(rrtrho)
-        if(Cspc.BuildRRTRho(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+        if(Cspc.BuildRRTRho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
         #elif defined(rrtfast)
-        if(Cspc.BuildRRTFast(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+        if(Cspc.BuildRRTFast(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
         #else
-        if(Cspc.BuildTree(last_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+        if(Cspc.BuildTree(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
         #endif  
         {
           found_path = true;
