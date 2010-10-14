@@ -37,7 +37,9 @@ class GlobalVariables
    vector<int> local_ID;      // local_ID[n] gives the index associated with robot n on this agent (i.e. 1 level of id abstraction)
    vector<int> global_ID;     // inverse mapping of local_ID
    
-   vector<int> planning_iteration; // keeps track of how many times each agent has restarted planning, indexed using global ID (i.e. agent number)
+   vector<int> planning_iteration;   // keeps track of how many times each agent has restarted planning, indexed using global ID (i.e. agent number)
+   vector<float> last_known_dist;    // last known distance between this agent's robot and the other robots (global index)
+   vector<clock_t> last_known_time;  // the time that last_known_dist was captured (global index)
    
    vector<int> have_info;     // have_info[i] gets set to 1 when we get agent i's info (start and goal), indexed using local_ID
    vector<int> agent_ready;   // agent_ready[i] is set to 1 when agent i has enough info to start planning, indexed using local_ID
@@ -67,7 +69,8 @@ class GlobalVariables
    
    bool kill_master;          // if true then we shut down all threads
    bool master_reset;         // if true then we restart the planning
-           
+   bool done_planning;             // true when done_planning (i.e. moving)
+   
    float sync_message_wait_time;  // time to wait between sending messages during sync phases
    float message_wait_time;       // time to wait between sending messages during planning
    
@@ -87,7 +90,8 @@ class GlobalVariables
    
    float combine_dist;   // if paths intetsect, then we must be this close to the robot of the other path to join their team
    float drop_dist;      // after we know a robot is this far away from us, we can drop them from our team (note: combine_dist < drop_dist)
-  
+   float drop_time;      // after this long without hearing from a robot we drop it from the team
+           
    clock_t start_time; // this gets set at the beginning and then never changed
    void* MAgSln;   // pointer to the multi agent solution
 };

@@ -204,7 +204,8 @@ bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combi
 
 float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
-
+float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
+        
 bool robot_is_moving = false;
 float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
@@ -385,8 +386,6 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
       return;
   
   printf("new goal -------------------------------------------------------------------\n");
-    
-  
   
   while(change_token_used)
     {printf(" change token used, goal \n");}
@@ -412,6 +411,8 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   //print_pose(goal_pose);
   new_goal = true;
 
+  Globals.master_reset = true;
+      printf("--- c \n");
   change_token_used = false;
 }
 
@@ -1043,7 +1044,8 @@ int main(int argc, char** argv)
   Globals.robot_pose = robot_pose;
   Globals.combine_dist = team_combine_dist;
   Globals.drop_dist = team_drop_dist;
-  
+  Globals.drop_time = team_drop_time;
+          
   if(min_num_agents < 0)
     Globals.min_team_size = total_agents;
   else
@@ -1096,6 +1098,7 @@ int main(int argc, char** argv)
  
   while(!Globals.kill_master)
   {   
+    Globals.done_planning = false;
     if(Globals.master_reset && robot_is_moving == true)
     {
       system(system_call);  // remove old files
@@ -1147,6 +1150,28 @@ int main(int argc, char** argv)
     Globals.last_update_time.resize(Globals.number_of_agents);
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
+    
+    // get rid of outdated team members
+    for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
+    {
+      int j_global = Globals.global_ID[j];
+      
+      if(difftime_clock(now_time, Globals.last_known_time[j_global]) > Globals.drop_time || Globals.last_known_dist[j_global] > Globals.drop_dist)
+      {
+        // either the drop distance or time has been reached, so drop this agent from our team
+          
+        Globals.InTeam[j_global] = false;
+        Globals.local_ID[j_global] = -1; 
+          
+        // swap local index with the last one
+        Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1]    ;         
+        Globals.local_ID[Globals.global_ID[j]] = j;
+   
+        Globals.team_size--;
+        Globals.global_ID.resize(Globals.team_size);
+      }
+    }
+    
     
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
@@ -1218,6 +1243,7 @@ int main(int argc, char** argv)
     if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
     {
       Globals.master_reset = true;
+          printf("--- d \n");
       continue;
     }
     
@@ -1290,54 +1316,7 @@ int main(int argc, char** argv)
     
       publish_planning_area(Scene);
       //publish_obstacles(Scene);
-      
-      
-      
-      
-//       
-//       
-//           int num = Cspc.ValidConfigs.size();
-//   if(num > 2000)
-//       num = 2000;
-// 
-//   multi_robot_planner_cu::PolygonArray msg;
-// 
-//   msg.header.frame_id = "/map_cu";
-//   msg.polygons.resize(1);
-// 
-//   int num_points = num;
-//   msg.polygons[0].points.resize(num_points);
-//     
-// 
-//   for(int j = 0; j < num_points; j++)
-//   {
-//     msg.polygons[0].points[j].x = Cspc.ValidConfigs[j][0] + Globals.team_bound_area_min[0];
-//     msg.polygons[0].points[j].y = Cspc.ValidConfigs[j][1] + Globals.team_bound_area_min[1];
-//     msg.polygons[0].points[j].z = 0;        
-//   }
-// 
-//   obstacles_pub.publish(msg); 
-// 
-//   
-//   
-//       
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
+         
       ros::spinOnce();
     }
     float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
@@ -1556,7 +1535,7 @@ int main(int argc, char** argv)
 //     Globals.kill_master = true; // shutdown listener thread
 //     sleep(1);
 //     return 0;
-    
+    Globals.done_planning = true;
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part
     {       
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
