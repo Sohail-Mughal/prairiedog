@@ -1254,6 +1254,12 @@ int main(int argc, char** argv)
     MultAgSln.obstacles_pub = &obstacles_pub;
     Globals.MAgSln = &MultAgSln;
 
+    if(Globals.team_size == 1) /////////////////////
+      min_clock_to_plan = 20;
+    else
+      min_clock_to_plan = 40;
+
+    
     
     int iterations_left = -1; // negative means that time is used instead
   
