@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<agents>
+<agents> 
   <agent id="0" ip="192.168.22.1">
     <broadcast>
       <message type="0" mode="2">
