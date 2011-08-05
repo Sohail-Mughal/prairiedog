@@ -2330,7 +2330,7 @@ void mouse(int button, int mouse_state, int x, int y)
     if(closest_bot != -1)
       closest_dist = dist_to_pose(robots[closest_bot]->pose, mouse_x_global, mouse_y_global);
   
-    int closest_goal = closest_pose_to_point_within(goal_poses, mouse_x_global, mouse_y_global, closest_dist); 
+    int closest_goal = -1; //closest_pose_to_point_within(goal_poses, mouse_x_global, mouse_y_global, closest_dist); 
 
     if(closest_goal != -1)
       closest_bot = closest_goal;
