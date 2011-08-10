@@ -9,6 +9,7 @@
   <review status="unreviewed" notes=""/>
   <url>http://correll.cs.colorado.edu/pmwiki/index.php/Main/RobotBase</url>
   <depend package="irobot_create_rustic"/>
+  <depend package="intercom_cu"/>
   <depend package="geometry_msgs"/>
   <depend package="nav_msgs"/>
   <depend package="tf"/>
