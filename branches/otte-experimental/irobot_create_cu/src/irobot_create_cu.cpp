@@ -56,6 +56,9 @@
 #include "nav_msgs/Path.h"
 
 #include "std_msgs/Int32.h"
+#include "std_msgs/Float32.h"
+
+#include "intercom_cu/Float32_CU_ID.h"
 
 #ifndef PI
   #define PI 3.1415926535897
@@ -97,6 +100,7 @@ ros::Publisher bumper_pose_pub;
 ros::Publisher system_state_pub;
 ros::Publisher target_pose_pub;
 ros::Publisher turn_circle_pub;
+ros::Publisher time_ahead_pub;
 
 // subscriber handles
 ros::Subscriber user_control_sub;
@@ -105,6 +109,7 @@ ros::Subscriber goal_sub; // global goal
 ros::Subscriber global_path_sub;
 ros::Subscriber system_update_sub;
 ros::Subscriber user_state_sub;
+ros::Subscriber time_ahead_sub;
 
 // globals for defining robot velocity
 float speed = 0;
@@ -168,9 +173,12 @@ void print_state()
 }
 */
 
+float time_adjust = 0;          // if other robots fall behind schedual, use this to help this agent slow down to accomodate them
+
 /* ------------------- a few function headers ---------------------------*/
 float setSpeed(float newspeed);
 float setTurn(float x);
+
 // given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
 void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, float time_granularity);
 void print_2d_float_vector(vector<vector<float> >& V);
@@ -405,7 +413,9 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
   {     
     if(!recieved_first_path || safe_path_exists == 0)
     {
-      move_start_time = ros::Time::now();
+      if(!recieved_first_path)
+        move_start_time = ros::Time::now();
+      
       recieved_first_path = true;
 
       // save into first_path
@@ -480,6 +490,19 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
     backing_up = false;
     setSpeed(0);
     setTurn(0);   
+  }
+}
+
+void time_ahead_callback(const intercom_cu::Float32_CU_ID::ConstPtr& msg)
+{      
+  int sender_id = msg->id.data;
+  float time_adjust_other_robot = msg->data.data;
+
+  printf("data from agent %d: %f \n", sender_id, time_adjust_other_robot);
+
+  if(time_adjust_other_robot > time_adjust + 2) // the other robot is behind schedual by more than 2 seconds (more than this robot)
+  {  
+    time_adjust = time_adjust_other_robot;
   }
 }
 
@@ -606,6 +629,15 @@ void publish_turn_circle(float x, float y, float theta)
   
   turn_circle_pub.publish(msg);       
 }
+
+void publish_time_ahead(float t_adjust)
+{  
+  std_msgs::Float32 msg;
+  msg.data = t_adjust;
+  
+  time_ahead_pub.publish(msg);       
+}
+
 /* ---------------------- navigation functions --------------------------*/
 
 // given [x, y, alpha, time] path p, this extracts [x, y, alpha, time] trajectory t at higher granularity defined by time_granularity
@@ -1226,8 +1258,10 @@ int follow_path(vector<POSE>& path, float tolerance_distance, int new_path_flag)
 // it will speed up to try to get where it should currently be. new_path_flag = 1 means that a new path has been sent
 // time_look_ahead is the ammount of time into the future we consider to be now.
 
-int current_place_index = 0;   // index of closest point to robot currently
-int current_time_index = 0;    // index of point where robot should be currently
+int it_count = 0;
+int current_place_index = 0;    // index of closest point to robot currently
+int current_time_index = 0;     // index of point where robot should be currently
+bool was_near_the_goal = false; // once we are near the goal this goes true
 int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_path_flag)
 {
   if(robot_pose == NULL)
@@ -1312,14 +1346,38 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     
   // find "now" in terms of the time path coordinate
   ros::Duration elapsed_time = ros::Time::now() - move_start_time;
-  float time_now = elapsed_time.toSec() + time_look_ahead;
+  float time_now_not_adjusted = elapsed_time.toSec() + time_look_ahead;
+  float time_now = time_now_not_adjusted - time_adjust;
+
   current_time_index = 0;
   for(int i = 0; i < length; i++)
   {
-    current_time_index = i;
     if(time_now < T[i][3])
+    {  
+      current_time_index = i;
       break;
-  }    
+    }
+  }  
+
+  #ifndef old_controller 
+
+  float time_ahead = T[current_place_index][3] - time_now;
+  float dx_t = T[current_place_index][0] - T[current_time_index][0];
+  float dy_t = T[current_place_index][1] - T[current_time_index][1];
+  float dist_away = sqrt(dx_t*dx_t + dy_t*dy_t);
+
+  if(!was_near_the_goal && dist_away > 0.2)
+  {
+    if(time_ahead < -2.0) // this robot is more than 2 seconds behind and also more than 20 cm behind (including vs. all other robots)
+    {
+      time_adjust -= time_ahead; // makes time_adjust get bigger
+      time_now = time_now_not_adjusted - time_adjust;
+      time_ahead = T[current_place_index][3] - time_now;
+    }
+    publish_time_ahead(time_adjust);
+  }
+
+  #endif  
   
   // set the target location so we can broadcast it for visualization
   t_target_ind = current_time_index;
@@ -1327,9 +1385,12 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   
   int carrot_index; // point we actually steer at
   
+
+
   #ifndef old_controller 
           
-  float time_ahead = T[current_place_index][3] - T[current_time_index][3];
+  
+
   //printf("%f secs ahead of schedule \n", time_ahead);
    
   // calculate flags to use later for figuring out what to do based on different situations
@@ -1355,6 +1416,13 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   
   // calculate a factor for how far we are ahead or behind schedual
   float time_ahead_rad = 2; // sec, for control if we are further away then this in time, then we want behaviour to be the same as if we were this far away in time
+
+
+  it_count++;
+
+  if((it_count/100)*100 == it_count)
+    printf("time adjust: %f \n", time_adjust);
+
   if(time_ahead > time_ahead_rad)
     time_ahead = time_ahead_rad; 
   if(time_ahead < -time_ahead_rad)
@@ -1402,8 +1470,12 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   else if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // steering at a point
     on_a_point = true; 
     
-  if(near_the_goal)
+  if(near_the_goal || was_near_the_goal)
   {
+    was_near_the_goal = true;
+
+    //printf("near the goal \n");
+
     // use point navigation to get us the last little bit of the way there    
     
     // find distance to goal from robot
@@ -1418,16 +1490,24 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
         
     //printf("moving toward goal, %f \n", dist_factor);  
     
-    TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2));
+    // TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2));
+
+    TARGET_SPEED = 0;
     TARGET_TURN = DEFAULT_TURN;
         
-    return move_toward_pose_fast(T[length-1], .05, PI/24, PI/24);
+    //return move_toward_pose_fast(T[length-1], .05, PI/12, PI/12);
+
+    setSpeed(TARGET_SPEED);
+    return turn_toward_heading(T[length-1], PI/12);
   }
-  else if(on_a_point) // going toward a point
+  else if(on_a_point) // going toward a point !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+                                              //rotation may cause flipping between cases due to inacurate startgazer angle
   {
     if(!too_far_away) // basically at point
     {
       TARGET_SPEED = 0;
+
+      //printf("here --1-- \n");
     }
     else // not at point yet
     {
@@ -1441,8 +1521,9 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       if(dist_factor > 1)
         dist_factor = 1;
         
-      printf("moving toward point, %f \n", dist_factor);  
-    
+      //printf("moving toward point, %f \n", dist_factor);  
+      //printf("here --2-- \n");
+
       TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2)); 
     }
   }
@@ -1797,7 +1878,9 @@ int main(int argc, char * argv[])
   {
     target_pose_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/target_pose_cu", 1);
     turn_circle_pub = nh.advertise<geometry_msgs::Pose2D>("/cu/turn_circle_cu", 1);
+    time_ahead_pub = nh.advertise<std_msgs::Float32>("/cu/time_ahead_cu", 1);
   }
+
   // set up subscribers
   user_control_sub = nh.subscribe("/cu/user_control_cu", 1, user_control_callback);
   pose_sub = nh.subscribe("/cu/pose_cu", 1, pose_callback);
@@ -1805,7 +1888,10 @@ int main(int argc, char * argv[])
   global_path_sub = nh.subscribe("/cu/global_path_cu", 1, global_path_callback);
   system_update_sub = nh.subscribe("/cu/system_update_cu", 10, system_update_callback);
   user_state_sub = nh.subscribe("/cu/user_state_cu", 1, user_state_callback);
-    
+
+  if(multi_robot_mode)
+    time_ahead_sub = nh.subscribe("/cu_multi/time_ahead_cu", 1, time_ahead_callback);
+
   // init pose and local goal
   robot_pose = make_pose(0,0,0);
   local_goal_pose = make_pose(0,0,0);
@@ -1974,12 +2060,20 @@ int main(int argc, char * argv[])
   user_control_sub.shutdown();  
   target_pose_pub.shutdown();
   turn_circle_pub.shutdown();
+
   pose_sub.shutdown();
   goal_sub.shutdown();
   global_path_sub.shutdown();
   system_update_sub.shutdown();
   user_state_sub.shutdown(); 
-  
+ 
+  if(multi_robot_mode)
+  {
+    time_ahead_pub.shutdown();
+
+    time_ahead_sub.shutdown();
+  }
+ 
   destroy_pose(robot_pose);
   destroy_pose(local_goal_pose);
   destroy_pose(global_goal_pose);
