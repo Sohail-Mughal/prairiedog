@@ -63,6 +63,7 @@
           <agent id="5"/>  
         </to>
       </message> 
+      <message type="18"/>
     </broadcast>
     <receive>
       <message type="6"/>
@@ -70,6 +71,7 @@
       <message type="8"/>
       <message type="9"/>
       <nonmessage type="11"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>
   <agent id="1" ip="192.168.22.2">
@@ -135,6 +137,7 @@
           <agent id="5"/>  
         </to>
       </message> 
+      <message type="18"/>
     </broadcast>
     <receive>
       <message type="6"/>
@@ -142,6 +145,7 @@
       <message type="8"/>
       <message type="9"/>
       <nonmessage type="11"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>  
   <agent id="2" ip="192.168.22.3">
@@ -206,7 +210,8 @@
         <to>
           <agent id="5"/>  
         </to>
-      </message> 
+      </message>
+      <message type="18"/> 
     </broadcast>
     <receive>
       <message type="6"/>
@@ -214,6 +219,7 @@
       <message type="8"/>
       <message type="9"/>
       <nonmessage type="11"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>
   <agent id="3" ip="192.168.22.4">
@@ -278,7 +284,8 @@
         <to>
           <agent id="5"/>  
         </to>
-      </message> 
+      </message>
+      <message type="18"/> 
     </broadcast>
     <receive>
       <message type="6"/>
@@ -286,6 +293,7 @@
       <message type="8"/>
       <message type="9"/>
       <nonmessage type="11"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>
   <agent id="4" ip="192.168.22.5">
@@ -351,6 +359,7 @@
           <agent id="5"/>  
         </to>
       </message> 
+      <message type="18"/>
     </broadcast>
     <receive>
       <message type="6"/>
@@ -358,6 +367,7 @@
       <message type="8"/>
       <message type="9"/>
       <nonmessage type="11"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>
   <agent id="5" ip="192.168.22.6">
@@ -382,6 +392,7 @@
       <message type="15" mode="1"/>
       <message type="16" mode="1"/>
       <message type="17" mode="1"/>
+      <message type="18" mode="1"/>
     </receive> 
   </agent>
 </agents>
