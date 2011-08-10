@@ -74,7 +74,7 @@
 #include "multi_robot_planner_cu/PolygonArray.h"
 
 #include "std_msgs/Int32.h"
-
+#include "std_msgs/Float32.h"
 
 #include "intercom_cu/PoseStamped_CU_ID.h"
 #include "intercom_cu/Int32_CU_ID.h"
@@ -84,6 +84,7 @@
 #include "intercom_cu/PointCloudWithOrigin_CU_ID.h"
 #include "intercom_cu/Polygon_CU_ID.h"
 #include "intercom_cu/PolygonArray_CU_ID.h"
+#include "intercom_cu/Float32_CU_ID.h"
 
 #include "ros_to_buffer.cpp"
 
@@ -105,7 +106,7 @@ bool using_tf = true;              // when set to true, use the tf package
 int max_message_size = 500000;
 size_t max_network_message_size = 15000; // messages larger than this are split into multiple messages to be sent
 
-int NUM_MESSAGE_TYPES = 18;
+int NUM_MESSAGE_TYPES = 19;
   
 // global ROS subscriber handles
 ros::Subscriber selected_robot_sub;
@@ -128,6 +129,8 @@ ros::Subscriber planning_area_sub;
 ros::Subscriber turn_circle_sub;
 ros::Subscriber obstacles_sub;
 
+ros::Subscriber time_ahead_sub;
+
 // global ROS publisher handles
 ros::Publisher pose_pub;
 ros::Publisher global_path_pub;
@@ -146,6 +149,8 @@ ros::Publisher target_pose_pub;
 ros::Publisher planning_area_pub;
 ros::Publisher turn_circle_pub;
 ros::Publisher obstacles_pub;
+
+ros::Publisher time_ahead_pub;
 
 // global ROS provide service server handles
 ros::ServiceServer get_map_srv;
@@ -1118,7 +1123,7 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
       
       obstacles_pub.publish(msg);
     }
-    else if(G->listen_mode_list[16] == 1)
+    else if(G->listen_mode_list[17] == 1)
     {
       intercom_cu::PolygonArray_CU_ID msg;
       msg.id.data = sending_agent;
@@ -1127,6 +1132,28 @@ void extract_and_publish_message_type(int message_type, size_t buffer_ptr, size_
          return;
 
       obstacles_pub.publish(msg);   
+    }
+  }
+  else if(message_type == 18 && G->listen_list[18]) // it is a time ahead message
+  {
+    if(G->listen_mode_list[18] == 0)
+    {
+      std_msgs::Float32 msg;
+      buffer_ptr = extract_from_buffer_float(buffer_ptr, msg.data, buffer_max);
+      if(buffer_ptr == 0)
+         return;
+      
+      time_ahead_pub.publish(msg);
+    }
+    else if(G->listen_mode_list[18] == 1)
+    {
+      intercom_cu::Float32_CU_ID msg;
+      msg.id.data = sending_agent;
+      buffer_ptr = extract_from_buffer_float(buffer_ptr, msg.data.data, buffer_max); 
+      if(buffer_ptr == 0)
+         return; 
+      
+      time_ahead_pub.publish(msg);
     }
   }
 }  
@@ -1572,7 +1599,7 @@ void turn_circle_callback(const geometry_msgs::Pose2D::ConstPtr& msg)
   buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 16,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_Pose2D(buffer_ptr, *msg, buffer_max);                            // add posestamped
 
-  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 14);                           // send 
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 16);                           // send 
 }
 
 void obstacles_callback(const multi_robot_planner_cu::PolygonArray::ConstPtr& msg)
@@ -1584,7 +1611,20 @@ void obstacles_callback(const multi_robot_planner_cu::PolygonArray::ConstPtr& ms
   
   buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 17,0,0,0, buffer_max); // add space for ethernet header 
   buffer_ptr = add_to_buffer_PolygonArray(buffer_ptr, *msg, buffer_max);                      // add posestamped
-  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 14);                           // send 
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 17);                           // send 
+}
+
+void time_ahead_callback(const std_msgs::Float32::ConstPtr& msg)
+{      
+  uint this_msg_size = 100; 
+  char buffer[this_msg_size];
+  size_t buffer_ptr = (size_t)buffer;
+  size_t buffer_max = buffer_ptr + (size_t)this_msg_size;
+  
+  buffer_ptr = add_to_buffer_ethernetheader(buffer_ptr, Globals.my_id, 18,0,0,0, buffer_max); // add space for ethernet header 
+  buffer_ptr = add_to_buffer_float(buffer_ptr,  msg->data, buffer_max);                       // add float
+
+  Globals.send_message_type(buffer, buffer_ptr-(size_t)buffer, 18);                           // send 
 }
 
 int main(int argc, char * argv[]) 
@@ -1660,7 +1700,9 @@ int main(int argc, char * argv[])
     turn_circle_sub = nh.subscribe("/cu/turn_circle_cu", 1, turn_circle_callback);
   if(Globals.send_list[17])
     obstacles_sub = nh.subscribe("/cu/obstacles_cu", 1, obstacles_callback);
-  
+  if(Globals.send_list[18])
+    time_ahead_sub = nh.subscribe("/cu/time_ahead_cu", 1, time_ahead_callback);
+
   // set up ROS topic publishers
   if(Globals.listen_list[0])
   { 
@@ -1767,7 +1809,14 @@ int main(int argc, char * argv[])
     else if(Globals.listen_mode_list[16] == 1) 
       obstacles_pub = nh.advertise<intercom_cu::PolygonArray_CU_ID>("/cu_multi/obstacles_cu", 1);
   }
-  
+  if(Globals.listen_list[18])
+  {
+    if(Globals.listen_mode_list[18] == 0)  
+      time_ahead_pub = nh.advertise<std_msgs::Float32>("/cu/time_ahead_cu", 1);
+    else if(Globals.listen_mode_list[18] == 1)
+      time_ahead_pub = nh.advertise<intercom_cu::Float32_CU_ID>("/cu_multi/time_ahead_cu", 1);
+  }  
+
   // set up service servers
   if(Globals.send_list[11])
     get_map_srv = nh.advertiseService("/cu/get_map_cu", get_map_callback);
@@ -1869,7 +1918,9 @@ int main(int argc, char * argv[])
   planning_area_sub.shutdown();
   turn_circle_sub.shutdown();
   obstacles_sub.shutdown();
-          
+       
+  time_ahead_sub.shutdown();
+   
   // destroy publishers
   pose_pub.shutdown();
   global_path_pub.shutdown();
@@ -1889,6 +1940,8 @@ int main(int argc, char * argv[])
   turn_circle_pub.shutdown();
   obstacles_pub.shutdown();
           
+  time_ahead_pub.shutdown();
+
   // destroy service providers
   get_map_srv.shutdown();
   
