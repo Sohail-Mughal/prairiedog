@@ -320,7 +320,7 @@ void MultiAgentSolution::RoughAnimate(Workspace& W, bool draw_paths)  // animate
 bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const vector<float>& goal_config)  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message, also makes sure that they use start and goal configs
 {   
   bool found_path_in_file = false;
-    
+   
   // check for messages from every other agent (even those not yet in team)
 
   for(int i = 0; i < Gbls->number_of_agents; i++)
@@ -343,6 +343,15 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       }   
       //printf("in file %s\n",this_file);
       
+      if(Gbls->master_reset)
+      {
+        fclose(ifp);
+        remove(this_file);
+
+        printf("dropping message due to reset \n" );
+        continue;
+      }
+
       //printf("parsing file message from %d \n", i);
       
       float file_best_solution_length;
@@ -675,7 +684,6 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           printf("++++++++++++++++ need to join teams !!! ++++++++++++++++++++++++++++++\n");
           
           
-//commented out to just add the one guy we intersected with, and then let him tell us the other members of his team later
           for(int j = 0; j < solution_num_robots; j++)
           {  
             int an_id = file_DimensionMapping[j];
@@ -690,21 +698,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
               Gbls->team_size++;
             }
           }
-          
-          
-
-//           if(!Gbls->InTeam[i])
-//           {
-//             //not in team yet
-//             Gbls->InTeam[i] = true;
-//         
-//             Gbls->local_ID[i] = Gbls->team_size;
-//             Gbls->global_ID.push_back(i);
-//             Gbls->team_size++;
-//           }
-          
-          
-          
+                   
           Gbls->planning_iteration[Gbls->agent_number]++; // the problem has changed, so we update our planning iteration
           
           printf(" --- h \n");
@@ -1379,7 +1373,6 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
       return;
     }
-    
     sprintf(temp_buffer,"2%d",agent_id);
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     

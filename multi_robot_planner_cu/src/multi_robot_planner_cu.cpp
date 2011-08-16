@@ -421,8 +421,6 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 /*---------------------- ROS Publisher Functions ------------------------*/
 void publish_global_path(const vector<vector<float> >& path, const vector<float>& times_p)
 {   
-   //printf("--- 3 \n");   
-    
   while(change_token_used)
     {printf("change token used, publish path \n");}
   change_token_used = true;
@@ -1187,7 +1185,7 @@ int main(int argc, char** argv)
     printf("My IP: %s\n",Globals.my_IP);
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
     printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
-  
+
     // kick off sender threads
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
       
@@ -1267,9 +1265,13 @@ int main(int argc, char** argv)
     
     // find at least one solution (between all robots), also does one round of message passing per loop
     found_path = false;
-    while(!found_path && !Globals.master_reset)
+    while(!found_path && (!Globals.master_reset || !Globals.found_single_robot_solution))
     {  
-      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
+
+
+
+      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       // broadcast tf
       //broadcast_map_tf();  
       
@@ -1278,8 +1280,11 @@ int main(int argc, char** argv)
       {
         now_time = clock();
         
-        printf("pulse num_ag=%d  :  ", Globals.number_of_agents);
-        
+        if(Globals.master_reset)
+          printf("pulse num_ag=%d  reset:  ", Globals.number_of_agents);
+        else
+          printf("pulse num_ag=%d  -----:  ", Globals.number_of_agents);      
+
         for(int a = 0; a < Globals.number_of_agents ; a++)
         {
           if(!Globals.InTeam[a])
@@ -1347,8 +1352,10 @@ int main(int argc, char** argv)
   
     printf("found first path \n");
     
-    if(Globals.master_reset)
+    if(Globals.master_reset && Globals.found_single_robot_solution) 
     {
+      // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
+
       printf("restarting planning 1\n");
       continue;  // a team member has been added, need to restart planning with more dimensions
     }
@@ -1369,9 +1376,13 @@ int main(int argc, char** argv)
         this_time_to_plan = time_left_to_plan;
     
       int last_time_left_floor = (int)time_left_to_plan;
-      while(this_time_to_plan > 0 && !Globals.master_reset)
+      while(this_time_to_plan > 0 && (!Globals.master_reset  || !Globals.found_single_robot_solution))
       {    
-        data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
+        // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
+
+
+
+        //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
           
         if(last_time_left_floor != (int)time_left_to_plan)
         {
@@ -1435,12 +1446,29 @@ int main(int argc, char** argv)
       
       now_time = clock(); 
             
-      if(Globals.master_reset)
+      if(Globals.master_reset && Globals.found_single_robot_solution)
       {
+        // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
+
+
         printf("restarting planning 2\n");
         continue;  // a team member has been added, need to restart planning with more dimensions
       }
     }
+ 
+    if(!Globals.found_single_robot_solution)
+    {
+      // now save the single robot solution
+      Globals.single_robot_solution = MultAgSln.BestSolution;
+      Globals.found_single_robot_solution = true;
+
+      if(Globals.master_reset)
+      {
+        printf("restarting planning 2.5\n");
+        continue;  // a team member has been added, need to restart planning with more dimensions
+      }
+    }
+
     printf("Done with path planning phase\n");
   
     // record that this agent has reach the end of path planning
@@ -1551,7 +1579,7 @@ int main(int argc, char** argv)
     //  data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
   
     
-    data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+    //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
     
     // now we just broadcast the final solution, in case other robots didn't get it
   
@@ -1567,7 +1595,7 @@ int main(int argc, char** argv)
    
       //printf("----------------------\n");
   
-      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       
       start_wait_t = clock();
       now_time = clock();

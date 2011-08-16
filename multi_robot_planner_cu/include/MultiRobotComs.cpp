@@ -93,6 +93,9 @@ void GlobalVariables::Populate(int num_of_agents)
   
   start_time = clock();
   MAgSln = NULL;
+
+  found_single_robot_solution = false;
+  single_robot_solution.resize(0);
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -357,29 +360,46 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
     //printf("adding: %d %d %f %f %f %f %f %f\n", i, planning_iteration[i], start_coords[local_id_temp][0], start_coords[local_id_temp][1], start_coords[local_id_temp][2], goal_coords[local_id_temp][0], goal_coords[local_id_temp][1], goal_coords[local_id_temp][2]);
     strcat(buffer, temp);
   }
+
   sprintf(temp,"A");   
   strcat(buffer, temp);
   
   //printf("SENDING --------->\n%s\n<---------\n", buffer); 
+  int index = 0;  
+
+  if(found_single_robot_solution)
+  { 
+    sprintf(temp,"V");   
+    strcat(buffer, temp);
   
-  int index = 0;
-  while(buffer[index] != '\0')
-    index++;
-  
+    while(buffer[index] != '\0')
+      index++;
+
+    //printf("adding v %d\n", index);
+
+    index += add_2d_vector_to_buffer(single_robot_solution, (void*)((size_t)buffer + (size_t)index));
+
+    //printf("added v \n");
+  }
+  else
+  {
+    while(buffer[index] != '\0')
+      index++;
+  }
+
   return index;
 }
 
-bool GlobalVariables::recover_data_from_buffer(char* buffer) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution
-{
-    
- if(master_reset)
-   return false;
-    
+bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution, index holds the index directly after data
+{  
+  index = 0;
+  
+  if(master_reset)
+    return false;
     
   bool overlap = false;
   if(buffer[0] == 'A') // message type 'A'  
   { 
-    int index = 0;
     int sending_agent = -1;
     int senders_planning_iteration = -1;
     int an_id, ag_pln_it;
@@ -681,6 +701,23 @@ printf(" ---- a \n");
       }
     }
     #endif
+
+
+    if(buffer[index] == 'A')
+    {
+      if(buffer[index+1] == 'V')
+      {
+        index += 2;
+        vector<vector<float> > v;
+
+        //printf("extracting v \n");
+
+        index += extract_2d_vector_from_buffer(v, (void*)((size_t)buffer + (size_t)index));
+
+        //printf("extracted v \n");
+      }
+
+    }
   }
   else
     printf("asked to parse unknown message type \n");
@@ -1170,13 +1207,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
         {
           //printf("-Received start-up data from an agent:\n%s\n", planning_message_buffer);
-          overlapping = G->recover_data_from_buffer(planning_message_buffer);
+          overlapping = G->recover_data_from_buffer(planning_message_buffer, message_ptr);
         
           //printf("trying to recover data \n");
         
-          message_ptr++;
-          while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
-            message_ptr++;
+          //message_ptr++;
+          //while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
+          //  message_ptr++;
           if(planning_message_buffer[message_ptr] == 'A')
             message_ptr++;
         }
@@ -1318,7 +1355,9 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   clock_t start_wait_t, now_time;
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
-  {           
+  {   
+    printf("here -0- %d\n", max_message_size);
+        
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
@@ -1342,6 +1381,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   // now we start path planning, but this thread still keeps broadcasting the data to agents in our team who are not yet ready to plan
   while(!G->all_team_ready_to_plan() && !G->master_reset) // until the rest of the team is ready to plan
   {       
+    printf("here -1-, %d\n", max_message_size);
     G->populate_buffer_with_data(buffer);
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     

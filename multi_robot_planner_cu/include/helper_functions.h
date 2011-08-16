@@ -52,3 +52,8 @@ float PointSafe(const vector<float>& point, int index, float the_robot_rad, cons
 bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad); // this checks if an edge is safe vs obstacle_list, where the points' coords start at index in vectors
 
 bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad, int path_dims); // this if the solution is safe vs obstacle_list, path_dims is the dimensions of 1 robot's path
+
+int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer); // add v to buffer and returns the size in chars
+
+int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer); // extracts a 2d vector from buffer and places it in v, returns the size that was used in buffer in chars
+
