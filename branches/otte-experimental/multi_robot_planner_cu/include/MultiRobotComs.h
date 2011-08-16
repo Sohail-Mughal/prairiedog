@@ -23,7 +23,7 @@ class GlobalVariables
    void populate_buffer_with_ips(char* buffer); // puts everybody's ip into a buffer
    void recover_ips_from_buffer(char* buffer); // gets everybody's ip out of the buffer
    int populate_buffer_with_data(char* buffer); // puts this agents ip, start, and goal positions into the buffer
-   bool recover_data_from_buffer(char* buffer); // gets an agents ip, start, and goal position out of the buffer
+   bool recover_data_from_buffer(char* buffer, int &index); // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution, index holds the index directly after data
    void tell_master_we_are_moving(void * inG); // tells the master that this robot is moving
    
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning
@@ -94,4 +94,9 @@ class GlobalVariables
            
    clock_t start_time; // this gets set at the beginning and then never changed
    void* MAgSln;   // pointer to the multi agent solution
+
+   bool found_single_robot_solution;             // starts false, turns true when single_robot_solution is found
+   vector<vector<float> > single_robot_solution; // a single robot solution for this robot from its start to goal, 
+                                                 // always updated to incoporate new multi-robot path stuff 
+
 };

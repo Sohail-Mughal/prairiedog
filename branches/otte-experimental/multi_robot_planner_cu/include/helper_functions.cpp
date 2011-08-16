@@ -725,3 +725,76 @@ bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<ve
   }
   return true;
 }
+
+
+int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer) // add v to buffer and returns the size in chars
+{
+  size_t buffer_ptr = (size_t)buffer;
+
+  int r = (int)v.size();
+
+  int c = 0;
+  if(r > 0)
+    c = (int)v[0].size();
+
+  // add size of first dimension
+  memcpy((void*)buffer_ptr, (void*)&r, sizeof(r));
+  buffer_ptr += sizeof(r);
+
+  // add size of second dimension
+  memcpy((void*)buffer_ptr, &c, sizeof(int));
+  buffer_ptr += sizeof(int);
+
+  //printf("adding: \n");
+
+  // add all points
+  for(int i = 0; i < r; i++)
+  {
+    for(int j = 0; j < c; j++)
+    {
+      float t = v[i][j];
+      //printf("%f, ", t);
+
+      memcpy((void*)buffer_ptr, &t, sizeof(float));
+      buffer_ptr += sizeof(float);
+    }
+    //printf("\n");
+  }
+
+  return (int)(buffer_ptr - ( (size_t)buffer));
+}
+
+int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // extracts a 2d vector from buffer and places it in v, returns the bumber of chars that were used
+{
+  size_t buffer_ptr = (size_t)buffer;
+  int r, c;
+
+  // extract size of first dimension
+  memcpy(&r, (void*)buffer_ptr, sizeof(int));
+  buffer_ptr += sizeof(int);
+
+  // extract size of second dimension
+  memcpy(&c, (void*)buffer_ptr, sizeof(int));
+  buffer_ptr += sizeof(int);
+
+  //printf("extracting: \n");
+
+  // add all points
+  v.resize(r);
+  for(int i = 0; i < r; i++)
+  {
+    v[i].resize(c);
+    for(int j = 0; j < c; j++)
+    {
+      float t;
+      memcpy(&t, (void*)buffer_ptr, sizeof(float));
+      buffer_ptr += sizeof(float);
+      v[i][j] = t;
+
+       //printf("%f, ", t);
+    }
+    //printf("\n");
+  }
+
+  return (int)(buffer_ptr - ((size_t)buffer));
+}
