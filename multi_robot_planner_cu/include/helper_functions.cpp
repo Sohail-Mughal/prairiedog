@@ -727,6 +727,25 @@ bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<ve
 }
 
 
+int add_int_to_buffer(const int &i, void* buffer) // add int to buffer and returns the size in chars
+{
+  size_t buffer_ptr = (size_t)buffer;
+  memcpy((void*)buffer_ptr, (void*)&i, sizeof(i));
+  buffer_ptr += sizeof(i);
+
+  return (int)(buffer_ptr - ( (size_t)buffer));
+}
+
+int extract_int_from_buffer(int &i, void* buffer) // extracts int from buffer and places it in i, returns the number of chars that were used
+{
+  size_t buffer_ptr = (size_t)buffer;
+
+  memcpy(&i, (void*)buffer_ptr, sizeof(int));
+  buffer_ptr += sizeof(int);
+
+  return (int)(buffer_ptr - ((size_t)buffer));
+}
+
 int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer) // add v to buffer and returns the size in chars
 {
   size_t buffer_ptr = (size_t)buffer;
@@ -745,7 +764,7 @@ int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer) // ad
   memcpy((void*)buffer_ptr, &c, sizeof(int));
   buffer_ptr += sizeof(int);
 
-  //printf("adding: \n");
+  //printf("adding: [%d, %d]\n", r, c);
 
   // add all points
   for(int i = 0; i < r; i++)
@@ -764,7 +783,7 @@ int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer) // ad
   return (int)(buffer_ptr - ( (size_t)buffer));
 }
 
-int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // extracts a 2d vector from buffer and places it in v, returns the bumber of chars that were used
+int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // extracts a 2d vector from buffer and places it in v, returns the number of chars that were used
 {
   size_t buffer_ptr = (size_t)buffer;
   int r, c;
@@ -777,7 +796,7 @@ int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // ex
   memcpy(&c, (void*)buffer_ptr, sizeof(int));
   buffer_ptr += sizeof(int);
 
-  //printf("extracting: \n");
+  //printf("extracting [%d, %d]: \n", r, c);
 
   // add all points
   v.resize(r);

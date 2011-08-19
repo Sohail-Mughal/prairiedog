@@ -96,6 +96,11 @@ void GlobalVariables::Populate(int num_of_agents)
 
   found_single_robot_solution = false;
   single_robot_solution.resize(0);
+
+  other_robots_single_solutions.resize(number_of_agents);
+  planning_iteration_single_solutions.resize(number_of_agents, -1);
+
+  have_calculated_start_and_goal = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -289,6 +294,36 @@ void GlobalVariables::recover_ips_from_buffer(char* buffer) // gets everybody's 
   }
 }
 
+int GlobalVariables::populate_buffer_with_single_robot_paths(char* buffer) // puts single robot paths in buffer, returns the number of chars that it required
+{
+  int index = 0;
+
+  buffer[index] = 'V';
+  index++;
+
+  index += add_int_to_buffer(agent_number, (void*)((size_t)buffer + (size_t)index));
+
+  index += add_int_to_buffer(planning_iteration_single_solutions[agent_number], (void*)((size_t)buffer + (size_t)index));
+
+  index += add_2d_vector_to_buffer(single_robot_solution, (void*)((size_t)buffer + (size_t)index));
+
+  // add all other agents prefered paths that this agent knows about
+  for(int lcl_id = 1; lcl_id < team_size; lcl_id++)
+  {
+    int glbl_id = global_ID[lcl_id];
+
+    buffer[index] = 'V';
+    index++;
+
+    index += add_int_to_buffer(glbl_id, (void*)((size_t)buffer + (size_t)index));
+
+    index += add_int_to_buffer(planning_iteration_single_solutions[glbl_id], (void*)((size_t)buffer + (size_t)index));
+
+    index += add_2d_vector_to_buffer(other_robots_single_solutions[glbl_id], (void*)((size_t)buffer + (size_t)index));
+  }
+  return index;
+}
+
 int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents ip, start, and goal positions into the buffer, returns the index of '\0' end of the message
 {
   char temp[2000];
@@ -367,19 +402,15 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   //printf("SENDING --------->\n%s\n<---------\n", buffer); 
   int index = 0;  
 
+  // add this agent's prefered path
   if(found_single_robot_solution)
   { 
-    sprintf(temp,"V");   
-    strcat(buffer, temp);
-  
     while(buffer[index] != '\0')
       index++;
 
-    //printf("adding v %d\n", index);
+   // add single robot prefered paths to buffer
+   index += populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)index));
 
-    index += add_2d_vector_to_buffer(single_robot_solution, (void*)((size_t)buffer + (size_t)index));
-
-    //printf("added v \n");
   }
   else
   {
@@ -581,6 +612,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
       
       master_reset = true;   
 printf(" ---- a \n");
+
       return overlap;
     }
         
@@ -702,22 +734,21 @@ printf(" ---- a \n");
     }
     #endif
 
-
+    /*  NOTE the following was moved to after the call to this function
     if(buffer[index] == 'A')
     {
       if(buffer[index+1] == 'V')
       {
         index += 2;
-        vector<vector<float> > v;
+        
+        // extract the sending robot's prefered single robot path
 
-        //printf("extracting v \n");
+        index += extract_2d_vector_from_buffer(other_robots_single_solutions[sending_agent], (void*)((size_t)buffer + (size_t)index));
 
-        index += extract_2d_vector_from_buffer(v, (void*)((size_t)buffer + (size_t)index));
-
-        //printf("extracted v \n");
       }
 
     }
+    */
   }
   else
     printf("asked to parse unknown message type \n");
@@ -781,6 +812,29 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
   planning_time_remaining[agent_number] = min_time_for_planning;
   
   return min_time_for_planning;
+}
+
+
+bool GlobalVariables::have_all_team_single_paths()         // returns true if we have all team members current single paths, else false
+{
+
+  printf("%d[%d]", global_ID[0], planning_iteration[global_ID[0]]);
+
+  for(int tm = 1; tm < team_size; tm ++)
+  {
+    int glbl_id = global_ID[tm];
+
+    printf("%d[%d]", glbl_id, planning_iteration[glbl_id]);
+
+    if(planning_iteration_single_solutions[glbl_id] < planning_iteration[agent_number])
+    {
+      printf(" f \n");
+      return false;
+    }
+  }
+
+  printf(" t \n");
+  return true;
 }
 
 /* ------------------------- the actual threads ------------------------ */
@@ -1212,12 +1266,57 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           //printf("trying to recover data \n");
         
           //message_ptr++;
-          //while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
-          //  message_ptr++;
+          while(planning_message_buffer[message_ptr] != 'A' && planning_message_buffer[message_ptr] != '\0')
+            message_ptr++;
           if(planning_message_buffer[message_ptr] == 'A')
             message_ptr++;
         }
       
+        // extract prefered single robot paths knowen to sending agent
+        while(planning_message_buffer[message_ptr] == 'V')
+        {
+          message_ptr++;
+
+          int ag_gbl_id;
+          message_ptr += extract_int_from_buffer(ag_gbl_id, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+
+          int pln_itr;
+          message_ptr += extract_int_from_buffer(pln_itr, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+
+          //printf("extract maybe? %d[%d] \n", ag_gbl_id, pln_itr);
+
+          if(pln_itr > G->planning_iteration_single_solutions[ag_gbl_id])
+          {
+            if(pln_itr > G->planning_iteration_single_solutions[G->agent_number])
+            {
+               G->planning_iteration_single_solutions[G->agent_number] = pln_itr; 
+            }
+
+            //printf("here here here here here 1\n");
+            G->planning_iteration_single_solutions[ag_gbl_id] = pln_itr;
+ 
+            //printf("here here here here here 2\n"); 
+            message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+
+            //printf("here here here here here 3\n");
+ 
+            //printf("extracted agent %d prefered path \n", ag_gbl_id);
+         
+            // NOTE, this agent's path will never be used from other_robots_single_solutions, so ok to extract it to here
+          }
+          else // old planning iteration
+          {
+            //printf("there there there there there \n");
+
+            // extract to temp to advance in buffer 
+            vector<vector<float> > temp;
+            message_ptr += extract_2d_vector_from_buffer(temp, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+
+            //printf("old agent %d prefered path \n", ag_gbl_id);
+          }
+          //printf("did extract? \n");
+        }
+
         //printf("this is the message as it will be passed to other parts: \n%s", &(message_buffer[message_ptr]));
       
         //printf("this is the next chars: -1:%c, 0:%c, 1:%c, 2:%c, 3:%c \n", message_buffer[message_ptr-1], message_buffer[message_ptr], message_buffer[message_ptr+1], message_buffer[message_ptr+2], message_buffer[message_ptr+3]);
@@ -1324,6 +1423,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           //          printf("here 66 \n");
           G->kill_master = true;
         }
+        else if(planning_message_buffer[message_ptr] == 4)
+        {
+          printf("recieved prefered path exchange message\n");
+        }
         else if(planning_message_buffer[message_ptr] != '\0')   
         {
           printf("recieved unknown message type ---------------\n%s\n",  &(planning_message_buffer[message_ptr]));    
@@ -1353,6 +1456,36 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     error("problems creating socket");
 
   clock_t start_wait_t, now_time;
+
+  // while we don't have all the other robots individual prefered paths
+  while(!G->have_all_team_single_paths())
+  {
+    if(G->team_size <= 1)  // if only 1 robot in team, then can break out here
+      break;
+
+    // send all prefered paths we know about
+
+    int index = G->populate_buffer_with_single_robot_paths(buffer);
+
+    buffer[index] = 4;    
+    index++;
+
+    G->hard_broadcast((void *)buffer, sizeof(char) * index);
+
+    //printf("waiting until we know all team members single paths\n");
+    start_wait_t = clock();
+    now_time = clock();
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
+      now_time = clock(); 
+  }
+
+  while(!G->have_calculated_start_and_goal && !G->master_reset)
+  {
+    // wait until we have calculated the start and goal
+
+    printf("waiting to calculate this agents start and goal\n");
+    sleep(1);
+  }
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
   {   
