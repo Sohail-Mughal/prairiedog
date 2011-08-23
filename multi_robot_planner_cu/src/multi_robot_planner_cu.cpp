@@ -1197,7 +1197,30 @@ int main(int argc, char** argv)
         }
 
 
+
+
+        
+
+
+
+
+
+
+
         // calculate start and goal based on intersections with agent global_ag_id
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

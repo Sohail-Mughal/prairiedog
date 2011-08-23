@@ -817,3 +817,246 @@ int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // ex
 
   return (int)(buffer_ptr - ((size_t)buffer));
 }
+
+// returns the 2D eudlidian distance between two points (using first 2 dims)
+float euclid_dist(const vector<float> & A, const vector<float> &B)
+{
+  return sqrt( ( (A[0] - B[0]) * (A[0] - B[0]) ) + ( (A[1] - B[1]) * (A[1] - B[1]) ) );
+}
+
+
+// helps the function below, returns true of the point is within robot_rad of the edge to within resolution
+bool edge_and_point_conflict(const vector<float> & point, const vector<vector<float> > & edge, float robot_rad, float resolution)
+{
+  float obs_edge_length = euclid_dist(edge[0], edge[1]);
+  float obs_step = obs_edge_length*resolution;
+  float obs_step_x = (obs_step/obs_edge_length)*(edge[1][0] - edge[0][0]);
+  float obs_step_y = (obs_step/obs_edge_length)*(edge[1][1] - edge[0][1]);
+
+  vector<float> obs_point = edge[0];
+
+  for(float obs_d = 0; obs_d <= obs_edge_length; obs_d += obs_step)
+  {
+    if(robot_rad > euclid_dist(obs_point, point))
+    {       
+      // then there is a collision
+      return true;
+    }
+    obs_point[0] += obs_step_x;
+    obs_point[1] += obs_step_y;
+  }
+
+  return false;
+}
+
+
+// used in the function below
+bool edge_and_edge_conflict(const vector<vector<float> > & robot_forward_conflict, 
+                            const vector<vector<float> > & obstacle_forward_conflict,
+                            const vector<vector<float> > & obstacle_backward_conflict,
+                            float found_obstacle_forward_conflict,
+                            float found_obstacle_backward_conflict,
+                            vector<float> & robot_forward_point_conflict, 
+                            float robot_rad, float resolution)
+{
+  // find first robot_forward conflict point
+
+  float edge_length = euclid_dist(robot_forward_conflict[0], robot_forward_conflict[1]);
+  float step = edge_length*resolution;
+  float step_x = (step/edge_length)*(robot_forward_conflict[1][0] - robot_forward_conflict[0][0]);
+  float step_y = (step/edge_length)*(robot_forward_conflict[1][1] - robot_forward_conflict[0][1]);
+
+  vector<float> point = robot_forward_conflict[0];
+
+  for(float d = 0; d <= edge_length; d += step)
+  {
+    if(found_obstacle_forward_conflict)
+    {
+      if(edge_and_point_conflict(point, obstacle_forward_conflict, robot_rad, resolution))
+      {    
+        // then there is a collision
+        robot_forward_point_conflict = point;
+        return true;
+      }
+    }
+
+    if(found_obstacle_backward_conflict)
+    {
+      if(edge_and_point_conflict(point, obstacle_backward_conflict, robot_rad, resolution))
+      {    
+        // then there is a collision
+        robot_forward_point_conflict = point;
+        return true;
+      }
+    }
+
+    point[0] += step_x;
+    point[1] += step_y;
+  }
+
+  return false;
+}
+
+
+// finds the first and last conflict (with respect to robot path) between robot path and obstacle path. Edges are check at resolution, and conflicts take into account robot rad. Returns true if there is a conflict, else false
+bool find_conflict_points(const vector<vector<float> > &robot_path, const vector<vector<float> > &obstacle_path, float robot_rad, float resolution, vector<float> &first_conflict,  vector<float> &last_conflict)
+{
+  // store obstacle path in way that lets it be used with code I've already written
+  vector<vector<vector<float> > > obstacle_path_list(1,obstacle_path);
+
+  // store robot path in way that lets it be used with code I've already written
+  vector<vector<vector<float> > > robot_path_list(1,robot_path);
+
+  bool found_robot_forward_conflict = false;
+  bool found_robot_backward_conflict = false;
+  bool found_obstacle_forward_conflict = false;
+  bool found_obstacle_backward_conflict = false;
+
+  vector<vector<float> > robot_forward_conflict(2);
+  vector<vector<float> > robot_backward_conflict(2);
+  vector<vector<float> > obstacle_forward_conflict(2);
+  vector<vector<float> > obstacle_backward_conflict(2);
+
+  // robot_path forward direction:
+
+  // for each edge in the robot path, check if it conflicts with the obstacle path
+  for(int i = 0; i < robot_path.size()-1; i++)
+  {
+
+    if(EdgeSafe(robot_path[i], robot_path[i+1], 0, obstacle_path_list, robot_rad))
+      continue;
+
+    // if here then this edge had a conflict
+    robot_forward_conflict[0] = robot_path[i];
+    robot_forward_conflict[1] = robot_path[i+1];
+    found_robot_forward_conflict = true;
+
+    break;
+  }
+
+  // robot_path backward direction:
+
+  // for each edge in the robot path, check if it conflicts with the obstacle path
+  for(int i = robot_path.size()-1; i > 0; i--)
+  {
+
+    if(EdgeSafe(robot_path[i], robot_path[i-1], 0, obstacle_path_list, robot_rad))
+      continue;
+
+    // if here then this edge had a conflict
+    robot_backward_conflict[0] = robot_path[i];
+    robot_backward_conflict[1] = robot_path[i-1];
+    found_robot_backward_conflict = true;
+
+    break;
+  }
+
+  // obstacle_path forward direction:
+
+  // for each edge in the obstacle path, check if it conflicts with the robot path
+  for(int i = 0; i < obstacle_path.size()-1; i++)
+  {
+
+    if(EdgeSafe(obstacle_path[i], obstacle_path[i+1], 0, robot_path_list, robot_rad))
+      continue;
+
+    // if here then this edge had a conflict
+    obstacle_forward_conflict[0] = obstacle_path[i];
+    obstacle_forward_conflict[1] = obstacle_path[i+1];
+    found_obstacle_forward_conflict = true;
+
+    break;
+  }
+
+
+  // obstacle_path backward direction:
+
+  // for each edge in the obstacle path, check if it conflicts with the robot path
+  for(int i = obstacle_path.size()-1; i > 0; i--)
+  {
+
+    if(EdgeSafe(obstacle_path[i], obstacle_path[i-1], 0, robot_path_list, robot_rad))
+      continue;
+
+    // if here then this edge had a conflict
+    // if here then this edge had a conflict
+    obstacle_backward_conflict[0] = obstacle_path[i];
+    obstacle_backward_conflict[1] = obstacle_path[i-1];
+    found_obstacle_backward_conflict = true;
+
+    break;
+  }
+
+  // search for points that actually conflict to within resolution
+  // only need to compare conflict edges between obstacle and 
+
+  bool found_robot_forward_point_conflict = false;
+  bool found_robot_backward_point_conflict = false;
+  bool found_obstacle_forward_point_conflict = false;
+  bool found_obstacle_backward_point_conflict = false;
+
+  vector<float> robot_forward_point_conflict;
+  vector<float> robot_backward_point_conflict;
+  vector<float> obstacle_forward_point_conflict;
+  vector<float> obstacle_backward_point_conflict;
+
+  if(found_robot_forward_conflict)
+  {
+    // find first robot_forward conflict point
+
+    found_robot_forward_point_conflict = edge_and_edge_conflict(robot_forward_conflict, 
+                                                                obstacle_forward_conflict, obstacle_backward_conflict,
+                                                                found_obstacle_forward_conflict, found_obstacle_backward_conflict,
+                                                                robot_forward_point_conflict, robot_rad, resolution);
+  }
+
+  if(found_robot_backward_conflict)
+  {
+    // find first robot backward conflict point
+    found_robot_backward_point_conflict = edge_and_edge_conflict(robot_backward_conflict, 
+                                                                 obstacle_forward_conflict, obstacle_backward_conflict, 
+                                                                 found_obstacle_forward_conflict, found_obstacle_backward_conflict, 
+                                                                 robot_backward_point_conflict, robot_rad, resolution);
+  }
+
+  if(found_obstacle_forward_conflict)
+  {
+    // find first obstacle_forward conflict point
+
+    found_obstacle_forward_point_conflict = edge_and_edge_conflict(obstacle_forward_conflict, 
+                                                                   robot_forward_conflict, robot_backward_conflict, 
+                                                                   found_robot_forward_conflict, found_robot_backward_conflict, 
+                                                                   obstacle_forward_point_conflict, robot_rad, resolution);
+  }
+
+
+  if(found_obstacle_backward_conflict)
+  {
+    // find first obstacle_backward conflict point
+
+    found_obstacle_backward_point_conflict = edge_and_edge_conflict(obstacle_backward_conflict, 
+                                                                    robot_forward_conflict, robot_backward_conflict, 
+                                                                    found_robot_forward_conflict, found_robot_backward_conflict,
+                                                                    obstacle_backward_point_conflict, robot_rad, resolution);
+  }
+
+  if(!found_robot_forward_point_conflict && !found_robot_backward_point_conflict)
+    return false;
+  else if(!found_robot_forward_point_conflict && found_robot_backward_point_conflict)
+  {
+    robot_forward_point_conflict = robot_backward_point_conflict;
+    printf("here a \n");
+  }
+  else if(found_robot_forward_point_conflict && !found_robot_backward_point_conflict)
+  {
+    robot_backward_point_conflict = robot_forward_point_conflict;
+    printf("here b \n");
+
+  } 
+
+  first_conflict = robot_forward_point_conflict;
+  last_conflict = robot_backward_point_conflict;
+
+  return true;
+}
+
