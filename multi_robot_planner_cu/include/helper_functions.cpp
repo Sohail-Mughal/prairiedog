@@ -818,8 +818,9 @@ int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // ex
   return (int)(buffer_ptr - ((size_t)buffer));
 }
 
+
 // returns the 2D eudlidian distance between two points (using first 2 dims)
-float euclid_dist(const vector<float> & A, const vector<float> &B)
+float euclid_dist(const vector<float> &A, const vector<float> &B)
 {
   return sqrt( ( (A[0] - B[0]) * (A[0] - B[0]) ) + ( (A[1] - B[1]) * (A[1] - B[1]) ) );
 }
@@ -851,13 +852,13 @@ bool edge_and_point_conflict(const vector<float> & point, const vector<vector<fl
 
 
 // used in the function below
-bool edge_and_edge_conflict(const vector<vector<float> > & robot_forward_conflict, 
-                            const vector<vector<float> > & obstacle_forward_conflict,
-                            const vector<vector<float> > & obstacle_backward_conflict,
-                            float found_obstacle_forward_conflict,
-                            float found_obstacle_backward_conflict,
-                            vector<float> & robot_forward_point_conflict, 
-                            float robot_rad, float resolution)
+bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_conflict, 
+                             const vector<vector<vector<float> > > & obstacle_forward_conflicts,
+                             const vector<vector<vector<float> > > & obstacle_backward_conflicts,
+                             float found_obstacle_forward_conflict,
+                             float found_obstacle_backward_conflict,
+                             vector<float> & robot_forward_point_conflict, 
+                             float robot_rad, float resolution)
 {
   // find first robot_forward conflict point
 
@@ -872,20 +873,55 @@ bool edge_and_edge_conflict(const vector<vector<float> > & robot_forward_conflic
   {
     if(found_obstacle_forward_conflict)
     {
-      if(edge_and_point_conflict(point, obstacle_forward_conflict, robot_rad, resolution))
-      {    
-        // then there is a collision
-        robot_forward_point_conflict = point;
+      bool found_robot_forward_point_conflict = false;
+      for(int i = 0; i < obstacle_forward_conflicts.size(); i++)
+      {
+        if(edge_and_point_conflict(point, obstacle_forward_conflicts[i], robot_rad, resolution))
+        {    
+          // then there is a collision
+          if(!found_robot_forward_point_conflict)
+          {
+            // first one
+            robot_forward_point_conflict = point;
+            found_robot_forward_point_conflict = true;
+          }
+          else if( euclid_dist(robot_forward_conflict[0], point) < euclid_dist(robot_forward_conflict[0], robot_forward_point_conflict) )
+          {
+            // not first one, but only get here if it is closer to start of path 
+            robot_forward_point_conflict = point;
+          }
+        }
+      }
+       
+      if(found_robot_forward_point_conflict)
+      {
         return true;
       }
     }
 
     if(found_obstacle_backward_conflict)
     {
-      if(edge_and_point_conflict(point, obstacle_backward_conflict, robot_rad, resolution))
-      {    
-        // then there is a collision
-        robot_forward_point_conflict = point;
+      bool found_robot_forward_point_conflict = false;
+      for(int i = 0; i < obstacle_backward_conflicts.size(); i++)
+      {
+        if(edge_and_point_conflict(point, obstacle_backward_conflicts[i], robot_rad, resolution))
+        {    
+          // then there is a collision
+          if(!found_robot_forward_point_conflict)
+          {
+            // first one
+            robot_forward_point_conflict = point;
+            found_robot_forward_point_conflict = true;
+          }
+          else if( euclid_dist(robot_forward_conflict[0], point) < euclid_dist(robot_forward_conflict[0], robot_forward_point_conflict) )
+          {
+            // not first one, but only get here if it is closer to start of path 
+            robot_forward_point_conflict = point;
+          }
+        }
+      }
+      if(found_robot_forward_point_conflict)
+      {
         return true;
       }
     }
@@ -899,7 +935,7 @@ bool edge_and_edge_conflict(const vector<vector<float> > & robot_forward_conflic
 
 
 // finds the first and last conflict (with respect to robot path) between robot path and obstacle path. Edges are check at resolution, and conflicts take into account robot rad. Returns true if there is a conflict, else false
-bool find_conflict_points(const vector<vector<float> > &robot_path, const vector<vector<float> > &obstacle_path, float robot_rad, float resolution, vector<float> &first_conflict,  vector<float> &last_conflict)
+bool find_conflict_points(const vector<vector<float> > &robot_path, const vector<vector<float> > &obstacle_path, float robot_rad, float resolution, vector<float> &first_r_conflict,  vector<float> &last_r_conflict, vector<float> &first_o_conflict,  vector<float> &last_o_conflict)
 {
   // store obstacle path in way that lets it be used with code I've already written
   vector<vector<vector<float> > > obstacle_path_list(1,obstacle_path);
@@ -912,10 +948,10 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
   bool found_obstacle_forward_conflict = false;
   bool found_obstacle_backward_conflict = false;
 
-  vector<vector<float> > robot_forward_conflict(2);
-  vector<vector<float> > robot_backward_conflict(2);
-  vector<vector<float> > obstacle_forward_conflict(2);
-  vector<vector<float> > obstacle_backward_conflict(2);
+  vector<vector<vector<float> > > robot_forward_conflicts;
+  vector<vector<vector<float> > > robot_backward_conflicts;
+  vector<vector<vector<float> > > obstacle_forward_conflicts;
+  vector<vector<vector<float> > > obstacle_backward_conflicts;
 
   // robot_path forward direction:
 
@@ -927,11 +963,11 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
       continue;
 
     // if here then this edge had a conflict
+    vector<vector<float> > robot_forward_conflict(2);
     robot_forward_conflict[0] = robot_path[i];
     robot_forward_conflict[1] = robot_path[i+1];
+    robot_forward_conflicts.push_back(robot_forward_conflict);
     found_robot_forward_conflict = true;
-
-    break;
   }
 
   // robot_path backward direction:
@@ -944,11 +980,11 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
       continue;
 
     // if here then this edge had a conflict
+    vector<vector<float> > robot_backward_conflict(2);
     robot_backward_conflict[0] = robot_path[i];
     robot_backward_conflict[1] = robot_path[i-1];
+    robot_backward_conflicts.push_back(robot_backward_conflict);
     found_robot_backward_conflict = true;
-
-    break;
   }
 
   // obstacle_path forward direction:
@@ -961,11 +997,11 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
       continue;
 
     // if here then this edge had a conflict
+    vector<vector<float> > obstacle_forward_conflict(2);
     obstacle_forward_conflict[0] = obstacle_path[i];
     obstacle_forward_conflict[1] = obstacle_path[i+1];
+    obstacle_forward_conflicts.push_back(obstacle_forward_conflict);
     found_obstacle_forward_conflict = true;
-
-    break;
   }
 
 
@@ -979,12 +1015,11 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
       continue;
 
     // if here then this edge had a conflict
-    // if here then this edge had a conflict
+    vector<vector<float> > obstacle_backward_conflict(2);
     obstacle_backward_conflict[0] = obstacle_path[i];
     obstacle_backward_conflict[1] = obstacle_path[i-1];
+    obstacle_backward_conflicts.push_back(obstacle_backward_conflict);
     found_obstacle_backward_conflict = true;
-
-    break;
   }
 
   // search for points that actually conflict to within resolution
@@ -1004,29 +1039,29 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
   {
     // find first robot_forward conflict point
 
-    found_robot_forward_point_conflict = edge_and_edge_conflict(robot_forward_conflict, 
-                                                                obstacle_forward_conflict, obstacle_backward_conflict,
-                                                                found_obstacle_forward_conflict, found_obstacle_backward_conflict,
-                                                                robot_forward_point_conflict, robot_rad, resolution);
+    found_robot_forward_point_conflict = edge_and_edges_conflict(robot_forward_conflicts[0], 
+                                                                  obstacle_forward_conflicts, obstacle_backward_conflicts,
+                                                                  found_obstacle_forward_conflict, found_obstacle_backward_conflict,
+                                                                  robot_forward_point_conflict, robot_rad, resolution);
   }
 
   if(found_robot_backward_conflict)
   {
     // find first robot backward conflict point
-    found_robot_backward_point_conflict = edge_and_edge_conflict(robot_backward_conflict, 
-                                                                 obstacle_forward_conflict, obstacle_backward_conflict, 
-                                                                 found_obstacle_forward_conflict, found_obstacle_backward_conflict, 
-                                                                 robot_backward_point_conflict, robot_rad, resolution);
+    found_robot_backward_point_conflict = edge_and_edges_conflict(robot_backward_conflicts[0], 
+                                                                  obstacle_forward_conflicts, obstacle_backward_conflicts, 
+                                                                  found_obstacle_forward_conflict, found_obstacle_backward_conflict, 
+                                                                  robot_backward_point_conflict, robot_rad, resolution);
   }
 
   if(found_obstacle_forward_conflict)
   {
     // find first obstacle_forward conflict point
 
-    found_obstacle_forward_point_conflict = edge_and_edge_conflict(obstacle_forward_conflict, 
-                                                                   robot_forward_conflict, robot_backward_conflict, 
-                                                                   found_robot_forward_conflict, found_robot_backward_conflict, 
-                                                                   obstacle_forward_point_conflict, robot_rad, resolution);
+    found_obstacle_forward_point_conflict = edge_and_edges_conflict(obstacle_forward_conflicts[0], 
+                                                                    robot_forward_conflicts, robot_backward_conflicts, 
+                                                                    found_robot_forward_conflict, found_robot_backward_conflict, 
+                                                                    obstacle_forward_point_conflict, robot_rad, resolution);
   }
 
 
@@ -1034,29 +1069,443 @@ bool find_conflict_points(const vector<vector<float> > &robot_path, const vector
   {
     // find first obstacle_backward conflict point
 
-    found_obstacle_backward_point_conflict = edge_and_edge_conflict(obstacle_backward_conflict, 
-                                                                    robot_forward_conflict, robot_backward_conflict, 
-                                                                    found_robot_forward_conflict, found_robot_backward_conflict,
-                                                                    obstacle_backward_point_conflict, robot_rad, resolution);
+    found_obstacle_backward_point_conflict = edge_and_edges_conflict(obstacle_backward_conflicts[0], 
+                                                                     robot_forward_conflicts, robot_backward_conflicts, 
+                                                                     found_robot_forward_conflict, found_robot_backward_conflict,
+                                                                     obstacle_backward_point_conflict, robot_rad, resolution);
   }
 
-  if(!found_robot_forward_point_conflict && !found_robot_backward_point_conflict)
+
+  if(!found_robot_forward_point_conflict && !found_robot_backward_point_conflict &&
+     !found_obstacle_forward_point_conflict && !found_obstacle_backward_point_conflict)
+  {
     return false;
-  else if(!found_robot_forward_point_conflict && found_robot_backward_point_conflict)
+  }
+  else if(!found_robot_forward_point_conflict && !found_robot_backward_point_conflict)
+  {
+    // this should probably never happen
+    printf("this should probably never happen\n");
+    return false;
+  }
+  else if(!found_obstacle_forward_point_conflict && !found_obstacle_backward_point_conflict)
+  {
+    // this should probably never happen
+    printf("this should probably never happen\n");
+    return false;
+  }
+
+  if(!found_robot_forward_point_conflict && found_robot_backward_point_conflict)
   {
     robot_forward_point_conflict = robot_backward_point_conflict;
-    printf("here a \n");
   }
   else if(found_robot_forward_point_conflict && !found_robot_backward_point_conflict)
   {
     robot_backward_point_conflict = robot_forward_point_conflict;
-    printf("here b \n");
-
   } 
 
-  first_conflict = robot_forward_point_conflict;
-  last_conflict = robot_backward_point_conflict;
+  if(!found_obstacle_forward_point_conflict && found_obstacle_backward_point_conflict)
+  {
+    obstacle_forward_point_conflict = obstacle_backward_point_conflict;
+  }
+  else if(found_obstacle_forward_point_conflict && !found_obstacle_backward_point_conflict)
+  {
+    obstacle_backward_point_conflict = obstacle_forward_point_conflict;
+  } 
+
+  first_r_conflict = robot_forward_point_conflict;
+  last_r_conflict = robot_backward_point_conflict;
+
+  first_o_conflict = obstacle_forward_point_conflict;
+  last_o_conflict = obstacle_backward_point_conflict;
 
   return true;
 }
+
+
+// given data about a robot's path, start point along that path, and a planning region, this returns the last point along the path in the region
+// also handles conflicts with existing sub-goals in case that point is already used (note, may put slightly out of region in that case)
+bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, const vector<float> sub_goals, const vector<bool> & sub_goal_found, vector<float> & exit_point))
+{
+
+
+  return false;
+}
+
+// calculates the sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal
+bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_planning_area_side_length, float robot_rad, float resolution, const vector<float> & sub_start, const vector<float> & sub_goal)
+{
+  // Note: There are probably better ways to do this than duplicating it on each agent, but this works and runtime is only robots squared
+
+  // record all robot start and goal locations and see if they fit within the preferred planning area
+  vector<vector<float> > robot_starts;
+  vector<vector<float> > robot_goals;
+
+  float max_x = -LARGE;
+  float max_y = -LARGE;
+
+  float min_x = LARGE;
+  float min_y = LARGE;
+
+  int max_num_robots = InTeam.size();
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    robot_starts.push_back(robot_paths[i][0]);
+
+    if(robot_paths[i][0][0] > max_x)
+      robot_paths[i][0][0] = max_x;
+
+    if(robot_paths[i][0][1] > max_y)
+      robot_paths[i][0][1] = max_y;
+
+    if(robot_paths[i][0][0] < min_x)
+      robot_paths[i][0][0] = min_x;
+
+    if(robot_paths[i][0][1] < min_y)
+      robot_paths[i][0][1] = min_y;
+  }
+
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    int goal_ind = robot_paths[i].size()-1;
+    robot_goals.push_back(robot_paths[i][goal_ind]);
+
+    if(robot_paths[i][goal_ind][0] > max_x)
+      robot_paths[i][goal_ind][0] = max_x;
+
+    if(robot_paths[i][goal_ind][1] > max_y)
+      robot_paths[i][goal_ind][1] = max_y;
+
+    if(robot_paths[i][goal_ind][0] < min_x)
+      robot_paths[i][goal_ind][0] = min_x;
+
+    if(robot_paths[i][goal_ind][1] < min_y)
+      robot_paths[i][goal_ind][1] = min_y;
+  }
+
+  if( (max_x - min_x <= preferred_planning_area_side_length) && 
+      (max_y - min_y <= preferred_planning_area_side_length) // then we can just use normal start and goal
+  {
+    printf("just use normal start and goal\n");
+
+    return false;
+  }
+  // otherwise goals and starts are too far away from each other
+
+
+  // go through and find all robot vs robot first and last conflicts and see if they fit within the preferred planning area
+  // also save this robot's first and last conflicts seperately
+  vector<vector<float> > first_conflicts(max_num_robots);
+  vector<vector<float> > last_conflicts(max_num_robots);
+
+  vector<float> this_robots_first_conflict;
+  vector<float> this_robots_last_conflict;
+  bool found_this_robots_conflicts;
+
+  max_x = -LARGE;
+  max_y = -LARGE;
+
+  min_x = LARGE;
+  min_y = LARGE;
+
+  float max_x_first_only = -LARGE;
+  float max_y_first_only = -LARGE;
+
+  float min_x_first_only = LARGE;
+  float min_y_first_only = LARGE;
+
+  float max_x_last_only = -LARGE;
+  float max_y_last_only = -LARGE;
+
+  float min_x_last_only = LARGE;
+  float min_y_last_only = LARGE;
+
+  int max_num_robots = InTeam.size();
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    for(int j = i+1; j < max_num_robots; j++)
+    { 
+      if(!InTeam[j])
+        continue;
+
+      vector<float> first_i_conflict;
+      vector<float> first_j_conflict;
+
+      vector<float> last_i_conflict;
+      vector<float> last_j_conflict;
+
+      if(find_conflict_points(robot_paths[i], robot_paths[j], robot_rad, resolution, first_i_conflict,  last_i_conflict, first_j_conflict, last_j_conflict)
+      {
+        first_conflicts[i] = first_i_conflict;
+        first_conflicts[j] = first_j_conflict;
+
+        last_conflicts[i] = last_i_conflict;
+        last_conflicts[j] = last_j_conflict;
+
+        if(first_i_conflict[0] > max_x_first_only)
+          first_i_conflict[0] = max_x_first_only;
+
+        if(first_i_conflict[1] > max_y_first_only)
+          first_i_conflict[1] = max_y_first_only;
+
+        if(first_i_conflict[0] < min_x_first_only)
+          first_i_conflict[0] = min_x_first_only;
+
+        if(first_i_conflict[1] < min_y_first_only)
+          first_i_conflict[1] = min_y_first_only;
+
+
+        if(first_j_conflict[0] > max_x_first_only)
+          first_j_conflict[0] = max_x_first_only;
+
+        if(first_j_conflict[1] > max_y_first_only)
+          first_j_conflict[1] = max_y_first_only;
+
+        if(first_j_conflict[0] < min_x_first_only)
+          first_j_conflict[0] = min_x_first_only;
+
+        if(first_j_conflict[1] < min_y_first_only)
+          first_j_conflict[1] = min_y_first_only;
+
+
+        if(last_i_conflict[0] > max_x_last_only)
+          last_i_conflict[0] = max_x_last_only;
+
+        if(last_i_conflict[1] > max_y_last_only)
+          last_i_conflict[1] = max_y_last_only;
+
+        if(last_i_conflict[0] < min_x_last_only)
+          last_i_conflict[0] = min_x_last_only;
+
+        if(last_i_conflict[1] < min_y_last_only)
+          last_i_conflict[1] = min_y_last_only;
+
+
+        if(last_j_conflict[0] > max_x_last_only)
+          last_j_conflict[0] = max_x_last_only;
+
+        if(last_j_conflict[1] > max_y_last_only)
+          last_j_conflict[1] = max_y_last_only;
+
+        if(last_j_conflict[0] < min_x_last_only)
+          last_j_conflict[0] = min_x_last_only;
+
+        if(last_j_conflict[1] < min_y_last_only)
+          last_j_conflict[1] = min_y_last_only;
+     
+        if(i == this_agent_id)
+        {
+          this_robots_first_conflict = first_i_conflict;
+          this_robots_last_conflict = last_i_conflict;
+          found_this_robots_conflicts = true;
+        }
+        else if(j == this_agent_id)
+        {
+          this_robots_first_conflict = first_j_conflict;
+          this_robots_last_conflict = last_j_conflict;
+          found_this_robots_conflicts = true;
+        }
+      }
+    }
+  }
+
+  if(max_x_first_only > max_x_last_only)
+    max_x = max_x_first_only;
+  else
+    max_x = max_x_last_only;
+
+  if(max_y_first_only > max_y_last_only)
+    max_y = max_y_first_only;
+  else
+    max_y = max_y_last_only;
+
+  if(min_x_first_only < min_x_last_only)
+    min_x = min_x_first_only;
+  else
+    min_x = min_x_last_only;
+
+  if(min_y_first_only < min_y_last_only)
+    min_y = min_y_first_only;
+  else
+    min_y = min_y_last_only;
+
+
+  if( (max_x - min_x <= preferred_planning_area_side_length) && 
+      (max_y - min_y <= preferred_planning_area_side_length) ) // then we can just use first and last intersect as start and goal
+  {
+    printf("use first and last conflicts as start and goal");
+
+    if(found_this_robots_conflicts)
+    {
+      sub_start = this_robots_first_conflict;
+      sub_goal = this_robots_last_conflict;
+      return true;
+    }
+    else
+    {
+       // this should never happen
+       printf("no conflicts found?\n");
+       return false;
+    }
+  }
+
+  // if we are here than planning area based on first and last conflicts is too big
+
+  // start planning area based on first conflicts only, then expand
+  float planning_area_min_x = min_x_first_only;
+  float planning_area_max_x = max_x_first_only;
+  float planning_area_min_y = min_y_first_only;
+  float planning_area_max_y = max_y_first_only;
+
+  // now, per dimension, expand proportionally toward bounds set by last conflicts
+
+  // x direction
+  float x_dist_used = planning_area_max_x - planning_area_min_x;
+  float x_dist_remaining = preferred_planning_area_side_length - x_dist_used;
+
+  if(x_dist_remaining > 0)
+  {
+    float x_left = planning_area_min_x - min_x_last_only;
+    if(x_left < 0)
+      x_left = 0;
+ 
+    float x_right = max_x_last_only - planning_area_max_x;
+    if(x_left > 0)
+      x_left = 0;
+
+    float x_dist_desired = x_left + x_right;
+
+    if(x_dist_desired > 0)
+    {
+      if(x_dist_desired < x_dist_remaining) // there is enough distance reminaing to give all distance that is desired
+      {
+        planning_area_min_x -= x_left;
+        planning_area_max_x += x_right;
+      }
+      else // not enough distance remaining to give all distance that is desired
+      {
+        float ratio_we_can_give = x_dist_remaining/x_dist_desired;
+        planning_area_min_x -= x_left*ratio_we_can_give;
+        planning_area_max_x += x_right*ratio_we_can_give;
+      }
+    }   
+  }
+
+  // y direction
+  float y_dist_used = planning_area_max_y - planning_area_min_y;
+  float y_dist_remaining = preferred_planning_area_side_length - y_dist_used;
+
+  if(y_dist_remaining > 0)
+  {
+    float y_left = planning_area_min_y - min_y_last_only;
+    if(y_left < 0)
+      y_left = 0;
+ 
+    float y_right = max_y_last_only - planning_area_max_y;
+    if(y_left > 0)
+      y_left = 0;
+
+    float y_dist_desired = y_left + y_right;
+
+    if(y_dist_desired > 0)
+    {
+      if(y_dist_desired < y_dist_remaining) // there is enough distance reminaing to give all distance that is desired
+      {
+        planning_area_min_y -= y_left;
+        planning_area_max_y += y_right;
+      }
+      else // not enough distance remaining to give all distance that is desired
+      {
+        float ratio_we_can_give = y_dist_remaining/y_dist_desired;
+        planning_area_min_y -= y_left*ratio_we_can_give;
+        planning_area_max_y += y_right*ratio_we_can_give;
+      }
+    }   
+  }
+
+  // now we have a (soft) boundry, we will use first conflict point as start, 
+  // but need to calculate goal based on boundry and/or goals (NOTE using goal and not last conflict points)
+  // in order to insure that there will not be goal conflicts, need to calculate all robot's goals 
+  // (even though we trash this data and wait for other robots to send them later)
+
+  // use first conflict point as start 
+  sub_start = this_robots_first_conflict;
+
+  // remember which goals we need to set
+  vector<bool> sub_goal_found(max_num_robots, false);
+
+  // first pass, robot's with goals in planning area get priority
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    // check if robot i's goal is in the planning area, if so, then make sure that single robot path gets to it without exiting the planning area 
+    float goal_x = robot_paths[i][robot_paths[i].size()-1][0];
+    float goal_y = robot_paths[i][robot_paths[i].size()-1][1];
+
+    if( (planning_area_min_x <= goal_x && goal_x <= planning_area_max_x) &&
+        (planning_area_min_y <= goal_y && goal_y <= planning_area_max_y) ) // goal is in planning area
+    {
+      vector<float> exit_point;
+      if(!calculate_exit_point(robot_paths[i], first_conflicts[i], planning_area_min_x, planning_area_max_x, planning_area_min_y, planning_area_max_y, sub_goals, sub_goal_found, exit_point))
+      {
+        // if here then can get all the way to the goal without leaving the planning area, so use actual goal as sub_goal
+
+        if(i == this_agent_id)
+        {
+          // if i is this agent, then we are done
+          sub_goal = robot_paths[i][robot_paths[i].size()-1];
+          return true;
+        }
+
+        sub_goals[i] = robot_paths[i][robot_paths[i].size()-1];
+        sub_goal_found[i] = true;
+      }
+    }
+  }
+
+
+  // second pass, find goals for robots that do not yet have their goals set
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+    if(sub_goal_found[i])
+      continue;
+
+    vector<float> exit_point;
+    if(calculate_exit_point(robot_paths[i], first_conflicts[i], planning_area_min_x, planning_area_max_x, planning_area_min_y, planning_area_max_y, sub_goals, sub_goal_found, exit_point))
+    {
+      // if here then use exit_point as goal
+
+      if(i == this_agent_id)
+      {
+        // if i is this agent, then we are done
+        sub_goal = exit_point;
+        return true;
+      }
+
+      sub_goals[i] = exit_point;
+      sub_goal_found[i] = true;
+    }
+    else
+    {
+      // this should never happen
+      printf("unable to calculate sub goal?\n");
+    }
+  }
+
+  return false;
+}
+
+
 
