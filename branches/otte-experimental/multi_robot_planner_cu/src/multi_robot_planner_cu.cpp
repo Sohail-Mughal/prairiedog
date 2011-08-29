@@ -203,7 +203,7 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = true; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
-float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
+float team_combine_dist = 20;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
 float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
         
@@ -960,23 +960,7 @@ int main(int argc, char** argv)
 //   
 //   
   
-  
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+    
       printf("waiting for goal and/or pose \n");
       if(goal_pose == NULL)
       {
@@ -1155,24 +1139,21 @@ int main(int argc, char** argv)
     Globals.MAgSln = NULL;
     Globals.non_planning_yet = true;  
     Globals.master_reset = false;
-
-    Globals.start_coords.resize(0);
-    Globals.start_coords.resize(Globals.number_of_agents);
-    Globals.start_coords[0].resize(3, 0); 
-    
-    Globals.start_coords[0][0] = robot_pose->x;
-    Globals.start_coords[0][1] = robot_pose->y;
-    Globals.start_coords[0][2] = robot_pose->alpha;
-
-    Globals.goal_coords.resize(0);
-    Globals.goal_coords.resize(Globals.number_of_agents);
       
     Globals.have_calculated_start_and_goal = false;
 
     // kick off sender threads
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
 
-    // need to calculate own goals based on limited sub-region if there are other robots in team
+
+    // reset start and goal data
+    Globals.start_coords.resize(0);
+    Globals.start_coords.resize(Globals.number_of_agents);
+
+    Globals.goal_coords.resize(0);
+    Globals.goal_coords.resize(Globals.number_of_agents);
+
+    // need to calculate own start and goals based on limited sub-region if there are other robots in team
     if(Globals.team_size > 1)
     {
       // do message passing (in sender thread) until we have everybody's updated prefered single robot paths
@@ -1182,71 +1163,72 @@ int main(int argc, char** argv)
         sleep(1);
       }
 
-      // look at this agent's single path vs other agent's single paths 
-      for(int tm = 1; tm < Globals.team_size; tm ++)
+      // look at this agent's single path vs other agent's single paths and 
+      // calculate start and goal for this agent based on intersections with other agents
+
+      vector<float> sub_start;
+      vector<float> sub_goal;
+      Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
+      float preferred_min_planning_area_side_length = 1;
+      float preferred_max_planning_area_side_length = 1;
+      float accuracy_resolution = .05;
+
+      printf("calculating sub_start and sub_goals \n");
+
+      if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
+                            preferred_min_planning_area_side_length,  preferred_max_planning_area_side_length, 
+                            robot_radius*2, accuracy_resolution, sub_start, sub_goal) )
       {
-        int global_ag_id = Globals.global_ID[tm];
+        // if here then sub_start and sub_goal have changed
+        printf("new sub area \n");
 
-        // only used for error checking
-        printf("agent %d is in my team \n their path is:\n", global_ag_id);
-        for(int i = 0; i < Globals.other_robots_single_solutions[global_ag_id].size(); i++)
-        {
-          for(int j = 0; j < Globals.other_robots_single_solutions[global_ag_id][i].size(); j++)
-            printf("%f, ", Globals.other_robots_single_solutions[global_ag_id][i][j]);
-          printf("\n");
-        }
+        Globals.start_coords[0].resize(3, 0); 
+        Globals.start_coords[0][0] = sub_start[0];
+        Globals.start_coords[0][1] = sub_start[1];
+        Globals.start_coords[0][2] = 0;
 
+        Globals.goal_coords[0].resize(3,0); 
+        Globals.goal_coords[0][0] = sub_goal[0];
+        Globals.goal_coords[0][1] = sub_goal[1];
+        Globals.goal_coords[0][2] = 0;
 
+        Globals.use_sub_sg = true;
+      }
+      else if(Globals.use_sub_sg)
+      {
+        printf("old sub area \n");
 
+        // continue using old sub_start and sub_goal (which we have saved)
+        Globals.start_coords[0].resize(3, 0); 
+        Globals.start_coords[0][0] = sub_start[0];
+        Globals.start_coords[0][1] = sub_start[1];
+        Globals.start_coords[0][2] = 0;
 
-        
-
-
-
-
-
-
-
-        // calculate start and goal based on intersections with agent global_ag_id
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // compare to what we already have and choose most conservative
-
-
-
-
+        Globals.goal_coords[0].resize(3,0); 
+        Globals.goal_coords[0][0] = sub_goal[0];
+        Globals.goal_coords[0][1] = sub_goal[1];
+        Globals.goal_coords[0][2] = 0;
       }
 
-
-      // the following gets replaced with the most conservative goal based on above calculations
-      Globals.goal_coords[0].resize(3,0); 
-      Globals.goal_coords[0][0] = goal_pose->x;
-      Globals.goal_coords[0][1] = goal_pose->y;
-      Globals.goal_coords[0][2] = goal_pose->alpha;
-
       // NOTE adjust bounds to take care of min planning region size based on huristic when we actually calculate min bounds and size
-
+      // NOTE remember to change single robot path to reflect group solution once a group solution is found
+      // NOTE also need to get this data to the controller (path-follower)
     }
-    else
+
+    printf("here 123 \n");
+    if(!Globals.use_sub_sg) // are not using 
     {
+      printf("default sub area \n");
+
       Globals.goal_coords[0].resize(3,0); 
       Globals.goal_coords[0][0] = goal_pose->x;
       Globals.goal_coords[0][1] = goal_pose->y;
       Globals.goal_coords[0][2] = goal_pose->alpha;
+
+      Globals.start_coords[0].resize(3,0); 
+      Globals.start_coords[0][0] = robot_pose->x;
+      Globals.start_coords[0][1] = robot_pose->y;
+      Globals.start_coords[0][2] = robot_pose->alpha;
     }
 
     printf("My IP: %s\n",Globals.my_IP);
@@ -1258,6 +1240,11 @@ int main(int argc, char** argv)
       printf("%d, ", Globals.planning_iteration[i]);
     printf("----------\n ");
     
+    if(Globals.master_reset)
+      printf("master_reset = true \n");
+    else
+      printf("master_reset = false \n");
+
     // remember the start time
     start_time = clock();
     now_time = clock();
@@ -1536,7 +1523,17 @@ int main(int argc, char** argv)
     if(!Globals.found_single_robot_solution)
     {
       // now save the single robot solution
+
       Globals.single_robot_solution = MultAgSln.BestSolution;
+
+      // take into account the bounding region
+      for(int p = 0; p < Globals.single_robot_solution.size(); p++)
+      {
+        Globals.single_robot_solution[p][0] += Globals.team_bound_area_min[0];
+        Globals.single_robot_solution[p][1] += Globals.team_bound_area_min[1];
+      }
+
+
       Globals.found_single_robot_solution = true;
 
       if(Globals.master_reset)

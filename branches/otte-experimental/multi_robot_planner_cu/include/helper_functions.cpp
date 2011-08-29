@@ -873,7 +873,7 @@ bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_confli
     if(found_obstacle_forward_conflict)
     {
       bool found_robot_forward_point_conflict = false;
-      for(int i = 0; i < obstacle_forward_conflicts.size(); i++)
+      for(uint i = 0; i < obstacle_forward_conflicts.size(); i++)
       {
         if(edge_and_point_conflict(point, obstacle_forward_conflicts[i], robot_rad, resolution))
         {    
@@ -901,7 +901,7 @@ bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_confli
     if(found_obstacle_backward_conflict)
     {
       bool found_robot_forward_point_conflict = false;
-      for(int i = 0; i < obstacle_backward_conflicts.size(); i++)
+      for(uint i = 0; i < obstacle_backward_conflicts.size(); i++)
       {
         if(edge_and_point_conflict(point, obstacle_backward_conflicts[i], robot_rad, resolution))
         {    
@@ -958,7 +958,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
   // robot_path forward direction:
 
   // for each edge in the robot path, check if it conflicts with the obstacle path
-  for(int i = 0; i < robot_path.size()-1; i++)
+  for(uint i = 0; i < robot_path.size()-1; i++)
   {
     if(EdgeSafe(robot_path[i], robot_path[i+1], 0, obstacle_path_list, robot_rad))
       continue;
@@ -973,7 +973,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
     {
       // save distance up until start of conflict edge for later use
       dist_to_first_r_conflict = 0;
-      for(int j = 0; j <= i; j++)
+      for(uint j = 0; j <= i; j++)
         dist_to_first_r_conflict += euclid_dist(robot_path[j], robot_path[j+1]);
 
       found_robot_forward_conflict = true;
@@ -983,7 +983,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
   // robot_path backward direction:
 
   // for each edge in the robot path, check if it conflicts with the obstacle path
-  for(int i = robot_path.size()-1; i > 0; i--)
+  for(uint i = robot_path.size()-1; i > 0; i--)
   {
     if(EdgeSafe(robot_path[i], robot_path[i-1], 0, obstacle_path_list, robot_rad))
       continue;
@@ -998,7 +998,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
     {
       // save distance up until start of conflict edge for later use
       dist_to_last_r_conflict = 0;
-      for(int j = i; j < robot_path.size()-1; j++)
+      for(uint j = i; j < robot_path.size()-1; j++)
         dist_to_last_r_conflict += euclid_dist(robot_path[j], robot_path[j+1]);
 
       found_robot_backward_conflict = true;
@@ -1008,7 +1008,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
   // obstacle_path forward direction:
 
   // for each edge in the obstacle path, check if it conflicts with the robot path
-  for(int i = 0; i < obstacle_path.size()-1; i++)
+  for(uint i = 0; i < obstacle_path.size()-1; i++)
   {
     if(EdgeSafe(obstacle_path[i], obstacle_path[i+1], 0, robot_path_list, robot_rad))
       continue;
@@ -1023,7 +1023,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
     {
       // save distance up until start of conflict edge for later use
       dist_to_first_o_conflict = 0;
-      for(int j = 0; j <= i; j++)
+      for(uint j = 0; j <= i; j++)
         dist_to_first_o_conflict += euclid_dist(obstacle_path[j], obstacle_path[j+1]);
 
       found_obstacle_forward_conflict = true;
@@ -1034,7 +1034,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
   // obstacle_path backward direction:
 
   // for each edge in the obstacle path, check if it conflicts with the robot path
-  for(int i = obstacle_path.size()-1; i > 0; i--)
+  for(uint i = obstacle_path.size()-1; i > 0; i--)
   {
     if(EdgeSafe(obstacle_path[i], obstacle_path[i-1], 0, robot_path_list, robot_rad))
       continue;
@@ -1049,7 +1049,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
     {
       // save distance up until start of conflict edge for later use
       dist_to_last_o_conflict = 0;
-      for(int j = i; j < obstacle_path.size()-1; j++)
+      for(uint j = i; j < obstacle_path.size()-1; j++)
         dist_to_last_o_conflict += euclid_dist(obstacle_path[j], obstacle_path[j+1]);
 
       found_obstacle_backward_conflict = true;
@@ -1191,6 +1191,7 @@ int find_edge_containing_point(const vector<vector<float> > & robot_path, const 
   {
     float edge_length = euclid_dist(robot_path[i], robot_path[i+1]);
     float dist_to_point = euclid_dist(robot_path[i], point);
+
 
     // check if dist_to_point along edge is approximatly start_point
     vector<float> approx_p(2);
@@ -1497,7 +1498,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   }
   else
   {
-    printf("didn't find conflicts \n");
+    printf("didn't find this agent's conflicts, so use normal start and goal, %d\n", robot_paths.size());
+    return false;
   }
 
   // see if path sub-sections between each robot's first and last conflict fit within the preferred planning area, 
@@ -1521,6 +1523,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     vector<float> last_path_point;
 
     // find the edge containing the first conflict
+    //printf("%d %d %d %d\n", robot_paths.size(), first_conflicts.size(), r, first_conflicts[r].size());
     int edge_first = find_edge_containing_point(robot_paths[r], first_conflicts[r], first_path_point);
 
     if(edge_first == -1)
@@ -1529,7 +1532,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       printf("hmmm this should not happen 1\n");
       return false;
     }
-     
+
     ind_of_current_edges[r] = edge_first;
     current_point[r] = first_path_point;
 
@@ -1597,6 +1600,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       {
         sub_start = this_robots_first_conflict;
         sub_goal = this_robots_last_conflict;
+        printf("returning true 1\n");
         return true;
       }
       else
@@ -1610,6 +1614,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     // if we are here then we need to expand the planning area up to the minimum size
     need_to_expand_up_to_maximum = true;
   }
+
 
   // if we are here than planning area based on first and last conflicts is too big or we need to expand the planning area up to the minimum size, so we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
 
@@ -1690,7 +1695,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         i++;
 
         // check if we've reached the end of the final edge
-        if(i >= robot_paths[r].size() - 1) // reached this robot's goal
+        if(i >= (int)robot_paths[r].size() - 1) // reached this robot's goal
         {
           at_goal[r] = true;
           break;
@@ -1813,8 +1818,10 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   }
 
   if(!sub_goal_found[this_agent_id])
+  {
+    printf("returning false 12\n");
     return false;
-
+  }
 
   // find sub start:
 
@@ -1864,6 +1871,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       {
         // if i is this agent, then we are done
         sub_start = robot_paths[i][0];
+        printf("returning true 2\n");
         return true;
       }
     }
@@ -1889,7 +1897,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       {
         // if i is this agent, then we are done
         sub_start = entrance_point;
-        break;
+         printf("returning true 2.5\n");
+        return true;
       }
     }
     else
@@ -1898,10 +1907,14 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       printf("unable to calculate sub start?\n");
 
       if(i == this_agent_id)
+      {
         return true;
+        printf("returning true 3\n");
+      }
     }
   }
 
+  printf("returning false 3\n");
   return false;
 }
 
