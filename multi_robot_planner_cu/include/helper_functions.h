@@ -61,3 +61,34 @@ int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer); // a
 
 int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer); // extracts a 2d vector from buffer and places it in v, returns the size that was used in buffer in chars
 
+// returns the 2D eudlidian distance between two points (using first 2 dims)
+float euclid_dist(const vector<float> & A, const vector<float> &B);
+
+// helps the function below, returns true of the point is within robot_rad of the edge to within resolution
+bool edge_and_point_conflict(const vector<float> & point, const vector<vector<float> > & edge, float robot_rad, float resolution);
+
+// used in the function below
+bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_conflict, 
+                             const vector<vector<vector<float> > > & obstacle_forward_conflicts,
+                             const vector<vector<vector<float> > > & obstacle_backward_conflicts,
+                             bool found_obstacle_forward_conflict,
+                             bool found_obstacle_backward_conflict,
+                             vector<float> & robot_forward_point_conflict, 
+                             float robot_rad, float resolution);
+
+// finds the first and last conflict (with respect to robot path) between robot path and obstacle path. Edges are check at resolution, and conflicts take into account robot rad. Returns true if there is a conflict, else false
+bool find_conflict_points(const vector<vector<float> > &robot_path, const vector<vector<float> > &obstacle_path, float robot_rad, float resolution, vector<float> &first_r_conflict,  float &dist_to_first_r_conflict,
+vector<float> &last_r_conflict, float &dist_to_last_r_conflict,
+vector<float> &first_o_conflict, float &dist_to_first_o_conflict,  
+vector<float> &last_o_conflict,  float &dist_to_last_o_conflict);
+
+// find edge that mot likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
+int find_edge_containing_point(const vector<vector<float> > & robot_path, const vector<float> & point, vector<float> & best_point_found);
+
+// given data about a robot's path, start point along that path, and a planning region, this returns the last point along the path in the region
+// also handles conflicts with existing sub-goals in case that point is already used (note, may put slightly out of region in that case)
+bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, const vector<vector<float> > sub_goals, const vector<bool> & sub_goal_found, float robot_rad, float resolution, vector<float> & exit_point);
+
+// calculates the sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal
+bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_min_planning_area_side_length, float preferred_max_planning_area_side_length, float robot_rad, float resolution, vector<float> & sub_start, vector<float> & sub_goal);
+

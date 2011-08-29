@@ -110,4 +110,6 @@ class GlobalVariables
    vector<int> planning_iteration_single_solutions; // holds the associated planning iteration of other_robots_single_solutions 
 
    bool have_calculated_start_and_goal;  // gets set to true when we calculate this agent's start and goal
+
+   bool use_sub_sg; // gets set to true if we need to use sub_start and sub_goal instead of start and goal
 };

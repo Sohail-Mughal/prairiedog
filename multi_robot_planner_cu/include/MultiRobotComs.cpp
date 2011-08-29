@@ -52,7 +52,9 @@ void GlobalVariables::Populate(int num_of_agents)
   MasterInPort = 57001;
   MasterOutPort = 57002;
 
+  have_info.resize(0);
   have_info.resize(number_of_agents, 0);   // gets set to 1 when we get an agent's info
+  agent_ready.resize(0);
   agent_ready.resize(number_of_agents, 0); // gets set to 1 when we get an agent's info
   other_addresses.resize(number_of_agents);
 
@@ -101,6 +103,7 @@ void GlobalVariables::Populate(int num_of_agents)
   planning_iteration_single_solutions.resize(number_of_agents, -1);
 
   have_calculated_start_and_goal = false;
+  use_sub_sg = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -296,6 +299,7 @@ void GlobalVariables::recover_ips_from_buffer(char* buffer) // gets everybody's 
 
 int GlobalVariables::populate_buffer_with_single_robot_paths(char* buffer) // puts single robot paths in buffer, returns the number of chars that it required
 {
+  //printf("populating buffer with paths \n");
   int index = 0;
 
   buffer[index] = 'V';
@@ -818,6 +822,9 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
 bool GlobalVariables::have_all_team_single_paths()         // returns true if we have all team members current single paths, else false
 {
 
+  if(global_ID.size()< 1 || planning_iteration.size() < 1)
+    return false;
+
   printf("%d[%d]", global_ID[0], planning_iteration[global_ID[0]]);
 
   for(int tm = 1; tm < team_size; tm ++)
@@ -1243,6 +1250,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         for(int i = 0; i < G->team_size; i++)
           printf("%d(%d), ", G->global_ID[i], G->have_info[i]);
         printf("\n"); 
+        sleep(1);
       }
     
       memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
@@ -1425,7 +1433,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         }
         else if(planning_message_buffer[message_ptr] == 4)
         {
-          printf("recieved prefered path exchange message\n");
+          //printf("recieved prefered path exchange message\n");
         }
         else if(planning_message_buffer[message_ptr] != '\0')   
         {
