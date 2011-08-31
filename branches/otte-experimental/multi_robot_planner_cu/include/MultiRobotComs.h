@@ -112,4 +112,7 @@ class GlobalVariables
    bool have_calculated_start_and_goal;  // gets set to true when we calculate this agent's start and goal
 
    bool use_sub_sg; // gets set to true if we need to use sub_start and sub_goal instead of start and goal
+
+   bool an_agent_needs_this_single_path_iteration; // gets set to true if another agent is incorrect about this robot's single robot path iteration
+                                                   // gets set to false after a hard broadcast of that data
 };

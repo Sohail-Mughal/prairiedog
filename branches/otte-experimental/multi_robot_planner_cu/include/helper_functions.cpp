@@ -338,7 +338,7 @@ void double_up_points(const vector<vector<float> >& V1, vector<vector<float> >& 
   } 
 }
 
-void extract_and_translate_solution(vector<vector<float> >& AgentSolution, vector<vector<float> >& MultiSolution, vector<float>& Translation, int agent_id, int dims) // extracts the agent solution if agent_id where dims is the workspace dimensions and Translate holds the inverse ammount to translate along each
+void extract_and_translate_solution(vector<vector<float> >& AgentSolution, vector<vector<float> >& MultiSolution, vector<float>& Translation, int agent_id, int dims) // extracts the agent solution of agent_id where dims is the workspace dimensions and Translate holds the inverse ammount to translate along each
 {
   // make sure solution lengths are the same
   AgentSolution.resize(MultiSolution.size());
@@ -1179,7 +1179,7 @@ vector<float> &last_o_conflict,  float &dist_to_last_o_conflict)
 }
 
 
-// find edge that mot likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
+// find edge that most likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
 int find_edge_containing_point(const vector<vector<float> > & robot_path, const vector<float> & point, vector<float> & best_point_found)
 {
   vector<float> best_point;

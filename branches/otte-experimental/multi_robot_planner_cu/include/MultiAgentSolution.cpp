@@ -1365,8 +1365,15 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     
     // add header data about robot start and goal locations
     int sp = Gbls->populate_buffer_with_data(out_buffer); // sp points to the current position in the string
-    
-    
+
+    // add single robot path data if it is needed        
+    if(Gbls->an_agent_needs_this_single_path_iteration)
+    {
+      //printf("here 6 \n");
+      sp += Gbls->populate_buffer_with_single_robot_paths((char*)((size_t)out_buffer + (size_t)sp));
+      Gbls->an_agent_needs_this_single_path_iteration = false;
+    }
+
     if(BestSolution.size() < 1)
     {
       //printf(" sending here ! \n");
