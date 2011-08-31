@@ -89,7 +89,7 @@ void GlobalVariables::Populate(int num_of_agents)
   angular_resolution = .3;
   planning_border_width = 1;
   
-  master_reset = false;
+  master_reset = true;
   kill_master = false;
   done_planning = false;
   
@@ -104,6 +104,7 @@ void GlobalVariables::Populate(int num_of_agents)
 
   have_calculated_start_and_goal = false;
   use_sub_sg = false;
+  an_agent_needs_this_single_path_iteration = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -407,20 +408,21 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   int index = 0;  
 
   // add this agent's prefered path
-  if(found_single_robot_solution)
-  { 
+  //if(found_single_robot_solution)
+  //{ 
+  //  while(buffer[index] != '\0')
+  //    index++;
+  //
+  // // add single robot prefered paths to buffer
+  // printf("here 1 \n");
+  // index += populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)index));
+  //
+  //}
+  //else
+  //{
     while(buffer[index] != '\0')
       index++;
-
-   // add single robot prefered paths to buffer
-   index += populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)index));
-
-  }
-  else
-  {
-    while(buffer[index] != '\0')
-      index++;
-  }
+  //}
 
   return index;
 }
@@ -615,8 +617,6 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
       planning_iteration[agent_number]++; // the problem has changed, so update our planning iteration number
       
       master_reset = true;   
-printf(" ---- a \n");
-
       return overlap;
     }
         
@@ -685,9 +685,6 @@ printf(" ---- a \n");
             {
               planning_iteration[agent_number]++;
               master_reset = true;
-              
-                  printf("--- b \n");
-              
             }
           } 
           
@@ -822,25 +819,25 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
 bool GlobalVariables::have_all_team_single_paths()         // returns true if we have all team members current single paths, else false
 {
 
-  if(global_ID.size()< 1 || planning_iteration.size() < 1)
+  if(global_ID.size()< 1 || planning_iteration_single_solutions.size() < 1)
     return false;
 
-  printf("%d[%d]", global_ID[0], planning_iteration[global_ID[0]]);
+  //printf("%d[%d]", global_ID[0], planning_iteration_single_solutions[global_ID[0]]);
 
   for(int tm = 1; tm < team_size; tm ++)
   {
     int glbl_id = global_ID[tm];
 
-    printf("%d[%d]", glbl_id, planning_iteration[glbl_id]);
+    //printf("%d[%d]", glbl_id, planning_iteration_single_solutions[glbl_id]);
 
-    if(planning_iteration_single_solutions[glbl_id] < planning_iteration[agent_number])
+    if(planning_iteration_single_solutions[glbl_id] < planning_iteration_single_solutions[agent_number])
     {
-      printf(" f \n");
+      //printf(" f \n");
       return false;
     }
   }
 
-  printf(" t \n");
+  //printf(" t \n");
   return true;
 }
 
@@ -1215,12 +1212,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
     
   in_port = G->InPorts[G->agent_number];    
 
-  printf("ad-hoc listener thread\n"); 
+  printf("(listener) ad-hoc listener thread\n"); 
   
   // create socket
   in_socket = socket(AF_INET, SOCK_DGRAM, 0);
   if(in_socket < 0)  // failed to open socket
-    error("Problems opening socket\n");
+    error("(listener) Problems opening socket\n");
   
   // clear all memory of my_address structure
   my_address_length = sizeof(my_address);
@@ -1233,7 +1230,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   
   // bind in_socket with my_address
   if(bind(in_socket, (struct sockaddr *)&my_address, my_address_length)<0) 
-    error("problems binding in_socket");
+    error("(listener) problems binding in_socket");
   
   senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
 
@@ -1241,29 +1238,38 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           
   while(!G->kill_master)
   {
+    if(G->master_reset)
+    {
+      printf("(listener) sleeping due to master_reset \n");
+      sleep(1);
+    }
+
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
     {  
-      if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+      //printf("(listener) pulse\n");
+
+      if(!Globals.have_all_team_single_paths())
       {
-        printf("listining for start/goal from other agents \n");   
-        printf("so far, team includes: ");
+        printf("(listener) listening for single robot paths from other robots \n");
+      }
+      else if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+      {
+        printf("(listener) listining for start/goal from other agents \n");   
+        printf("(listener) so far, team includes: ");
         for(int i = 0; i < G->team_size; i++)
           printf("%d(%d), ", G->global_ID[i], G->have_info[i]);
         printf("\n"); 
-        sleep(1);
       }
     
       memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
       message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
 
-      //printf("here 11 %d\n", message_length);
-    
       int message_ptr = 0;
       if(message_length < 0) 
-        printf("had problems getting a message \n");
+        printf("(listener) had problems getting a message \n");
       else  // the sending computer's info is in senders_address
       {   
-        //printf("Received data: %c\n", (char)planning_message_buffer[message_ptr]);
+        //printf("(listener) Received data: %c\n", (char)planning_message_buffer[message_ptr]);
         
         bool overlapping = false;
         if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
@@ -1291,31 +1297,34 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           int pln_itr;
           message_ptr += extract_int_from_buffer(pln_itr, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
 
-          //printf("extract maybe? %d[%d] \n", ag_gbl_id, pln_itr);
+          printf("(listener) extract maybe? %d[%d] \n", ag_gbl_id, pln_itr);
+
+          if(ag_gbl_id == G->agent_number) // what the sending agent thinks about this agent
+          {
+            if(pln_itr < G->planning_iteration_single_solutions[G->agent_number]) // the sending agent is incorrect about this agent's iteration
+            {
+              printf("(listener) another agent is incorrect about (my) planning iteration \n");
+              G->an_agent_needs_this_single_path_iteration = true;
+            }
+
+          }
 
           if(pln_itr > G->planning_iteration_single_solutions[ag_gbl_id])
           {
-            if(pln_itr > G->planning_iteration_single_solutions[G->agent_number])
+            if(pln_itr > G->planning_iteration_single_solutions[G->agent_number] && G->InTeam[ag_gbl_id])
             {
                G->planning_iteration_single_solutions[G->agent_number] = pln_itr; 
             }
 
-            //printf("here here here here here 1\n");
             G->planning_iteration_single_solutions[ag_gbl_id] = pln_itr;
- 
-            //printf("here here here here here 2\n"); 
             message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
 
-            //printf("here here here here here 3\n");
- 
             //printf("extracted agent %d prefered path \n", ag_gbl_id);
          
             // NOTE, this agent's path will never be used from other_robots_single_solutions, so ok to extract it to here
           }
           else // old planning iteration
           {
-            //printf("there there there there there \n");
-
             // extract to temp to advance in buffer 
             vector<vector<float> > temp;
             message_ptr += extract_2d_vector_from_buffer(temp, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
@@ -1344,7 +1353,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           else if( agent_sending < 1000)       
             message_ptr += 3;
           else
-            printf("error: agent id >= 1000 \n");
+            printf("(listener) error: agent id >= 1000 \n");
      
           //printf("recieved message from agent %d:\n%c\n", agent_sending, &(planning_message_buffer[message_ptr]));
           if(agent_sending < 0)
@@ -1379,7 +1388,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
             if(ofp == NULL) // problem opening file
             {
-              printf("cannot open message file for writing\n");
+              printf("(listener) cannot open message file for writing\n");
               continue;
             }
               
@@ -1388,7 +1397,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           }
           else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
           {
-            printf("waiting while things reset \n"); 
+            printf("(listener) waiting while things reset \n"); 
           }
           //else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
           else if(G->InTeam[agent_sending] && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
@@ -1402,17 +1411,15 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
           
             //printf("attempting to open: %s \n",this_file);
-            //          printf("here 33.2 \n");
-                    
+       
             FILE* ofp = fopen(this_file,"w");
             //               printf("here 33.3 \n");
             if(ofp == NULL) // problem opening file
             {
-              printf("cannot open message file for writing\n");
+              printf("(listener) cannot open message file for writing\n");
               continue;
             }
-            //    printf("here 44 \n");
-              
+
             fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
             fclose(ofp);
           
@@ -1421,14 +1428,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
               // mark that this agent is planning
               G->agent_ready[G->local_ID[agent_sending]] = 1;
             }
-            //    printf("here 55 \n");
           }
           //else
             //printf("s:%d (d)  <?   %d \n", agent_sending, (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size()));
         }
         else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
         {
-          //          printf("here 66 \n");
           G->kill_master = true;
         }
         else if(planning_message_buffer[message_ptr] == 4)
@@ -1437,13 +1442,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         }
         else if(planning_message_buffer[message_ptr] != '\0')   
         {
-          printf("recieved unknown message type ---------------\n%s\n",  &(planning_message_buffer[message_ptr]));    
+          printf("(listener) recieved unknown message type --\n%s\n",  &(planning_message_buffer[message_ptr]));    
         }
-          //      printf("here 77 \n");
       }     
-        // printf("here 88 \n");
     }
-       // printf("here 99 \n");
   }
   
   // this thread terminates
@@ -1451,69 +1453,96 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 }
 
 // this thread sends this robot's data to other robots durring the start up sync phase, then terminates
+// also terminates on master_reset = true
 void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 {
   GlobalVariables* G = (GlobalVariables*)inG;  
   char buffer[max_message_size];    
    
-  printf("ad-hoc sender start-up thread \n");  
+  printf("(startup sender) ad-hoc sender start-up thread \n");  
 
   // create an outgoing socket
   G->my_out_sock = socket(AF_INET, SOCK_DGRAM, 0); 
   if(G->my_out_sock < 0)        // failed to create socket
-    error("problems creating socket");
+    error("(startup sender) problems creating socket");
 
   clock_t start_wait_t, now_time;
 
   // while we don't have all the other robots individual prefered paths
-  while(!G->have_all_team_single_paths())
+  while(!G->have_all_team_single_paths() && !G->master_reset)
   {
     if(G->team_size <= 1)  // if only 1 robot in team, then can break out here
       break;
 
     // send all prefered paths we know about
 
+    //printf("here 2 \n");
     int index = G->populate_buffer_with_single_robot_paths(buffer);
 
-    buffer[index] = 4;    
+    buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
     index++;
 
     G->hard_broadcast((void *)buffer, sizeof(char) * index);
 
-    //printf("waiting until we know all team members single paths\n");
+    printf("(startup sender) waiting until we know all team members single paths\n");
     start_wait_t = clock();
     now_time = clock();
     while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
       now_time = clock(); 
   }
 
+  printf("(startup sender) have all robot's single paths \n");
+
   while(!G->have_calculated_start_and_goal && !G->master_reset)
   {
     // wait until we have calculated the start and goal
 
-    printf("waiting to calculate this agents start and goal\n");
-    sleep(1);
+    if(G->an_agent_needs_this_single_path_iteration) // some agent is incorrect about this agent's single robot path planning iteration
+    {
+      // send all prefered paths we know about
+
+      //printf("here 3 \n");
+      int index = G->populate_buffer_with_single_robot_paths(buffer);
+
+      buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
+      index++;
+
+      G->hard_broadcast((void *)buffer, sizeof(char) * index);
+      G->an_agent_needs_this_single_path_iteration = false;
+    }
+
+    printf("(startup sender) waiting to calculate this agents start and goal\n");
+    start_wait_t = clock();
+    now_time = clock();
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->an_agent_needs_this_single_path_iteration)
+      now_time = clock(); 
   }
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
   {   
     printf("here -0- %d\n", max_message_size);
         
-    G->populate_buffer_with_data(buffer);
+    int final_index = G->populate_buffer_with_data(buffer);
+    if(G->an_agent_needs_this_single_path_iteration)
+    {
+      //printf("here 4 \n");
+      final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
+      G->an_agent_needs_this_single_path_iteration = false;
+    }
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
     start_wait_t = clock();
     now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration)
       now_time = clock(); 
     
-    printf("waiting for agent start and goal coords -(sending data)- \n");
+    printf("(startup sender) waiting for agent start and goal coords -(sending data)- \n");
   }
-  printf("we have min number of start and goal locations to start planning\n");  
+  printf("(startup sender) we have min number of start and goal locations to start planning\n");  
   
   if(G->master_reset)
   {
-    printf("sender thread exiting due to master reset 1 \n");
+    printf("(startup sender) sender thread exiting due to master reset 1 \n");
     return NULL;
   }
   
@@ -1523,24 +1552,30 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   while(!G->all_team_ready_to_plan() && !G->master_reset) // until the rest of the team is ready to plan
   {       
     printf("here -1-, %d\n", max_message_size);
-    G->populate_buffer_with_data(buffer);
+    int final_index = G->populate_buffer_with_data(buffer);
+    if(G->an_agent_needs_this_single_path_iteration)
+    {
+      //printf("here 5 \n");
+      final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
+      G->an_agent_needs_this_single_path_iteration = false;
+    }
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
     start_wait_t = clock();
     now_time = clock();
     
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
+    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration)
       now_time = clock(); 
   }
   
   if(G->master_reset)
   {
-    printf("sender thread exiting due to master reset 2 \n");
+    printf("(startup sender) sender thread exiting due to master reset 2 \n");
     return NULL;
   }
   
   // now we know the team is all planning, so we exit this thread
-  printf("all members of team are planning, exiting ad-hoc sender startup thread \n"); 
+  printf("(startup sender) all members of team are planning, exiting ad-hoc sender startup thread \n"); 
   
   return NULL;
 } 

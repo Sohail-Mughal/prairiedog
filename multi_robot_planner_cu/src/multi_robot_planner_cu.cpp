@@ -214,6 +214,10 @@ float change_plase_thresh = .001; // if start or goal change less than this, the
 vector<vector<float> > free_space;  // holds freespace points to resolution of bitmap map
 #endif
 
+bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then this gets set to true, and min_planning_time is adjusted based on circumstance
+float plan_time_mult = 3;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
+float smart_min_time_to_plan = 5; // if(use_smart_plan_time) then plan for at least smart_min_time_to_plan
+
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
 {
@@ -412,8 +416,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   //print_pose(goal_pose);
   new_goal = true;
 
-  Globals.master_reset = true;
-      printf("--- c \n");
+  Globals.master_reset = true; // goal change, so reset
   change_token_used = false;
 }
 
@@ -473,8 +476,6 @@ void publish_global_path(const vector<vector<float> >& path, const vector<float>
 
 void publish_system_update(int data)
 {
-   //printf("--- 4 \n");   
-    
   std_msgs::Int32 msg;  
   
   msg.data = data;
@@ -913,6 +914,13 @@ int main(int argc, char** argv)
   
   printf("I am agent #%d of %d, and can plan for %f seconds\nmessages sent with probability %f\nmessage_wait_time: %f, sync_message_wait_time: %f\n", agent_number, total_agents, min_clock_to_plan, prob_success, message_wait_time, sync_message_wait_time);
   
+  if(min_clock_to_plan <= 0) // use smart planning, where we plan for max(MX,N) where M and N are defined up near the top of this file
+  {
+     printf("using smart plan time with max(%f(first_sln_time), %f) \n", plan_time_mult, smart_min_time_to_plan);
+     use_smart_plan_time = true;
+  }
+
+
   // set up random number generator 
   time_t seed;
   time(&seed);
@@ -1014,7 +1022,7 @@ int main(int argc, char** argv)
   
   // each of the following loops is a complete planning cycle
   clock_t start_time, now_time, last_time;  
-  Globals.Populate(total_agents);
+  Globals.Populate(total_agents);  // sets master_reset to true, so globals are not used as they are being changed
       
   // enter into communication with other robots to get their start and goal positions
   
@@ -1073,16 +1081,26 @@ int main(int argc, char** argv)
   Globals.resolution = resolution;
   Globals.angular_resolution = angular_resolution;         
   Globals.planning_border_width = planning_border_width;
-  Globals.master_reset = false;
   
   // communication threads
   pthread_t Listener_thread, Sender_thread;
-  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages
+  pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages, will sleep when and as long as master_reset = true but not terminate
  
   while(!Globals.kill_master)
   {   
+    // at this point master_reset is true because globals may be changing and being reset, it will only be set to false lower down in this loop
+
+    // if using smart plan time then reset min time to plan
+    printf("-----------------------start of planning phase -----------------------\n");
+ 
+    if(use_smart_plan_time)
+    {
+      min_clock_to_plan = smart_min_time_to_plan;
+      printf("using smart plan time : %f \n", min_clock_to_plan);
+    }
+
     Globals.done_planning = false;
-    if(Globals.master_reset && robot_is_moving == true)
+    if(robot_is_moving) // master_reset = true while robot is moving
     {
       system(system_call);  // remove old files
       start_time = clock();
@@ -1138,13 +1156,13 @@ int main(int argc, char** argv)
     
     Globals.MAgSln = NULL;
     Globals.non_planning_yet = true;  
-    Globals.master_reset = false;
+    Globals.master_reset = false;  // now set master_reset to false indicating that "perminate" robot data in globals is stable
+                                   // this should be the only place in the code where master_reset is set to false
       
     Globals.have_calculated_start_and_goal = false;
 
     // kick off sender threads
-    pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots
-
+    pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots, will terminate on master_reset
 
     // reset start and goal data
     Globals.start_coords.resize(0);
@@ -1157,10 +1175,15 @@ int main(int argc, char** argv)
     if(Globals.team_size > 1)
     {
       // do message passing (in sender thread) until we have everybody's updated prefered single robot paths
-      while(!Globals.have_all_team_single_paths())
+      while(!Globals.have_all_team_single_paths() && !Globals.master_reset)
       {
         printf("waiting for other member's single paths\n");
         sleep(1);
+      }
+      if(Globals.master_reset)
+      {
+        printf("restarting planning -1\n");
+        continue;
       }
 
       // look at this agent's single path vs other agent's single paths and 
@@ -1215,7 +1238,6 @@ int main(int argc, char** argv)
       // NOTE also need to get this data to the controller (path-follower)
     }
 
-    printf("here 123 \n");
     if(!Globals.use_sub_sg) // are not using 
     {
       printf("default sub area \n");
@@ -1240,11 +1262,6 @@ int main(int argc, char** argv)
       printf("%d, ", Globals.planning_iteration[i]);
     printf("----------\n ");
     
-    if(Globals.master_reset)
-      printf("master_reset = true \n");
-    else
-      printf("master_reset = false \n");
-
     // remember the start time
     start_time = clock();
     now_time = clock();
@@ -1275,7 +1292,7 @@ int main(int argc, char** argv)
       continue;  // a team member has been added, need to restart planning with more dimensions
     }
     
-    printf("starting planning phase \n");
+    printf("--- start of actual planning ---\n");
   
     // this is where the planning stuff starts
     // set up the scene based on all start/goal locations and any maps
@@ -1308,7 +1325,6 @@ int main(int argc, char** argv)
     if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
     {
       Globals.master_reset = true;
-          printf("--- d \n");
       continue;
     }
     
@@ -1316,13 +1332,6 @@ int main(int argc, char** argv)
     MultAgSln.obstacles_pub = &obstacles_pub;
     Globals.MAgSln = &MultAgSln;
 
-    if(Globals.team_size == 1) /////////////////////
-      min_clock_to_plan = 20;
-    else
-      min_clock_to_plan = 40;
-
-    
-    
     int iterations_left = -1; // negative means that time is used instead
   
     clock_t phase_two_start_t = clock();
@@ -1416,7 +1425,15 @@ int main(int argc, char** argv)
   
     printf("found first path \n");
     
-    if(Globals.master_reset && Globals.found_single_robot_solution) 
+
+    if(use_smart_plan_time)
+    {
+      if(actual_solution_time*plan_time_mult > smart_min_time_to_plan)
+        min_clock_to_plan = actual_solution_time*plan_time_mult;
+      printf("using smart plan time : %f \n", min_clock_to_plan);
+    }
+
+    if(Globals.master_reset && Globals.found_single_robot_solution) // master reset and have a single robot solution
     {
       // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
 
@@ -1527,7 +1544,7 @@ int main(int argc, char** argv)
       Globals.single_robot_solution = MultAgSln.BestSolution;
 
       // take into account the bounding region
-      for(int p = 0; p < Globals.single_robot_solution.size(); p++)
+      for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
       {
         Globals.single_robot_solution[p][0] += Globals.team_bound_area_min[0];
         Globals.single_robot_solution[p][1] += Globals.team_bound_area_min[1];
@@ -1543,7 +1560,7 @@ int main(int argc, char** argv)
       }
     }
 
-    printf("Done with path planning phase\n");
+    printf("--- Done with actual path planning --- \n");
   
     // record that this agent has reach the end of path planning
     MultAgSln.FinalSolutionSent[agent_number] = 1;
@@ -1591,48 +1608,7 @@ int main(int argc, char** argv)
       
       publish_planning_area(Scene);
      // publish_obstacles(Scene);
-      
-      
-      
-      
-      
-      
-      
-      
             
-//       
-//       
-//           int num = Cspc.ValidConfigs.size();
-//   if(num > 2000)
-//       num = 2000;
-// 
-//   multi_robot_planner_cu::PolygonArray msg;
-// 
-//   msg.header.frame_id = "/map_cu";
-//   msg.polygons.resize(1);
-// 
-//   int num_points = num;
-//   msg.polygons[0].points.resize(num_points);
-//     
-// 
-//   for(int j = 0; j < num_points; j++)
-//   {
-//     msg.polygons[0].points[j].x = Cspc.ValidConfigs[j][0] + Globals.team_bound_area_min[0];
-//     msg.polygons[0].points[j].y = Cspc.ValidConfigs[j][1] + Globals.team_bound_area_min[1];
-//     msg.polygons[0].points[j].z = 0;        
-//   }
-// 
-//   obstacles_pub.publish(msg); 
-// 
-//   
-//       
-      
-      
-      
-      
-      
-      
-      
       ros::spinOnce();
     }
     now_time = clock();
@@ -1662,6 +1638,7 @@ int main(int argc, char** argv)
 //     sleep(1);
 //     return 0;
     Globals.done_planning = true;
+    bool need_to_calculate_path_to_broadcast = true;
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part
     {       
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
@@ -1673,33 +1650,215 @@ int main(int argc, char** argv)
       
       start_wait_t = clock();
       now_time = clock();
-      while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time)
+      while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
       { 
         now_time = clock();
       }
 
       if(mode == 2 && agent_number != 0) 
-      continue; 
+        continue; 
 
       MultAgSln.GetMessages(startc, goalc);
     
       MultAgSln.SendMessageUDP(prob_success);
 
-    
+      
       // now extract this robot's path and send on to the controller
+      if(need_to_calculate_path_to_broadcast)
+      {
+        vector<vector<float> > mult_agent_bst_sln_doubled;
     
-      vector<vector<float> > mult_agent_bst_sln_doubled;
-    
-      double_up_points(MultAgSln.BestSolution, mult_agent_bst_sln_doubled);
-      calculate_rotation(mult_agent_bst_sln_doubled);
-      //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
-      extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, Globals.local_ID[agent_number], world_dims);
-      calculate_times(Parametric_Times, mult_agent_bst_sln_doubled, target_mps, target_rps);
-      //for(int i = 0; i < Parametric_Times.size(); i++)
-      //{
-      //  printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
-      //}
-      //getchar();
+        double_up_points(MultAgSln.BestSolution, mult_agent_bst_sln_doubled);
+        calculate_rotation(mult_agent_bst_sln_doubled);
+        //verrify_start_angle(MultAgSln.BestSolution, startc); // because for planning we have projected down to 2 dims from 3 (removing theta) 
+        extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, Globals.local_ID[agent_number], world_dims);
+        calculate_times(Parametric_Times, mult_agent_bst_sln_doubled, target_mps, target_rps);
+        //for(int i = 0; i < Parametric_Times.size(); i++)
+        //{
+        //  printf("at loc: %f %f %f   at time: %f\n", ThisAgentsPath[i][0], ThisAgentsPath[i][1], ThisAgentsPath[i][2], Parametric_Times[i]);   
+        //}
+        //getchar();
+
+        if(Globals.use_sub_sg)
+        {
+          // if this is a multi-agent solution that used sub-area selection, then need to account for getting to and from the sub area
+          // assume that the time at wich the teams starts moving through the sub-ara is 0, so adjust time to be negative before entering the sub-area
+
+          // first need to extract paths to and from the sub-area
+
+          // to sub_area:
+
+          // find the edge of the single robot path that contains the sub_start point, and the corresponding point as calculated from the path
+          vector<float> path_sub_start;
+          int ind_with_sub_start = find_edge_containing_point(Globals.single_robot_solution, ThisAgentsPath[0], path_sub_start);
+
+          if(ind_with_sub_start < 0)
+            printf("problems finding point at sub_start \n");
+          //printf("sub_start: [%f %f], path_sub_start: [%f %f] \n", ThisAgentsPath[0][0], ThisAgentsPath[0][1], path_sub_start[0], path_sub_start[1]);
+       
+          // save start portion of path into a seperate path
+          vector<vector<float> > path_to_sub_start(ind_with_sub_start+2);
+          uint p;
+          for(p = 0; p <= (uint)ind_with_sub_start; p++)
+          {
+            //printf("[%u] %f %f %f \n", p, Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2]);
+            path_to_sub_start[p] = Globals.single_robot_solution[p];
+          }
+          path_to_sub_start[p] = ThisAgentsPath[0];
+
+          // calculate times associated with the single robot path to the sub area
+        
+          vector<vector<float> > path_to_sub_start_doubled;
+          vector<float> path_to_sub_start_Parametric_Times;
+
+          double_up_points(path_to_sub_start, path_to_sub_start_doubled);
+          calculate_rotation(path_to_sub_start_doubled);
+          // note single robot solution is already extracted and translated
+          calculate_times(path_to_sub_start_Parametric_Times, path_to_sub_start_doubled, target_mps, target_rps);
+
+          // need to make the final time = 0, and the rest negative but with the same delta time
+          uint size_times = path_to_sub_start_Parametric_Times.size();
+          float final_time = path_to_sub_start_Parametric_Times[size_times-1];
+          for(uint p = 0; p < size_times; p++)
+            path_to_sub_start_Parametric_Times[p] -= final_time;
+
+
+          // from sub_area:
+
+          // find the edge of the single robot path that contains the sub_goal point, and the corresponding point as calculated from the path
+          vector<float> path_sub_goal;
+          int ind_with_sub_goal = find_edge_containing_point(Globals.single_robot_solution, ThisAgentsPath[ThisAgentsPath.size()-1], path_sub_goal);
+
+          if(ind_with_sub_goal < 0)
+            printf("problems finding point at sub_goal \n");
+          //printf("sub_goal: [%f %f], path_sub_goal: [%f %f] \n", ThisAgentsPath[ThisAgentsPath.size()-1][0], ThisAgentsPath[ThisAgentsPath.size()-1][1], path_sub_goal[0], path_sub_goal[1]);
+       
+          // save end portion of path into a seperate path
+          uint points_from_sub_goal_to_goal = Globals.single_robot_solution.size() - ind_with_sub_goal;
+          vector<vector<float> > path_from_sub_goal(points_from_sub_goal_to_goal);
+          path_from_sub_goal[0] = ThisAgentsPath[ThisAgentsPath.size()-1];
+          uint q;
+          for(p = 1, q = ind_with_sub_goal+1; q < Globals.single_robot_solution.size(); p++, q++)
+          {
+            //printf("[%u of %u, %u of %u] %f %f %f \n", p, path_from_sub_goal.size(), q, Globals.single_robot_solution.size(), Globals.single_robot_solution[q][0], Globals.single_robot_solution[q][1], Globals.single_robot_solution[q][2]);
+            path_from_sub_goal[p] = Globals.single_robot_solution[q];
+          }
+
+          // calculate times associated with the single robot path from the sub area
+        
+          vector<vector<float> > path_from_sub_goal_doubled;
+          vector<float> path_from_sub_goal_Parametric_Times;
+
+          double_up_points(path_from_sub_goal, path_from_sub_goal_doubled);
+          calculate_rotation(path_from_sub_goal_doubled);
+          // note single robot solution is already extracted and translated
+          calculate_times(path_from_sub_goal_Parametric_Times, path_from_sub_goal_doubled, target_mps, target_rps);
+
+          // need to add the final combined path time to all path_from_sub_goal_Parametric_Times
+          final_time = Parametric_Times[Parametric_Times.size()-1];
+          size_times = path_from_sub_goal_Parametric_Times.size();
+          for(uint p = 0; p < size_times; p++)
+            path_from_sub_goal_Parametric_Times[p] += final_time;
+
+          // now need to concatonate path to sub-area on the front of the multi_robot path and time and the path from on the back
+          uint first_part_size = path_to_sub_start_doubled.size();
+          uint sub_area_path_size = ThisAgentsPath.size();
+          uint last_part_size = path_from_sub_goal_doubled.size();
+          uint total_size = first_part_size + sub_area_path_size + last_part_size;
+          //printf("path lengths: %d %d %d\n", path_to_sub_start_doubled.size(), ThisAgentsPath.size(), path_from_sub_goal_doubled.size());        
+
+          vector<vector<float> > combined_path(total_size);
+          for(p = 0; p < first_part_size; p++)
+            combined_path[p] = path_to_sub_start_doubled[p];    
+          for(q = 0; q < sub_area_path_size; q++, p++)
+            combined_path[p] = ThisAgentsPath[q];
+          for(q = 0; q < last_part_size; q++, p++)
+            combined_path[p] = path_from_sub_goal_doubled[q];
+
+          first_part_size = path_to_sub_start_Parametric_Times.size();
+          sub_area_path_size = ThisAgentsPath.size();
+          last_part_size = path_from_sub_goal_Parametric_Times.size();
+          total_size = first_part_size + sub_area_path_size + last_part_size;
+          //printf("time lengths: %d %d %d\n", path_to_sub_start_Parametric_Times.size(),  Parametric_Times.size(), last_part_size);
+
+          vector<float> combined_times(total_size);
+          for(p = 0; p < first_part_size; p++)
+          {
+            //printf("p:%u of %u and %u \n", p, combined_times.size(), path_to_sub_start_Parametric_Times.size());
+            combined_times[p] = path_to_sub_start_Parametric_Times[p];
+          }
+          for(q = 0; q < sub_area_path_size; q++, p++)
+          {
+            //printf("p:%u of %u and q: %u of %u \n", p, combined_times.size(), q, Parametric_Times.size());
+            combined_times[p] = Parametric_Times[q];
+          }
+          for(q = 0; q < last_part_size; q++, p++)
+          {
+            //printf("p:%u of %u and q: %u of %u \n", p, combined_times.size(), q, Parametric_Times.size());
+            combined_times[p] = Parametric_Times[q];
+          }
+          ThisAgentsPath = combined_path;
+          Parametric_Times = combined_times;
+        }
+        need_to_calculate_path_to_broadcast = false;
+
+        // reset single robot solution to be what the robot is now doing, note that many points are duplicated within ThisAgentsPath for time sync
+        vector<vector<float> > new_single_robot_solution;
+        vector<float> temp(2);
+        temp[0] = ThisAgentsPath[0][0];
+        temp[1] = ThisAgentsPath[0][1];
+        new_single_robot_solution.push_back(temp);
+        for(uint p = 1; p < ThisAgentsPath.size(); p++)
+        {
+          if((ThisAgentsPath[p][0] == ThisAgentsPath[p-1][0]) && (ThisAgentsPath[p][1] == ThisAgentsPath[p-1][1]))
+            continue;
+          temp[0] = ThisAgentsPath[p][0];
+          temp[1] = ThisAgentsPath[p][1];
+          new_single_robot_solution.push_back(temp);
+        }
+        Globals.single_robot_solution = new_single_robot_solution;
+      }
+      else // update single robot solution to reflect the robot's current location (shorten path to reflect distance traveled
+      {
+
+        // find closest point on path to robot's current position
+        printf("robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
+        vector<float> temp_robot_position(2);
+        temp_robot_position[0] = robot_pose->x;
+        temp_robot_position[1] = robot_pose->y;
+
+        vector<float> temp_best_point_found;
+
+
+        int first_i_of_edge = find_edge_containing_point(Globals.single_robot_solution, temp_robot_position, temp_best_point_found);
+        if(first_i_of_edge >= 0) //found an edge
+        {
+          if(euclid_dist(temp_robot_position, temp_best_point_found) < Globals.robot_radius) // robot is within radius of the closest point on the path
+          {      
+            if(first_i_of_edge == 0) // just repace first point in path with temp_best_point_found
+            {
+              Globals.single_robot_solution[0] = temp_best_point_found;
+            }
+            else // need to remove at least one edge
+            {
+              uint orig_size = Globals.single_robot_solution.size();
+              uint new_size = orig_size - first_i_of_edge;
+              vector<vector<float> > new_single_robot_solution(new_size);
+
+              uint p = first_i_of_edge;
+              for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
+              {
+                new_single_robot_solution[q] = Globals.single_robot_solution[p];
+              }
+
+              Globals.single_robot_solution = new_single_robot_solution;
+            }
+          }
+        }
+
+        //for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
+        //  printf("%f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1]);
+      }
 
       publish_global_path(ThisAgentsPath, Parametric_Times); 
       robot_is_moving = true;
