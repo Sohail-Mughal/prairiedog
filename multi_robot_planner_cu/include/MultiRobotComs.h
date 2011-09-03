@@ -58,7 +58,7 @@ class GlobalVariables
    vector<float> planning_time_remaining; // holds the ammount of planning time remaining for each agent, indexed using local_ID
    vector<clock_t> last_update_time;      // last_update_time[i] holds the last time planning_time_remaining[i] was updated, indexed using local_ID
    
-   bool non_planning_yet;
+   bool not_planning_yet; // is true when this agen is not planning
    
    int agent_number;    // this agent's global id
      
@@ -115,4 +115,6 @@ class GlobalVariables
 
    bool an_agent_needs_this_single_path_iteration; // gets set to true if another agent is incorrect about this robot's single robot path iteration
                                                    // gets set to false after a hard broadcast of that data
+
+   bool revert_to_single_robot_path;       // set to true if no team's single robot paths conflict
 };

@@ -998,7 +998,9 @@ int main(int argc, char** argv)
       broadcast_map_tf();
       
       ros::spinOnce();
-      loop_rate.sleep();    
+      loop_rate.sleep();   
+
+      usleep(sync_message_wait_time*1000000); 
     }
   }
   else
@@ -1115,8 +1117,9 @@ int main(int argc, char** argv)
     robot_is_moving = false;  
     
     Globals.planning_iteration[Globals.agent_number]++;
-    Globals.planning_iteration_single_solutions[Globals.agent_number] = Globals.planning_iteration[Globals.agent_number];  
-      
+    printf("increasing planning_iteration_single_solutions of me \n");
+    Globals.planning_iteration_single_solutions[Globals.agent_number] = Globals.planning_iteration[Globals.agent_number];        
+
     Globals.have_info.resize(0);
     Globals.have_info.resize(Globals.number_of_agents, 0);   // gets set to 1 when we get an agent's info
         
@@ -1155,7 +1158,7 @@ int main(int argc, char** argv)
     #endif
     
     Globals.MAgSln = NULL;
-    Globals.non_planning_yet = true;  
+    Globals.not_planning_yet = true;  
     Globals.master_reset = false;  // now set master_reset to false indicating that "perminate" robot data in globals is stable
                                    // this should be the only place in the code where master_reset is set to false
       
@@ -1193,14 +1196,15 @@ int main(int argc, char** argv)
       vector<float> sub_goal;
       Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
       float preferred_min_planning_area_side_length = 1;
-      float preferred_max_planning_area_side_length = 1;
+      float preferred_max_planning_area_side_length = 1.5;
       float accuracy_resolution = .05;
 
       printf("calculating sub_start and sub_goals \n");
 
+      bool no_conflicts_between_sub_paths = false;
       if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
                             preferred_min_planning_area_side_length,  preferred_max_planning_area_side_length, 
-                            robot_radius*2, accuracy_resolution, sub_start, sub_goal) )
+                            robot_radius*2, accuracy_resolution, sub_start, sub_goal, no_conflicts_between_sub_paths) )
       {
         // if here then sub_start and sub_goal have changed
         printf("new sub area \n");
@@ -1216,6 +1220,14 @@ int main(int argc, char** argv)
         Globals.goal_coords[0][2] = 0;
 
         Globals.use_sub_sg = true;
+      }
+      else if(no_conflicts_between_sub_paths)
+      {
+        printf("no conflicts between sub-paths\n");
+
+        // reset single robot path 
+        Globals.use_sub_sg = false;
+        Globals.revert_to_single_robot_path = true;
       }
       else if(Globals.use_sub_sg)
       {
@@ -1233,12 +1245,14 @@ int main(int argc, char** argv)
         Globals.goal_coords[0][2] = 0;
       }
 
+      printf("Done calculating sub_start and sub_goals \n");
+
       // NOTE adjust bounds to take care of min planning region size based on huristic when we actually calculate min bounds and size
       // NOTE remember to change single robot path to reflect group solution once a group solution is found
       // NOTE also need to get this data to the controller (path-follower)
     }
 
-    if(!Globals.use_sub_sg) // are not using 
+    if(!Globals.use_sub_sg) // are not using sub area
     {
       printf("default sub area \n");
 
@@ -1270,376 +1284,395 @@ int main(int argc, char** argv)
     Globals.have_calculated_start_and_goal = true;  // allows sender thread to move forward to message sync phase
     Globals.start_time = start_time;
  
-    // start-up phase loop (wait until we have min number of agents start and goal locations)
-    clock_t start_wait_t;
-    while(Globals.non_planning_yet && !Globals.master_reset)
+    clock_t start_wait_t = clock();
+    int world_dims = 3; // reset later
+    if(!Globals.revert_to_single_robot_path) // do only if we need to calculate a path
     {
-      // wait until we have everybody in this team's address info
-      printf("planner thread not planning yet\n");
-    
-      // broadcast tf
-      //broadcast_map_tf();
-    
-      start_wait_t = clock();
-      now_time = clock();
-      while(difftime_clock(now_time, start_wait_t) < Globals.sync_message_wait_time && !Globals.master_reset)
-        now_time = clock(); 
-    }
-  
-    if(Globals.master_reset)
-    {
-      printf("restarting planning 0\n");
-      continue;  // a team member has been added, need to restart planning with more dimensions
-    }
-    
-    printf("--- start of actual planning ---\n");
-  
-    // this is where the planning stuff starts
-    // set up the scene based on all start/goal locations and any maps
-    if(!Scene.LoadFromGlobals(Globals))
-      return 0;
-    
-    char map_file[] = "../lab.txt";
-    if(!Scene.LoadMapFromFile(map_file))
-    {
-      printf("unable to load map file: %s\n", map_file);
-      return 0;
-    }
-  
-    Scene.PrintSceneInfo(); 
-    publish_planning_area(Scene);
-    publish_obstacles(Scene);
-    ros::spinOnce();
-  
-    int num_robots = Scene.num_robots;
-    int world_dims = Scene.world_dims;
-    float robot_rad = Scene.robot_rad[0];      
-    map_resolution = Scene.resolution*num_robots; //////////////////// this is kind of wierd, someday it may be a good idea to go down the rabbit hole and figure out if this actually affects anything, or if it is now ignorred by stuff
-    startc = Scene.startC;
-    goalc = Scene.goalC;
-    dist_threshold = map_resolution;
-    
-    Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
-    Cspc.W.Gbls = &Globals;
-    
-    if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
-    {
-      Globals.master_reset = true;
-      continue;
-    }
-    
-    MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
-    MultAgSln.obstacles_pub = &obstacles_pub;
-    Globals.MAgSln = &MultAgSln;
-
-    int iterations_left = -1; // negative means that time is used instead
-  
-    clock_t phase_two_start_t = clock();
-    
-    // find at least one solution (between all robots), also does one round of message passing per loop
-    found_path = false;
-    while(!found_path && (!Globals.master_reset || !Globals.found_single_robot_solution))
-    {  
-      // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
-
-
-
-      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
-      // broadcast tf
-      //broadcast_map_tf();  
-      
-      last_time = clock();
-      if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0)) // a planning agent
+      // start-up phase loop (wait until we have min number of agents start and goal locations)
+      while(Globals.not_planning_yet && !Globals.master_reset)
       {
-        now_time = clock();
-        
-        if(Globals.master_reset)
-          printf("pulse num_ag=%d  reset:  ", Globals.number_of_agents);
-        else
-          printf("pulse num_ag=%d  -----:  ", Globals.number_of_agents);      
-
-        for(int a = 0; a < Globals.number_of_agents ; a++)
-        {
-          if(!Globals.InTeam[a])
-            printf("--- ");
-          else
-          {
-            printf("%d(%d,%d) ", a, Globals.have_info[Globals.local_ID[a]], Globals.agent_ready[Globals.local_ID[a]]);
-          } 
-        }
-        printf(" \n");
-        
-        #ifdef treev2
-        if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(treev3)
-        if(Cspc.BuildTreeV3(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
-        #elif defined(treev4)
-        if(Cspc.BuildTreeV4(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
-        #elif defined(treev2rho)
-        if(Cspc.BuildTreeV2rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
-        #elif defined(treev3rho)
-        if(Cspc.BuildTreeV3rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
-        #elif defined(rrt)
-        if(Cspc.BuildRRT(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(rrtrho)
-        if(Cspc.BuildRRTRho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(rrtfast)
-        if(Cspc.BuildRRTFast(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #else
-        if(Cspc.BuildTree(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #endif  
-        {
-          found_path = true;
-          MultAgSln.ExtractSolution(Cspc);
-        }
-      
-        if(mode == 0) // share partial solutions
-        {
-          if(MultAgSln.GetMessages(startc, goalc))
-          {
-            MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
-            found_path = true;
-          }
-          MultAgSln.SendMessageUDP(prob_success);
-        }
-      }
-      else if (mode == 2 && agent_number != 0) // client agents just wait for solution
-      {
-        if(difftime_clock(now_time,start_time) <= min_clock_to_plan)  
-          phase_two_start_t = clock();
-      
-        if(MultAgSln.GetMessages(startc, goalc))
-        {
-          MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
-          found_path = true;
-        } 
-      }
-      now_time = clock();
+        // wait until we have everybody in this team's address info
+        printf("planner thread not planning yet\n");
     
+        // broadcast tf
+        //broadcast_map_tf();
+    
+        //start_wait_t = clock();
+        //now_time = clock();
+        //while(difftime_clock(now_time, start_wait_t) < Globals.sync_message_wait_time && !Globals.master_reset)
+        //{
+        //  usleep(Globals.sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+        //  now_time = clock();
+        //}
+        usleep(Globals.sync_message_wait_time*1000000);
+ 
+      }
+  
+      if(Globals.master_reset)
+      {
+        printf("restarting planning 0\n");
+        continue;  // a team member has been added, need to restart planning with more dimensions
+      }
+    
+      printf("--- start of actual planning ---\n");
+  
+      // this is where the planning stuff starts
+      // set up the scene based on all start/goal locations and any maps
+      if(!Scene.LoadFromGlobals(Globals))
+        return 0;
+    
+      char map_file[] = "../lab.txt";
+      if(!Scene.LoadMapFromFile(map_file))
+      {
+        printf("unable to load map file: %s\n", map_file);
+        return 0;
+      }
+  
+      Scene.PrintSceneInfo(); 
       publish_planning_area(Scene);
-      //publish_obstacles(Scene);
-         
+      publish_obstacles(Scene);
       ros::spinOnce();
-    }
-    float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
   
-    printf("found first path \n");
+      int num_robots = Scene.num_robots;
+      world_dims = Scene.world_dims;
+      float robot_rad = Scene.robot_rad[0];      
+      map_resolution = Scene.resolution*num_robots; //////////////////// this is kind of wierd, someday it may be a good idea to go down the rabbit hole and figure out if this actually affects anything, or if it is now ignorred by stuff
+      startc = Scene.startC;
+      goalc = Scene.goalC;
+      dist_threshold = map_resolution;
     
-
-    if(use_smart_plan_time)
-    {
-      if(actual_solution_time*plan_time_mult > smart_min_time_to_plan)
-        min_clock_to_plan = actual_solution_time*plan_time_mult;
-      printf("using smart plan time : %f \n", min_clock_to_plan);
-    }
-
-    if(Globals.master_reset && Globals.found_single_robot_solution) // master reset and have a single robot solution
-    {
-      // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
-
-      printf("restarting planning 1\n");
-      continue;  // a team member has been added, need to restart planning with more dimensions
-    }
+      Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
+      Cspc.W.Gbls = &Globals;
     
-    // record how much time left there is for planning (on this agent)
-    Globals.planning_time_remaining[agent_number] = min_clock_to_plan - actual_solution_time;
-    Globals.last_update_time[agent_number] = now_time;
+      if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
+      {
+        Globals.master_reset = true;
+
+        printf("!!!!!!!!!!!!! INVALID START OR GOAL !!!!!!!!!!!!!!\n");
+        sleep(1);
+        continue;
+      }
+    
+      MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
+      MultAgSln.obstacles_pub = &obstacles_pub;
+      Globals.MAgSln = &MultAgSln;
+
+      int iterations_left = -1; // negative means that time is used instead
   
-    if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))   // a planning agent
-    {
-      // do anytime until a better solution is found, or we run out of time, also does one round of message passing per loop
-      
-      float time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+      clock_t phase_two_start_t = clock();
     
-      // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
-      float this_time_to_plan = message_wait_time;
-      if(time_left_to_plan < message_wait_time)
-        this_time_to_plan = time_left_to_plan;
-    
-      int last_time_left_floor = (int)time_left_to_plan;
-      while(this_time_to_plan > 0 && (!Globals.master_reset  || !Globals.found_single_robot_solution))
-      {    
+      // find at least one solution (between all robots), also does one round of message passing per loop
+      found_path = false;
+      while(!found_path && (!Globals.master_reset || !Globals.found_single_robot_solution))
+      {  
         // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
 
 
 
-        //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
-          
-        if(last_time_left_floor != (int)time_left_to_plan)
+        //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+        // broadcast tf
+        //broadcast_map_tf();  
+      
+        last_time = clock();
+        if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0)) // a planning agent
         {
-          printf("\ntime left to plan: %f\n", time_left_to_plan);
-          last_time_left_floor = (int)time_left_to_plan;
+          now_time = clock();
         
-          //for(int k = 0; k < Globals.number_of_agents; k++)
-          //  printf("agent %d: %f \n", k, Globals.planning_time_remaining[k]);
-          //printf("\n");
-        }
+          if(Globals.master_reset)
+            printf("pulse num_ag=%d  reset:  ", Globals.number_of_agents);
+          else
+            printf("pulse num_ag=%d  -----:  ", Globals.number_of_agents);      
+
+          for(int a = 0; a < Globals.number_of_agents ; a++)
+          {
+            if(!Globals.InTeam[a])
+              printf("--- ");
+            else
+            {
+              printf("%d(%d,%d) ", a, Globals.have_info[Globals.local_ID[a]], Globals.agent_ready[Globals.local_ID[a]]);
+            } 
+          }
+          printf(" \n");
         
-        now_time = clock();
-     
-        #ifdef treev2
-        if(Cspc.BuildTreeV2(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(treev3)
-        if(Cspc.BuildTreeV3(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
-        #elif defined(treev4)
-        if(Cspc.BuildTreeV4(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
-        #elif defined(treev2rho)
-        if(Cspc.BuildTreeV2rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
-        #elif defined(treev3rho)
-        if(Cspc.BuildTreeV3rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
-        #elif defined(rrt)
-        if(Cspc.BuildRRT(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(rrtrho)
-        if(Cspc.BuildRRTRho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #elif defined(rrtfast)
-        if(Cspc.BuildRRTFast(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
-        #else
-        if(Cspc.BuildTree(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
-        #endif
-        {
-          found_path = true;
-          MultAgSln.ExtractSolution(Cspc);
+          #ifdef treev2
+          if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(treev3)
+          if(Cspc.BuildTreeV3(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+          #elif defined(treev4)
+          if(Cspc.BuildTreeV4(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+          #elif defined(treev2rho)
+          if(Cspc.BuildTreeV2rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+          #elif defined(treev3rho)
+          if(Cspc.BuildTreeV3rho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+          #elif defined(rrt)
+          if(Cspc.BuildRRT(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(rrtrho)
+          if(Cspc.BuildRRTRho(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(rrtfast)
+          if(Cspc.BuildRRTFast(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #else
+          if(Cspc.BuildTree(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #endif  
+          {
+            found_path = true;
+            MultAgSln.ExtractSolution(Cspc);
+          }
+        
+          if(mode == 0) // share partial solutions
+          {
+            if(MultAgSln.GetMessages(startc, goalc))
+            {
+              MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
+              found_path = true;
+            }
+            MultAgSln.SendMessageUDP(prob_success);
+          }
         }
-    
-        if(mode == 0) // share partial solutions
+        else if (mode == 2 && agent_number != 0) // client agents just wait for solution
         {
+          if(difftime_clock(now_time,start_time) <= min_clock_to_plan)  
+            phase_two_start_t = clock();
+        
           if(MultAgSln.GetMessages(startc, goalc))
-          {  
+          {
             MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
             found_path = true;
-          }
-          MultAgSln.SendMessageUDP(prob_success);
+          } 
         }
-
-        // ROS stuff
+        now_time = clock();
+      
         publish_planning_area(Scene);
-        publish_obstacles(Scene);
+        //publish_obstacles(Scene);
+           
         ros::spinOnce();
-      
-      
-        time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
-    
-        // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
-        this_time_to_plan = message_wait_time;
-        if(time_left_to_plan < message_wait_time)
-          this_time_to_plan = time_left_to_plan;
       }
-      
-      now_time = clock(); 
-            
-      if(Globals.master_reset && Globals.found_single_robot_solution)
+      float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
+    
+      printf("found first path \n");
+              
+
+      if(use_smart_plan_time)
+      {
+        if(actual_solution_time*plan_time_mult > smart_min_time_to_plan)
+          min_clock_to_plan = actual_solution_time*plan_time_mult;
+        printf("using smart plan time : %f \n", min_clock_to_plan);
+      }
+
+      if(Globals.master_reset && Globals.found_single_robot_solution) // master reset and have a single robot solution
       {
         // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
 
-
-        printf("restarting planning 2\n");
+        printf("restarting planning 1\n");
         continue;  // a team member has been added, need to restart planning with more dimensions
       }
-    }
- 
-    if(!Globals.found_single_robot_solution)
-    {
-      // now save the single robot solution
-
-      Globals.single_robot_solution = MultAgSln.BestSolution;
-
-      // take into account the bounding region
-      for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
+    
+      // record how much time left there is for planning (on this agent)
+      Globals.planning_time_remaining[agent_number] = min_clock_to_plan - actual_solution_time;
+      Globals.last_update_time[agent_number] = now_time;
+  
+      if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))   // a planning agent
       {
-        Globals.single_robot_solution[p][0] += Globals.team_bound_area_min[0];
-        Globals.single_robot_solution[p][1] += Globals.team_bound_area_min[1];
+        // do anytime until a better solution is found, or we run out of time, also does one round of message passing per loop
+        
+        float time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+      
+        // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
+        float this_time_to_plan = message_wait_time;
+        if(time_left_to_plan < message_wait_time)
+          this_time_to_plan = time_left_to_plan;
+      
+        int last_time_left_floor = (int)time_left_to_plan;
+        while(this_time_to_plan > 0 && (!Globals.master_reset  || !Globals.found_single_robot_solution))
+        {    
+          // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
+ 
+ 
+
+          //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
+          
+          if(last_time_left_floor != (int)time_left_to_plan)
+          {
+            printf("\ntime left to plan: %f\n", time_left_to_plan);
+            last_time_left_floor = (int)time_left_to_plan;
+        
+            //for(int k = 0; k < Globals.number_of_agents; k++)
+            //  printf("agent %d: %f \n", k, Globals.planning_time_remaining[k]);
+            //printf("\n");
+          }
+        
+          now_time = clock();
+     
+          #ifdef treev2
+          if(Cspc.BuildTreeV2(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(treev3)
+          if(Cspc.BuildTreeV3(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+          #elif defined(treev4)
+          if(Cspc.BuildTreeV4(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+          #elif defined(treev2rho)
+          if(Cspc.BuildTreeV2rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+          #elif defined(treev3rho)
+          if(Cspc.BuildTreeV3rho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
+          #elif defined(rrt)
+          if(Cspc.BuildRRT(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(rrtrho)
+          if(Cspc.BuildRRTRho(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #elif defined(rrtfast)
+          if(Cspc.BuildRRTFast(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          #else
+          if(Cspc.BuildTree(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
+          #endif
+          {
+            found_path = true;
+            MultAgSln.ExtractSolution(Cspc);
+          }
+    
+          if(mode == 0) // share partial solutions
+          {
+            if(MultAgSln.GetMessages(startc, goalc))
+            {  
+              MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
+              found_path = true;
+            }
+            MultAgSln.SendMessageUDP(prob_success);
+          }
+
+          // ROS stuff
+          publish_planning_area(Scene);
+          publish_obstacles(Scene);
+          ros::spinOnce();
+      
+      
+          time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+      
+          // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
+          this_time_to_plan = message_wait_time;
+          if(time_left_to_plan < message_wait_time)
+            this_time_to_plan = time_left_to_plan;
+        }
+      
+        now_time = clock(); 
+            
+        if(Globals.master_reset && Globals.found_single_robot_solution)
+        {
+          // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second case
+
+ 
+          printf("restarting planning 2\n");
+          continue;  // a team member has been added, need to restart planning with more dimensions
+        }
+      }
+ 
+      if(!Globals.found_single_robot_solution)
+      {
+        // now save the single robot solution
+
+        Globals.single_robot_solution = MultAgSln.BestSolution;
+
+        // take into account the bounding region
+        for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
+        {
+          Globals.single_robot_solution[p][0] += Globals.team_bound_area_min[0];
+          Globals.single_robot_solution[p][1] += Globals.team_bound_area_min[1];
+        }
+
+
+        Globals.found_single_robot_solution = true;
+
+        if(Globals.master_reset)
+        {
+          printf("restarting planning 2.5\n");
+          continue;  // a team member has been added, need to restart planning with more dimensions
+        }
       }
 
+      printf("--- Done with actual path planning --- \n");
+  
+      // record that this agent has reach the end of path planning
+      MultAgSln.FinalSolutionSent[agent_number] = 1;
+  
+      if(mode == 2) // just tell the clients to start moving, and server also starts moving 
+        MultAgSln.moving = true;
+  
+      // now we try to get consensus among the agents as to who's solution to use
+      if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))
+        phase_two_start_t = clock();
 
-      Globals.found_single_robot_solution = true;
+      while(!MultAgSln.StartMoving() && !Globals.master_reset)
+      {    
+          
+        data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+       
+        //start_wait_t = clock();
+        //now_time = clock();
+        //while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
+        //{ 
+        //  usleep(sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+        //  now_time = clock();
+        //}
+        usleep(sync_message_wait_time*1000000);
 
+        if(mode == 2 && agent_number != 0)
+          break;
+    
+        // while we cannot move, we broadcaset the best solution to everybody, and recieve thier best solutions
+        MultAgSln.GetMessages(startc, goalc);  
+        MultAgSln.SendMessageUDP(prob_success);
+   
+        printf(" waiting, not moving\n");
+    
+      
+        printf("final solution sent:  -->");
+        for(uint i = 0; i < MultAgSln.FinalSolutionSent.size(); i++)
+        {
+          if(Globals.InTeam[i])
+            printf("%d, ", MultAgSln.FinalSolutionSent[i]);
+          else
+            printf("-, ");
+        }
+        printf("  <---\n");
+      
+      
+      
+        publish_planning_area(Scene);
+       // publish_obstacles(Scene);
+            
+        ros::spinOnce();
+      }
+      now_time = clock();
+    
       if(Globals.master_reset)
       {
-        printf("restarting planning 2.5\n");
+        printf("restarting planning 3\n");
         continue;  // a team member has been added, need to restart planning with more dimensions
       }
-    }
 
-    printf("--- Done with actual path planning --- \n");
+      float phase_two_time = difftime_clock(now_time,phase_two_start_t); // time since planning ended until this robot is aware of an agreement
+      //float total_time = difftime_clock(now_time,start_time);
+      printf("Done with communication phase, (which took %f secs)\n", phase_two_time); 
+      printf("agent #%d found the best overall solution, with length %f \n", MultAgSln.best_solution_agent, MultAgSln.best_solution_length);
   
-    // record that this agent has reach the end of path planning
-    MultAgSln.FinalSolutionSent[agent_number] = 1;
+      // save this info to a file so we can look at stats later
+      //if(total_agents > 1)
+      //  data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
   
-    if(mode == 2) // just tell the clients to start moving, and server also starts moving 
-      MultAgSln.moving = true;
-  
-    // now we try to get consensus among the agents as to who's solution to use
-    if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))
-      phase_two_start_t = clock();
-
-    while(!MultAgSln.StartMoving() && !Globals.master_reset)
-    {    
-        
-      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
-      
-      start_wait_t = clock();
-      now_time = clock();
-      while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
-      { 
-        now_time = clock();
-      }
-      
-      if(mode == 2 && agent_number != 0)
-        break;
     
-      // while we cannot move, we broadcaset the best solution to everybody, and recieve thier best solutions
-      MultAgSln.GetMessages(startc, goalc);  
-      MultAgSln.SendMessageUDP(prob_success);
-   
-      printf(" waiting, not moving\n");
+      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
     
-      
-      printf("final solution sent:  -->");
-      for(uint i = 0; i < MultAgSln.FinalSolutionSent.size(); i++)
-      {
-        if(Globals.InTeam[i])
-          printf("%d, ", MultAgSln.FinalSolutionSent[i]);
-        else
-          printf("-, ");
-      }
-      printf("  <---\n");
-      
-      
-      
-      publish_planning_area(Scene);
-     // publish_obstacles(Scene);
-            
-      ros::spinOnce();
+      // now we just broadcast the final solution, in case other robots didn't get it
+  
+//       printf("ending clean \n");
+//       Globals.kill_master = true; // shutdown listener thread
+//       sleep(1);
+//       return 0;
     }
-    now_time = clock();
-    
-    if(Globals.master_reset)
+    else // Globals.revert_to_single_robot_path
     {
-      printf("restarting planning 3\n");
-      continue;  // a team member has been added, need to restart planning with more dimensions
+      printf("using old single robot path \n");
     }
-    
-    float phase_two_time = difftime_clock(now_time,phase_two_start_t); // time since planning ended until this robot is aware of an agreement
-    //float total_time = difftime_clock(now_time,start_time);
-    printf("Done with communication phase, (which took %f secs)\n", phase_two_time); 
-    printf("agent #%d found the best overall solution, with length %f \n", MultAgSln.best_solution_agent, MultAgSln.best_solution_length);
-  
-    // save this info to a file so we can look at stats later
-    //if(total_agents > 1)
-    //  data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
-  
-    
-    //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
-    
-    // now we just broadcast the final solution, in case other robots didn't get it
-  
-//     printf("ending clean \n");
-//     Globals.kill_master = true; // shutdown listener thread
-//     sleep(1);
-//     return 0;
+
     Globals.done_planning = true;
     bool need_to_calculate_path_to_broadcast = true;
-    while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part
+    while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part, otherwise loop here until goal or path conflict
     {       
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
       //printf("%f %f %f \n", elookup_sum/en_lookup, eout_collision/en_collision, eout_sum/en_out );
@@ -1650,10 +1683,12 @@ int main(int argc, char** argv)
       
       start_wait_t = clock();
       now_time = clock();
-      while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
-      { 
-        now_time = clock();
-      }
+      //while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
+      //{ 
+      //  usleep(sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+      //  now_time = clock();
+      //}
+      usleep(sync_message_wait_time*1000000);
 
       if(mode == 2 && agent_number != 0) 
         continue; 
@@ -1664,7 +1699,42 @@ int main(int argc, char** argv)
 
       
       // now extract this robot's path and send on to the controller
-      if(need_to_calculate_path_to_broadcast)
+      if(Globals.revert_to_single_robot_path)
+      {
+        vector<vector<float> > single_agent_bst_sln_doubled;
+        double_up_points(Globals.single_robot_solution, single_agent_bst_sln_doubled);
+
+        // add space to store rotation
+        for(int p = 0; p < single_agent_bst_sln_doubled.size(); p++)
+          single_agent_bst_sln_doubled[p].resize(3);
+
+        calculate_rotation(single_agent_bst_sln_doubled);
+
+        // note already extracted and translated
+        ThisAgentsPath = single_agent_bst_sln_doubled;
+
+        calculate_times(Parametric_Times, single_agent_bst_sln_doubled, target_mps, target_rps);
+
+        // reset single robot solution to be what the robot is now doing, note that many points are duplicated within ThisAgentsPath for time sync
+        vector<vector<float> > new_single_robot_solution;
+        vector<float> temp(2);
+        temp[0] = ThisAgentsPath[0][0];
+        temp[1] = ThisAgentsPath[0][1];
+        new_single_robot_solution.push_back(temp);
+        for(uint p = 1; p < ThisAgentsPath.size(); p++)
+        {
+          if((ThisAgentsPath[p][0] == ThisAgentsPath[p-1][0]) && (ThisAgentsPath[p][1] == ThisAgentsPath[p-1][1]))
+            continue;
+          temp[0] = ThisAgentsPath[p][0];
+          temp[1] = ThisAgentsPath[p][1];
+          new_single_robot_solution.push_back(temp);
+        }
+        Globals.single_robot_solution = new_single_robot_solution;
+
+        Globals.revert_to_single_robot_path = false;
+        need_to_calculate_path_to_broadcast = false;
+      }
+      else if(need_to_calculate_path_to_broadcast)
       {
         vector<vector<float> > mult_agent_bst_sln_doubled;
     

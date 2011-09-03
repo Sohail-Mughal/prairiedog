@@ -818,12 +818,77 @@ int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer) // ex
   return (int)(buffer_ptr - ((size_t)buffer));
 }
 
+
 // returns the 2D eudlidian distance between two points (using first 2 dims)
 float euclid_dist(const vector<float> & A, const vector<float> &B)
 {
   return sqrt( ( (A[0] - B[0]) * (A[0] - B[0]) ) + ( (A[1] - B[1]) * (A[1] - B[1]) ) );
 }
 
+// finds the closest point along the edge [edge0, edge1] to the point within resolution, returns false if closest_point is not populated
+bool find_closest_point_along_edge(const vector<float> & point, const vector<float> & edge0, const vector<float> & edge1, float resolution, vector<float> & closest_point, float & best_dist_to_point)
+{
+  float obs_edge_length = euclid_dist(edge0, edge1);
+  float obs_step = obs_edge_length*resolution;
+  float obs_step_x = (obs_step/obs_edge_length)*(edge1[0] - edge0[0]);
+  float obs_step_y = (obs_step/obs_edge_length)*(edge1[1] - edge0[1]);
+
+  vector<float> obs_point = edge0;
+
+  best_dist_to_point = LARGE;
+  for(float obs_d = 0; obs_d <= obs_edge_length; obs_d += obs_step)
+  {
+    //printf("obs_point: [%f %f] ", obs_point[0], obs_point[1]);
+
+    float dist_to_point = euclid_dist(obs_point, point);
+
+    if(dist_to_point < best_dist_to_point)
+    {       
+      //printf("(new best %f)", dist_to_point);
+      best_dist_to_point = dist_to_point;
+      closest_point = obs_point;
+    }
+    //printf("\n");
+    obs_point[0] += obs_step_x;
+    obs_point[1] += obs_step_y;
+  }
+
+  if(best_dist_to_point == LARGE)
+    return false;
+
+  return true;
+}
+
+
+// finds the closest point along the path to the point within resolution, returns false if closest_point is not populated
+bool find_closest_point_along_path(const vector<float> & point, const vector<vector<float> > & path, float resolution, vector<float> & closest_point, float & best_dist_to_point)
+{
+  best_dist_to_point = LARGE;
+  uint size_of_path = path.size()-1;
+  for(uint i = 0; i < size_of_path; i++)
+  {
+    float dist_to_point;
+    vector<float> this_point;
+
+    //printf(" :::: [%f %f] [%f %f] [%f %f]\n", point[0], point[1], path[i][0], path[i][1], path[i+1][0], path[i+1][1]);
+
+    if(find_closest_point_along_edge(point, path[i], path[i+1], resolution, this_point, dist_to_point))
+    {     
+      if(dist_to_point < best_dist_to_point)
+      {
+        //printf("new best, edge ind %d to %d at %f\n", i, i+1, dist_to_point);
+   
+        best_dist_to_point = dist_to_point;
+        closest_point = this_point;
+      }
+    }
+  }
+
+  if(best_dist_to_point == LARGE)
+    return false;
+
+  return true;
+}
 
 // helps the function below, returns true of the point is within robot_rad of the edge to within resolution
 bool edge_and_point_conflict(const vector<float> & point, const vector<vector<float> > & edge, float robot_rad, float resolution)
@@ -862,6 +927,10 @@ bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_confli
   // find first robot_forward conflict point
 
   float edge_length = euclid_dist(robot_forward_conflict[0], robot_forward_conflict[1]);
+
+  if(edge_length < SMALL)
+    return false;
+
   float step = edge_length*resolution;
   float step_x = (step/edge_length)*(robot_forward_conflict[1][0] - robot_forward_conflict[0][0]);
   float step_y = (step/edge_length)*(robot_forward_conflict[1][1] - robot_forward_conflict[0][1]);
@@ -891,7 +960,7 @@ bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_confli
           }
         }
       }
-       
+
       if(found_robot_forward_point_conflict)
       {
         return true;
@@ -1215,8 +1284,7 @@ int find_edge_containing_point(const vector<vector<float> > & robot_path, const 
 
 
 // given data about a robot's path, start point along that path, and a planning region, this returns the last point along the path in the region
-// also handles conflicts with existing sub-goals in case that point is already used (note, may put slightly out of region in that case)
-bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, const vector<vector<float> > sub_goals, const vector<bool> & sub_goal_found, float robot_rad, float resolution, vector<float> & exit_point)
+bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, float resolution, float robot_rad, vector<float> & exit_point)
 {
   // find edge that contains point and remember both
   vector<float> best_point;
@@ -1258,7 +1326,9 @@ bool calculate_exit_point(const vector<vector<float> > & robot_path, const vecto
       this_point = robot_path[i];
 
     if(EdgeSafe(this_point, robot_path[i+1], 0, boundary, robot_rad))
+    {
       continue;
+    }
 
     // if here then this edge leaves the boundary, so find the last point within the boundary
     vector<vector<float> > robot_forward_conflict(2);
@@ -1279,56 +1349,116 @@ bool calculate_exit_point(const vector<vector<float> > & robot_path, const vecto
     // made it all the way to the goal without finding a conflict with the boundary
     return false;
   }
-  // if here than found a last point in boundary, but still need to make sure it is compatible with the other robot goals that have already been selected
-
-  bool compatible = true;
-  int max_num_robots = sub_goal_found.size();
-  while(true) // break out when done
-  {
-    for(int r = 0; r < max_num_robots; r++)
-    {
-      if(!sub_goal_found[r])
-        continue;
-
-      if(robot_rad > euclid_dist(last_point_in_boundary, sub_goals[r]) )
-      {
-        // there is a conflict
-        compatible = false;
-        break;
-      }
-    }
-
-    if(compatible)
-      break;
-
-    // if here then not compatible, so move further along robot_path
-    float dist_remaining = euclid_dist(last_point_in_boundary, robot_path[edge_that_intersects_boundary_i + 1]);
-    if(robot_rad > dist_remaining) // need to move to next edge
-    {
-      last_point_in_boundary = robot_path[edge_that_intersects_boundary_i + 1];
-      edge_that_intersects_boundary_i++; 
-    }
-    else // stay on same edge
-    {
-      last_point_in_boundary[0] += (resolution/dist_remaining)*(robot_path[edge_that_intersects_boundary_i+1][0] - last_point_in_boundary[0]);
-      last_point_in_boundary[1] += (resolution/dist_remaining)*(robot_path[edge_that_intersects_boundary_i+1][1] - last_point_in_boundary[1]);
-    }
-
-    // if close to normal robot goal, just use that
-    if(robot_rad > euclid_dist(last_point_in_boundary, robot_path[robot_path.size()-1]) )
-    {
-      return false;
-    }
-  }
-
+  // if here than found a last point in boundary
   exit_point = last_point_in_boundary;
   return true;
 }
 
-// calculates the sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal
-bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_min_planning_area_side_length, float preferred_max_planning_area_side_length, float robot_rad, float resolution, vector<float> & sub_start, vector<float> & sub_goal)
+
+// returns true if any two points in sub_goals conflict within robot_rad, returns their inds in conflicting_ind_a, conflicting_ind_b
+bool any_two_points_conflict(const vector<vector<float> > & sub_goals, const vector<bool> & InTeam, float robot_rad, int & conflicting_ind_a, int & conflicting_ind_b)
+{
+  int max_num_robots = (int)sub_goals.size();
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    for(int j = i+1; j < max_num_robots; j++)
+    {
+      if(!InTeam[j])
+        continue;
+ 
+      //printf("checking goals of robot %d vs %d\n", i, j);
+      float diff_dist = euclid_dist(sub_goals[i], sub_goals[j]);
+      //printf(":::: %f > %f, [%f %f] [%f %f] \n", diff_dist, robot_rad, sub_goals[i][0], sub_goals[i][1], sub_goals[j][0], sub_goals[j][1]);
+      if(diff_dist < robot_rad)
+      {
+        //printf("two goals are too close: %f < %f, [%f %f] [%f %f] \n", diff_dist, robot_rad, sub_goals[i][0], sub_goals[i][1], sub_goals[j][0], sub_goals[j][1]);
+
+       conflicting_ind_a = i; 
+       conflicting_ind_b = j;
+       return true;
+      }
+    }
+  }
+  //printf("no points conflict \n");
+  return false;
+}
+
+// moves the point step along the path, assumes that point is already on path
+void move_point_along_path(vector<float> & point, const vector<vector<float> > & path, float step)
+{
+  // find edge that most likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
+  vector<float> best_point_found;
+  int ind_of_edge = find_edge_containing_point(path, point, best_point_found);
+
+  float total_dist_moved = 0;  
+  while(total_dist_moved < step)
+  {
+
+    float edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]); // length of edge remaining
+  
+    while(edge_length < SMALL && ind_of_edge+1 < path.size()-1) // while almost at the next edge and next edge is less than the final edge
+    {
+      total_dist_moved += edge_length;
+      ind_of_edge++;
+
+      if(ind_of_edge+1 < path.size()-1) // at last edge
+        break;
+
+      best_point_found = path[ind_of_edge];
+      edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]);
+    }
+
+    edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]);
+
+    if(ind_of_edge+1 >= path.size()-1) // if this is the last edge
+    {
+      if(edge_length <= step - total_dist_moved)  // if the end of the path is within step - total_dist_moved
+      {
+        // set point to the end of the path
+        printf("setting sub_goal to last point in path \n");
+        point = path[ind_of_edge+1];
+        return; 
+      }
+    }
+
+    if(edge_length <= step - total_dist_moved) // move to the end of the current edge
+    {
+      best_point_found = path[ind_of_edge+1];
+      total_dist_moved += edge_length;
+      continue;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  // if moved enough
+  if(total_dist_moved >= step)
+  {
+    point = best_point_found;
+  }
+
+  // otherwise move the rest of what we need along the current edge
+  // we know edge_length > step - total_dist_moved = dist_ramaining_to_move
+  float edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]); // length of edge remaining
+  float dist_ramaining_to_move = step - total_dist_moved;
+  best_point_found[0] += (dist_ramaining_to_move/edge_length)*(path[ind_of_edge+1][0] - best_point_found[0]);
+  best_point_found[1] += (dist_ramaining_to_move/edge_length)*(path[ind_of_edge+1][1] - best_point_found[1]);
+  point = best_point_found;
+}
+
+
+
+// calculates the sub_start and sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal. no_conflicts_between_single_paths gets set to true if there is no conflicts between anybody
+bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_min_planning_area_side_length, float preferred_max_planning_area_side_length, float robot_rad, float resolution, vector<float> & sub_start, vector<float> & sub_goal, bool & no_conflicts_between_single_paths)
 {
   // Note: There are probably better ways to do this than duplicating it on each agent, but this works and runtime is only robots squared
+
+  no_conflicts_between_single_paths = false;
 
   // see if all paths fit within the preferred planning area
   float max_x = -LARGE;
@@ -1405,6 +1535,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   float min_x_first_only = LARGE;
   float min_y_first_only = LARGE;
 
+  bool there_is_at_least_one_conflict = false;
+  bool there_is_at_least_one_robot_without_conflicts = false;
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
@@ -1427,7 +1559,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       float dist_to_first_j_conflict;
       float dist_to_last_j_conflict;
 
-      if(find_conflict_points(robot_paths[i], robot_paths[j], robot_rad, resolution, first_i_conflict,  dist_to_first_i_conflict, 
+      if(find_conflict_points(robot_paths[i], robot_paths[j], robot_rad*2, resolution, first_i_conflict,  dist_to_first_i_conflict, 
                                                                                      last_i_conflict, dist_to_last_i_conflict,
                                                                                      first_j_conflict, dist_to_first_j_conflict,
                                                                                      last_j_conflict, dist_to_last_j_conflict) )
@@ -1482,7 +1614,87 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
           last_conflicts[j] = last_j_conflict;
           dist_to_last_conflicts[j] = dist_to_last_j_conflict;
         }
+
+        there_is_at_least_one_conflict = true;
       }
+      else
+      {
+        there_is_at_least_one_robot_without_conflicts = true;
+      }
+    }
+  }
+
+
+  // check if any robots did not conflict, this may happen if a multi-path was 1/2 way through planning when a new robot was added to the team
+  // that does not conflict with the multi-path but does conflict with the single robot path
+  // (we need a portion of their path to be in the sub area so they are accounted for) (yes, this is a big hacky)
+  if(there_is_at_least_one_robot_without_conflicts) // at least one robot needs a first conflict
+  {
+    // check if there is at least 1 conflict
+    if(there_is_at_least_one_conflict) // there is at least one conflict
+    {
+      // for all robots that are in the team and do not have sub_start and sub_goal, call sub_start (and sub_goal) the closest
+      // point on their path to the centroid of all start_conflicts
+
+      // calculate centroid
+      float center_x = 0;
+      float center_y = 0;
+      float num = 0;
+      for(int i = 0; i < max_num_robots; i++)
+      {
+        if(!InTeam[i])
+          continue;
+
+        if(first_conflicts[i].size() < 2)  // in team but no conflict
+          continue;
+
+        center_x += first_conflicts[i][0];
+        center_y += first_conflicts[i][1];
+        num++;
+      }
+      center_x /= num;
+      center_y /= num;
+
+      vector<float> centroid(2);
+      centroid[0] = center_x;
+      centroid[1] = center_y;
+      printf("centrod: [%f %f]\n", centroid[0], centroid[1]);
+      // go through and find closest points as first conflicts for robots that need it
+      for(int i = 0; i < max_num_robots; i++)
+      {
+        if(!InTeam[i])
+          continue;
+
+        if(first_conflicts[i].size() < 2)  // in team and needs a conflict
+        {
+          vector<float> closest_point;
+          float best_dist_to_point;
+
+          printf("robot %d %f\n", i, resolution);
+
+          if(find_closest_point_along_path(centroid, robot_paths[i], resolution, closest_point, best_dist_to_point) )
+          {
+            first_conflicts[i] = closest_point;
+            dist_to_first_conflicts[i] = best_dist_to_point; // note, not dist along path, but main thing is its less than LARGE
+
+            last_conflicts[i] = closest_point;
+            dist_to_last_conflicts[i] = best_dist_to_point;  // note, not dist along path, but main thing is its less than LARGE
+          }
+          else
+          {
+            // this should not happen
+            printf("unable to find closest point \n");
+          }
+        }
+      }
+    }
+    else // no conflicts between any robots single paths
+    {
+      // send a flag that lets system know that it can ignore planning a new path and can just use its single robot path
+      // now that robots are in the same team, they will not try to recombine unless another robot conflicts with one or more of them
+
+      no_conflicts_between_single_paths = true;
+      return false;
     }
   }
 
@@ -1495,11 +1707,11 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
     printf("first conflict: [%f %f]\n", this_robots_first_conflict[0], this_robots_first_conflict[1]);
     printf("last conflict: [%f %f]\n", this_robots_last_conflict[0], this_robots_last_conflict[1]);
+    //getchar();
   }
   else
   {
-    printf("didn't find this agent's conflicts, so use normal start and goal, %d\n", robot_paths.size());
-    return false;
+    printf("didn't find conflicts\n");
   }
 
   // see if path sub-sections between each robot's first and last conflict fit within the preferred planning area, 
@@ -1523,7 +1735,6 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     vector<float> last_path_point;
 
     // find the edge containing the first conflict
-    //printf("%d %d %d %d\n", robot_paths.size(), first_conflicts.size(), r, first_conflicts[r].size());
     int edge_first = find_edge_containing_point(robot_paths[r], first_conflicts[r], first_path_point);
 
     if(edge_first == -1)
@@ -1532,7 +1743,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       printf("hmmm this should not happen 1\n");
       return false;
     }
-
+     
     ind_of_current_edges[r] = edge_first;
     current_point[r] = first_path_point;
 
@@ -1594,13 +1805,13 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   {
     if((max_x - min_x >= preferred_min_planning_area_side_length) && (max_y - min_y >= preferred_min_planning_area_side_length)) // if no need to expand
     {
-      printf("region bounds: x:[%f, %f] y:[%f, %f]\n", min_x, max_x, min_y, max_y);
+      /*printf("region bounds: x:[%f, %f] y:[%f, %f]\n", min_x, max_x, min_y, max_y);
+      printf("use first and last intersect as start and goal, no need to expand\n");
 
       if(found_this_robots_conflicts)
       {
         sub_start = this_robots_first_conflict;
         sub_goal = this_robots_last_conflict;
-        printf("returning true 1\n");
         return true;
       }
       else
@@ -1608,15 +1819,16 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         // this should never happen
         printf("no conflicts found?\n");
         return false;
-      }
+      }*/
     }
-
+    else
+    {
     // if we are here then we need to expand the planning area up to the minimum size
     need_to_expand_up_to_maximum = true;
+    }
   }
 
-
-  // if we are here than planning area based on first and last conflicts is too big or we need to expand the planning area up to the minimum size, so we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
+  // expand the planning area up to the minimum size, we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
 
   // start planning area based on first conflicts
   min_x = min_x_first_only;
@@ -1695,7 +1907,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         i++;
 
         // check if we've reached the end of the final edge
-        if(i >= (int)robot_paths[r].size() - 1) // reached this robot's goal
+        if(i >= robot_paths[r].size() - 1) // reached this robot's goal
         {
           at_goal[r] = true;
           break;
@@ -1737,7 +1949,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   //printf("current_point 1: [%f, %f]\n", current_point[1][0], current_point[1][1]);
 
   printf("region bounds: x:[%f, %f] y:[%f, %f]\n", min_x, max_x, min_y, max_y);
-
+  printf("(soft boundry)\n");
+ 
   // now we have a (soft) boundry, but need to calculate sub_start and sub_goal based on boundry and/or start/goals 
   // (NOTE using goal and not last conflict points) in order to insure that there will not be 
   // goal conflicts. (even though we trash this data and wait for other robots to send them later)
@@ -1745,7 +1958,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   // find sub goal:
 
   // record all robot goal locations
-  vector<vector<float> > robot_goals;
+  printf("(Recording all global goals) \n");
+  vector<vector<float> > robot_global_goals(max_num_robots);
 
   for(int i = 0; i < max_num_robots; i++)
   {
@@ -1753,15 +1967,17 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       continue;
 
     int goal_ind = robot_paths[i].size()-1;
-    robot_goals.push_back(robot_paths[i][goal_ind]);
+    robot_global_goals[i] = robot_paths[i][goal_ind];
   }
+  printf("(Done recording all goals)\n");
 
   // remember which goals we need to set
   vector<vector<float> > sub_goals(max_num_robots);
   vector<bool> sub_goal_found(max_num_robots, false);
 
+  printf("(First pass)\n");
 
-  // first pass, robot's with goals in planning area get priority as long as they were able to reach those goals without leaving the planning area
+  // first pass, robot's with goals in planning area get priority as long as they are able to reach those goals without leaving the planning area
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
@@ -1769,74 +1985,98 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
     if(at_goal[i]) // can reach goal without leaving planning area
     {
-      sub_goals[i] = robot_paths[i][robot_paths[i].size()-1];
+      printf("(robot %d can reach goal without leaving the planning area)\n", i);
+
+      sub_goals[i] = robot_global_goals[i];
       sub_goal_found[i] = true;
-
-      if(i == this_agent_id)
-      {
-        // if i is this agent, then we are done with sub_goal
-        sub_goal = robot_paths[i][robot_paths[i].size()-1];
-        break;
-      }
     }
   }
 
-  if(!sub_goal_found[this_agent_id])
-  {
-    // second pass, find goals for robots that do not yet have their goals set
-    for(int i = 0; i < max_num_robots; i++)
-    {
-      if(!InTeam[i])
-        continue;
+  printf("(Done with first pass)\n");
 
-      if(sub_goal_found[i])
-        continue;
+  printf("(Second pass)\n");
 
-      vector<float> exit_point;
-      if(calculate_exit_point(robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, sub_goals, sub_goal_found, robot_rad, resolution, exit_point))
-      {
-        // if here then use exit_point as goal
-        sub_goals[i] = exit_point;
-        sub_goal_found[i] = true;
-
-        if(i == this_agent_id)
-        {
-          // if i is this agent, then we are done with sub_goal
-          sub_goal = exit_point;
-          break;
-        }
-      }
-      else
-      {
-        // this should never happen
-        printf("unable to calculate sub goal?\n");
-
-        if(i == this_agent_id)
-          break;
-      }
-    }
-  }
-
-  if(!sub_goal_found[this_agent_id])
-  {
-    printf("returning false 12\n");
-    return false;
-  }
-
-  // find sub start:
-
-  // record all robot goal locations
-  vector<vector<float> > robot_starts;
-
+  // second pass, find goals for robots that do not yet have their goals set, this is the last point in the planning area that can be reached from the first conflict without leaving the planning area
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
       continue;
 
-    robot_starts.push_back(robot_paths[i][0]);
+    if(sub_goal_found[i])
+      continue;
+
+    vector<float> exit_point;
+    if(calculate_exit_point(robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, resolution, robot_rad, exit_point))
+    {
+      // if here then use exit_point as goal
+      sub_goals[i] = exit_point;
+      sub_goal_found[i] = true;
+    }
+    else
+    { 
+      // no exit point
+      printf("(did not find exit point for robot %d, so using global goal)",i);
+      sub_goals[i] = robot_global_goals[i];
+      sub_goal_found[i] = true;
+    }
+  }  
+  printf("(Done with second pass)\n");
+
+  if(!sub_goal_found[this_agent_id])
+  {
+    printf("(Return false, no subgoal found for this agent)\n");
+    return false;
   }
 
+  printf("This agents initial sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
+
+  // modify goals that conflict until they no longer conflict by moving the robot with lower id along its path toward its global goal
+  // if robot with lower id is at its global goal, then move the robot with the higher id toward its global goal
+  printf("(Removing sub_goal conflicts)\n");
+  int conflicting_ind_a = -1;
+  int conflicting_ind_b = -1;
+  while(any_two_points_conflict(sub_goals, InTeam, robot_rad, conflicting_ind_a, conflicting_ind_b))
+  {
+    printf("(two points are conflicting, so modifying goals)\n");
+    // if here then conflicting_ind_a and conflicting_ind_b conflict
+
+    if(resolution <= euclid_dist(sub_goals[conflicting_ind_a], robot_global_goals[conflicting_ind_a]))
+    {
+      // conflicting_ind_a is not yet at its global goal, so move it toward its global goal
+      move_point_along_path(sub_goals[conflicting_ind_a], robot_paths[conflicting_ind_a], robot_rad);
+    }
+    else if(resolution <= euclid_dist(sub_goals[conflicting_ind_b], robot_global_goals[conflicting_ind_b]))
+    {
+       // conflicting_ind_b is not yet at its global goal, so move it toward its global goal
+       move_point_along_path(sub_goals[conflicting_ind_b], robot_paths[conflicting_ind_b], robot_rad);
+    }
+    else
+    {
+      // this should not happen
+      printf("(two global goals are conflicting)");
+      return false;
+    }
+  }
+  printf("(Done removing sub_goal conflicts)\n");
+
+  printf("This agents final sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
+
+  // find sub start:
+
+  // record all robot goal locations
+  printf("(Recording global starts)\n");
+  vector<vector<float> > robot_global_starts(max_num_robots);
+  for(int i = 0; i < max_num_robots; i++)
+  {
+    if(!InTeam[i])
+      continue;
+
+    robot_global_starts[i] = robot_paths[i][0];
+  }
+  printf("(Done recording global starts)\n");
+
   // for coding ease I will use stuff I've already written, and just reverse all robot paths and then swap start and goals
+  printf("(Reversing all paths)\n");
   vector<vector<vector<float> > > reverse_robot_paths = robot_paths;
   for(int r = 0; r < max_num_robots; r++)
   {
@@ -1847,12 +2087,15 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       reverse_robot_paths[r][i] = robot_paths[r][j];
     }
   }
+  printf("(Done reversing all paths)\n");
 
   // remember which starts we need to set
   vector<vector<float> > sub_starts(max_num_robots);
   vector<bool> sub_start_found(max_num_robots, false);
 
-  // first pass, robot's with starts in planning area get priority as long as they were able to reach the first intersect point without leaving the planning area
+  printf("(Third pass)\n");
+
+  // third pass, robot's with starts in planning area get priority as long as they were able to reach the first intersect point without leaving the planning area
   vector<bool> at_start(max_num_robots,false);
   for(int i = 0; i < max_num_robots; i++)
   {
@@ -1861,23 +2104,18 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
     // see if robot i can reach start from first conflict point without leaving the planning area
     vector<float> entrance_point;
-    if(!calculate_exit_point(reverse_robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, sub_starts, sub_start_found, robot_rad, resolution, entrance_point))
+    if(!calculate_exit_point(reverse_robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, resolution, robot_rad, entrance_point))
     {
       // if here then did not exit the boundary before finding start, so use start as start
-      sub_starts[i] = robot_paths[i][0];
+      sub_starts[i] = robot_global_starts[i];
       sub_start_found[i] = true;
-
-      if(i == this_agent_id)
-      {
-        // if i is this agent, then we are done
-        sub_start = robot_paths[i][0];
-        printf("returning true 2\n");
-        return true;
-      }
     }
   }
 
-  // second pass, find starts for robots that do not yet have their starts set
+  printf("(Done with third pass)\n");
+  printf("(Fourth pass)\n");
+
+  // fourth pass, find starts for robots that do not yet have their starts set
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
@@ -1887,35 +2125,70 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       continue;
 
     vector<float> entrance_point;
-    if(calculate_exit_point(reverse_robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, sub_starts, sub_start_found, robot_rad, resolution, entrance_point))
+    if(calculate_exit_point(reverse_robot_paths[i], first_conflicts[i], min_x, max_x, min_y, max_y, resolution, robot_rad, entrance_point))
     {
       // if here then use entrance_point as start
       sub_starts[i] = entrance_point;
       sub_start_found[i] = true;
-
-      if(i == this_agent_id)
-      {
-        // if i is this agent, then we are done
-        sub_start = entrance_point;
-         printf("returning true 2.5\n");
-        return true;
-      }
     }
     else
     {
-      // this should never happen
-      printf("unable to calculate sub start?\n");
-
-      if(i == this_agent_id)
-      {
-        return true;
-        printf("returning true 3\n");
-      }
+      sub_starts[i] = robot_global_starts[i];
+      sub_start_found[i] = true;
     }
   }
 
-  printf("returning false 3\n");
-  return false;
-}
+  printf("(Done with fourth pass)\n");
 
+  if(!sub_start_found[this_agent_id])
+  {
+    printf("(unable to find sub_start of this agent, returning false)\n");
+    return false;
+  }
+
+  printf("This agents initial sub_start: [%f %f] \n",  sub_starts[this_agent_id][0],  sub_starts[this_agent_id][1]);
+
+
+  // modify starts that conflict until they no longer conflict by moving the robot with lower id along its path toward its global start
+  // if robot with lower id is at its global start, then move the robot with the higher id toward its global start
+  printf("(Removing sub_start conflicts)\n");
+  conflicting_ind_a = -1;
+  conflicting_ind_b = -1;
+  while(any_two_points_conflict(sub_starts, InTeam, robot_rad, conflicting_ind_a, conflicting_ind_b))
+  {
+    printf("(two points are conflicting, so modifying starts)\n");
+
+    // if here then conflicting_ind_a and conflicting_ind_b conflict
+    if(resolution <= euclid_dist(sub_starts[conflicting_ind_a], robot_global_starts[conflicting_ind_a]))
+    {
+      // conflicting_ind_a is not yet at its global start, so move it toward its global start
+      move_point_along_path(sub_starts[conflicting_ind_a], reverse_robot_paths[conflicting_ind_a], robot_rad);
+    }
+    else if(resolution <= euclid_dist(sub_starts[conflicting_ind_b], robot_global_starts[conflicting_ind_b]))
+    {
+       // conflicting_ind_b is not yet at its global start, so move it toward its global start
+       move_point_along_path(sub_starts[conflicting_ind_b], reverse_robot_paths[conflicting_ind_b], robot_rad);
+    }
+    else
+    {
+      // this should not happen, but just explicitly set each to the global start
+      printf("(Two global starts are conflictiong)\n");
+
+      sub_starts[conflicting_ind_a] = robot_paths[conflicting_ind_a][0];
+      sub_starts[conflicting_ind_b] = robot_paths[conflicting_ind_b][0];
+
+      //return false;
+    }
+  }
+  printf("(Done removing sub_start conflicts)\n");
+
+  printf("This agents final sub_start: [%f %f] \n",  sub_starts[this_agent_id][0],  sub_starts[this_agent_id][1]);
+
+  sub_start = sub_starts[this_agent_id];
+  sub_goal = sub_goals[this_agent_id];
+
+  printf("This agents final sub_goal  : [%f %f] \n",  sub_goal[0],  sub_goal[1]);
+  printf("This agents final sub_start : [%f %f] \n",  sub_start[0],  sub_start[1]);
+  return true;
+}
 
