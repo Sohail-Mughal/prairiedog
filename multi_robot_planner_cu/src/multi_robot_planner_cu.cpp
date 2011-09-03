@@ -756,9 +756,10 @@ int main(int argc, char** argv)
    
 
   // remove old files from temp directory
+  int unused_result;
   char system_call[200];
   sprintf(system_call,"rm -rf %s/*", message_dir); 
-  system(system_call);
+  unused_result = system(system_call);
     
   ros::init(argc, argv, "base_planner_cu");
   ros::NodeHandle nh;
@@ -1104,7 +1105,7 @@ int main(int argc, char** argv)
     Globals.done_planning = false;
     if(robot_is_moving) // master_reset = true while robot is moving
     {
-      system(system_call);  // remove old files
+      unused_result = system(system_call);  // remove old files
       start_time = clock();
       now_time = clock(); 
       while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
@@ -1130,7 +1131,14 @@ int main(int argc, char** argv)
     Globals.agent_ready[0] = 1;
           
     Globals.last_update_time.resize(0);
-    Globals.last_update_time.resize(Globals.number_of_agents, clock());
+    timeval temp_time;
+    gettimeofday(&temp_time, NULL);
+    Globals.last_update_time.resize(Globals.number_of_agents, temp_time);
+
+    printf("resetting planning start time\n");
+    Globals.start_time_of_planning = temp_time;
+    Globals.min_clock_to_plan = min_clock_to_plan;
+
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
     
@@ -1297,13 +1305,6 @@ int main(int argc, char** argv)
         // broadcast tf
         //broadcast_map_tf();
     
-        //start_wait_t = clock();
-        //now_time = clock();
-        //while(difftime_clock(now_time, start_wait_t) < Globals.sync_message_wait_time && !Globals.master_reset)
-        //{
-        //  usleep(Globals.sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-        //  now_time = clock();
-        //}
         usleep(Globals.sync_message_wait_time*1000000);
  
       }
@@ -1361,6 +1362,13 @@ int main(int argc, char** argv)
   
       clock_t phase_two_start_t = clock();
     
+      printf("resetting planning start time\n");
+      gettimeofday(&temp_time, NULL);
+      Globals.start_time_of_planning = temp_time;
+      Globals.last_update_time[Globals.agent_number] = Globals.start_time_of_planning; 
+      Globals.min_clock_to_plan = min_clock_to_plan;
+
+
       // find at least one solution (between all robots), also does one round of message passing per loop
       found_path = false;
       while(!found_path && (!Globals.master_reset || !Globals.found_single_robot_solution))
@@ -1468,7 +1476,9 @@ int main(int argc, char** argv)
     
       // record how much time left there is for planning (on this agent)
       Globals.planning_time_remaining[agent_number] = min_clock_to_plan - actual_solution_time;
-      Globals.last_update_time[agent_number] = now_time;
+      timeval temp_time;
+      gettimeofday(&temp_time, NULL);
+      Globals.last_update_time[agent_number] = temp_time;
   
       if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))   // a planning agent
       {
@@ -1601,14 +1611,7 @@ int main(int argc, char** argv)
       {    
           
         data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
-       
-        //start_wait_t = clock();
-        //now_time = clock();
-        //while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
-        //{ 
-        //  usleep(sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-        //  now_time = clock();
-        //}
+
         usleep(sync_message_wait_time*1000000);
 
         if(mode == 2 && agent_number != 0)
@@ -1683,11 +1686,7 @@ int main(int argc, char** argv)
       
       start_wait_t = clock();
       now_time = clock();
-      //while(difftime_clock(now_time, start_wait_t) < sync_message_wait_time && !Globals.master_reset)
-      //{ 
-      //  usleep(sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-      //  now_time = clock();
-      //}
+
       usleep(sync_message_wait_time*1000000);
 
       if(mode == 2 && agent_number != 0) 
@@ -1705,7 +1704,7 @@ int main(int argc, char** argv)
         double_up_points(Globals.single_robot_solution, single_agent_bst_sln_doubled);
 
         // add space to store rotation
-        for(int p = 0; p < single_agent_bst_sln_doubled.size(); p++)
+        for(uint p = 0; p < single_agent_bst_sln_doubled.size(); p++)
           single_agent_bst_sln_doubled[p].resize(3);
 
         calculate_rotation(single_agent_bst_sln_doubled);
@@ -1892,7 +1891,7 @@ int main(int argc, char** argv)
       {
 
         // find closest point on path to robot's current position
-        printf("robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
+        //printf("robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
         vector<float> temp_robot_position(2);
         temp_robot_position[0] = robot_pose->x;
         temp_robot_position[1] = robot_pose->y;

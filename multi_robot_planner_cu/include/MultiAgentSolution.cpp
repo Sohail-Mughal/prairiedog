@@ -323,6 +323,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
    
   // check for messages from every other agent (even those not yet in team)
 
+  int unused_result; // dummy return to make warning go away
+
   for(int i = 0; i < Gbls->number_of_agents; i++)
   {
     if(i == Gbls->agent_number)
@@ -438,8 +440,8 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         file_votes[this_s] = 1;  
       }
       //printf("\n");
-      
-      fscanf(ifp, "f:\n");
+     
+      unused_result = fscanf(ifp, "f:\n");
       
       // get list of flags indicating final solution
       for(int j = 0; j < num_agents; j++)
@@ -452,7 +454,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         
         file_FinalSolutionSent[j] = this_s;
       }
-      fscanf(ifp, "\n");
+      unused_result = fscanf(ifp, "\n");
       //printf("\n"); 
     
 //       ////////////////  for debugging  
@@ -515,7 +517,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         //printf("%d, ", this_f);
         file_DimensionOffset[j] = this_f;
       }
-      fscanf(ifp, "\n");
+      unused_result = fscanf(ifp, "\n");
       //printf("\n"); 
      
       if(!got_complete_offset)
@@ -554,7 +556,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         //printf("%d, ", this_s);
         file_DimensionMapping[j] = this_s;
       }
-      fscanf(ifp, "\n");
+      unused_result = fscanf(ifp, "\n");
       //printf("\n"); 
      
       if(!got_complete_mapping)
@@ -598,7 +600,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         }
         if(!successfull_path_get)
         {
-          printf("---ignoring message for a different problem (maps to higher dimension than we have %d)\n"); 
+          printf("---ignoring message for a different problem (maps to higher dimension than we have)\n"); 
           fclose(ifp);
           break; 
         }
@@ -657,7 +659,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           // instead of worrying about all paths in solution, only worry about that of the sending robot  (guarenteed to be in position 0)
           temp_polygon_list.resize(1); 
           
-          fscanf(ifp, "\n");
+          unused_result = fscanf(ifp, "\n");
           //printf("\n");
         }
         if(!successfull_path_get)
@@ -748,7 +750,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
           file_solution[j][temp_mapping[k]] = this_value;
           //printf("%f, ", file_solution[j][k]); 
         }
-        fscanf(ifp, "\n");
+        unused_result = fscanf(ifp, "\n");
         //printf("\n");   
       }
       
@@ -799,7 +801,9 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       if(remaining_planning_time < Gbls->planning_time_remaining[i])
       {
         Gbls->planning_time_remaining[i] = remaining_planning_time;
-        Gbls->last_update_time[i] = clock();
+        timeval temp_time;
+        gettimeofday(&temp_time, NULL);
+        Gbls->last_update_time[i] = temp_time;
       }
       
       // get file move flag from file
@@ -892,7 +896,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
                 }
                 this_point[d] = this_cord;
               }
-              fscanf(ifp, "\n");    
+              unused_result = fscanf(ifp, "\n");    
               the_coords[fn] = this_point;
             }
 

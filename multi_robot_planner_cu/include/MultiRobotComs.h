@@ -56,8 +56,10 @@ class GlobalVariables
    vector<vector<float> > goal_coords;   // goal_coords[i] holds the goal location for robot i, indexed using local_ID
    
    vector<float> planning_time_remaining; // holds the ammount of planning time remaining for each agent, indexed using local_ID
-   vector<clock_t> last_update_time;      // last_update_time[i] holds the last time planning_time_remaining[i] was updated, indexed using local_ID
-   
+   vector<timeval> last_update_time;      // last_update_time[i] holds the last time planning_time_remaining[i] was updated, indexed using local_ID
+   timeval start_time_of_planning;
+   float min_clock_to_plan;
+
    bool not_planning_yet; // is true when this agen is not planning
    
    int agent_number;    // this agent's global id

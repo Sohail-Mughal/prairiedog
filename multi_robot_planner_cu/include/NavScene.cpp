@@ -134,6 +134,8 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
   
   dim_max.resize(world_dims);
   
+  int unused_result; // dummy return to make warnings go away
+
   // get max values for each dimension from file
   float this_value;
   for(int k = 0; k < world_dims; k++)   
@@ -146,7 +148,7 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
     }
     dim_max[k] = this_value;
   }
-  fscanf(ifp, "\n");
+  unused_result = fscanf(ifp, "\n");
   
   // get num_robots from from file
   if(fscanf(ifp, "R:%d\n", &num_robots) <= 0)
@@ -201,7 +203,7 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
       startC[l] = this_value;
       l++;
     }
-    fscanf(ifp, "\n");
+    unused_result = fscanf(ifp, "\n");
   }
   
   // get goal configuration from file
@@ -226,7 +228,7 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
       goalC[l] = this_value;
       l++;
     }
-    fscanf(ifp, "\n");
+    unused_result = fscanf(ifp, "\n");
   }
   
   // get prob_at_goal from from file
@@ -363,7 +365,7 @@ bool NavScene::LoadFromFile(const char* filename) // loads the scene info from t
           polygon_list[i][j][k] = this_value;
           l++;
         }
-        fscanf(ifp, "\n");
+        unused_result = fscanf(ifp, "\n");
       }
     }
     
@@ -550,7 +552,8 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
           }
           polygon_list[i][j][k] = this_value + this_translation[k] + translation[k];
         }
-        fscanf(ifp, "\n");
+        int unused_result;
+        unused_result = fscanf(ifp, "\n");  // unused_result makes warning go away
       }
     }
     
@@ -1026,7 +1029,9 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
   if(num_polygons == 0)
      return true;
   ectr_all++;
-  float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo, x, y;
+  float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo;
+  float x = LARGE;
+  float y = LARGE;
   int this_edge_num;
   
   r_x1 = point1[index];
@@ -1034,10 +1039,10 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
   r_y1 = point1[index+1];
   r_y2 = point2[index+1];
   
-  int lookup_x1;
-  int lookup_y1;
-  int lookup_x2;
-  int lookup_y2;
+  int lookup_x1 = -1;
+  int lookup_y1 = -1;
+  int lookup_x2 = -1;
+  int lookup_y2 = -1;
     
   if(using_edge_lookup_table == 1)
   {

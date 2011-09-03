@@ -302,7 +302,12 @@ void time_data_dump(const char* directory, float prob_success, float min_clock_t
 
 float difftime_clock(const clock_t& clock_time_1, const clock_t& clock_time_2) // returns the difference in seconds between the clock time 1 and 2, (2 is assumed earlier than 1)
 {
-  return ((float)clock_time_1-(float)clock_time_2)/((float)CLOCKS_PER_SEC);
+  return ((float)(clock_time_1-clock_time_2))/((float)CLOCKS_PER_SEC);
+}
+
+float difftime_timeval(const timeval& time_1, const timeval& time_2) // returns the difference in seconds between the timeval time 1 and 2, (2 is assumed earlier than 1)
+{
+  return ((float)time_1.tv_sec + (((float)time_1.tv_usec)/1000000.0)) - ((float)time_2.tv_sec + (((float)time_2.tv_usec)/1000000.0));
 }
 
 bool string_printf_s(int &sp, char* buffer, char* buffer2, int buffer_len) // this takes the string in buffer 2 and puts it into buffer starting at buffer[sp], it then resets sp to be the new end of the string, returns false if there is not enough space in buffer
@@ -563,7 +568,9 @@ bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int inde
   if(num_polygons == 0)
      return true;
 
-  float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo, x, y;
+  float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo;
+  float x = LARGE;
+  float y = LARGE;
   int this_edge_num;
   
   r_x1 = point1[index];
@@ -1399,12 +1406,12 @@ void move_point_along_path(vector<float> & point, const vector<vector<float> > &
 
     float edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]); // length of edge remaining
   
-    while(edge_length < SMALL && ind_of_edge+1 < path.size()-1) // while almost at the next edge and next edge is less than the final edge
+    while(edge_length < SMALL && ind_of_edge+1 < ((int)path.size())-1) // while almost at the next edge and next edge is less than the final edge
     {
       total_dist_moved += edge_length;
       ind_of_edge++;
 
-      if(ind_of_edge+1 < path.size()-1) // at last edge
+      if(ind_of_edge+1 < ((int)path.size())-1) // at last edge
         break;
 
       best_point_found = path[ind_of_edge];
@@ -1413,7 +1420,7 @@ void move_point_along_path(vector<float> & point, const vector<vector<float> > &
 
     edge_length = euclid_dist(best_point_found, path[ind_of_edge+1]);
 
-    if(ind_of_edge+1 >= path.size()-1) // if this is the last edge
+    if(ind_of_edge+1 >= ((int)path.size())-1) // if this is the last edge
     {
       if(edge_length <= step - total_dist_moved)  // if the end of the path is within step - total_dist_moved
       {
@@ -1907,7 +1914,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         i++;
 
         // check if we've reached the end of the final edge
-        if(i >= robot_paths[r].size() - 1) // reached this robot's goal
+        if(i >= ((int)robot_paths[r].size()) - 1) // reached this robot's goal
         {
           at_goal[r] = true;
           break;
@@ -1966,7 +1973,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     if(!InTeam[i])
       continue;
 
-    int goal_ind = robot_paths[i].size()-1;
+    int goal_ind = ((int)robot_paths[i].size())-1;
     robot_global_goals[i] = robot_paths[i][goal_ind];
   }
   printf("(Done recording all goals)\n");
