@@ -65,7 +65,7 @@ void GlobalVariables::Populate(int num_of_agents)
     for(int i = 0; i < number_of_agents; i++)
       other_IP_strings[i] = (char*)malloc(256*sizeof(char));   
   }  
-  non_planning_yet = true;   
+  not_planning_yet = true;   
   
   agent_number = -1;
   
@@ -105,6 +105,8 @@ void GlobalVariables::Populate(int num_of_agents)
   have_calculated_start_and_goal = false;
   use_sub_sg = false;
   an_agent_needs_this_single_path_iteration = false;
+
+  revert_to_single_robot_path = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -1199,6 +1201,16 @@ bool GlobalVariables::have_all_team_single_paths()         // returns true if we
 //   return NULL;
 // } 
 
+void output_pulse(clock_t & last_listener_pulse, float pulse_time, const char* str)
+{
+  clock_t now_time_pulse = clock();
+  if(difftime_clock(now_time_pulse, last_listener_pulse) > pulse_time)
+  {
+    last_listener_pulse = now_time_pulse;
+    printf(str);
+  }
+}
+
 // this thread always listens for incomming messages from other robots
 void *Robot_Listner_Ad_Hoc(void * inG)
 {
@@ -1236,12 +1248,17 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
   char planning_message_buffer[max_message_size];
           
+
+  clock_t last_listener_pulse = clock();
+  float pulse_time = 1;
+
   while(!G->kill_master)
   {
     if(G->master_reset)
     {
-      printf("(listener) sleeping due to master_reset \n");
-      sleep(1);
+      output_pulse(last_listener_pulse, pulse_time, "(listener) sleeping due to master_reset \n");
+
+      usleep(100000); // sleep for 1/10 sec
     }
 
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
@@ -1250,15 +1267,19 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
       if(!Globals.have_all_team_single_paths())
       {
-        printf("(listener) listening for single robot paths from other robots \n");
+        output_pulse(last_listener_pulse, pulse_time, "(listener) listening for single robot paths from other robots \n");
       }
-      else if(G->non_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
+      else if(G->not_planning_yet) // i.e. while we don't have the min number of agent start/goal locations
       {
         printf("(listener) listining for start/goal from other agents \n");   
         printf("(listener) so far, team includes: ");
         for(int i = 0; i < G->team_size; i++)
           printf("%d(%d), ", G->global_ID[i], G->have_info[i]);
         printf("\n"); 
+
+        // check if we have all team data, if so then start planning
+        if(G->have_all_team_data())
+          G->not_planning_yet = false;
       }
     
       memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
@@ -1397,7 +1418,9 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           }
           else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
           {
-            printf("(listener) waiting while things reset \n"); 
+            // can also get in here after a rever to single robot path, in which case we do not need to worry about path-planning messages
+
+            //printf("(listener) waiting while things reset \n"); 
           }
           //else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
           else if(G->InTeam[agent_sending] && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
@@ -1468,8 +1491,21 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
   clock_t start_wait_t, now_time;
 
+  if(G->master_reset)
+  {
+    printf("(startup sender) sender thread exiting due to master reset -2 \n");
+    return NULL;
+  }
+  
+  if(G->revert_to_single_robot_path)
+  {
+    printf("(startup sender) sender thread exiting due to revert to single robot path -2\n");
+    return NULL;
+  }
+
+
   // while we don't have all the other robots individual prefered paths
-  while(!G->have_all_team_single_paths() && !G->master_reset)
+  while(!G->have_all_team_single_paths() && !G->master_reset && !G->revert_to_single_robot_path)
   {
     if(G->team_size <= 1)  // if only 1 robot in team, then can break out here
       break;
@@ -1485,15 +1521,34 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     G->hard_broadcast((void *)buffer, sizeof(char) * index);
 
     printf("(startup sender) waiting until we know all team members single paths\n");
-    start_wait_t = clock();
-    now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset)
-      now_time = clock(); 
+
+    //start_wait_t = clock();
+    //now_time = clock();
+    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->revert_to_single_robot_path)
+    //{
+    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+    //  now_time = clock(); 
+    //}
+    usleep(G->sync_message_wait_time*1000000);
+
   }
 
   printf("(startup sender) have all robot's single paths \n");
 
-  while(!G->have_calculated_start_and_goal && !G->master_reset)
+  if(G->master_reset)
+  {
+    printf("(startup sender) sender thread exiting due to master reset -1 \n");
+    return NULL;
+  }
+  
+  if(G->revert_to_single_robot_path)
+  {
+    printf("(startup sender) sender thread exiting due to revert to single robot path -1\n");
+    return NULL;
+  }
+
+
+  while(!G->have_calculated_start_and_goal && !G->master_reset && !G->revert_to_single_robot_path)
   {
     // wait until we have calculated the start and goal
 
@@ -1512,30 +1567,45 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     }
 
     printf("(startup sender) waiting to calculate this agents start and goal\n");
-    start_wait_t = clock();
-    now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->an_agent_needs_this_single_path_iteration)
-      now_time = clock(); 
+    //start_wait_t = clock();
+    //now_time = clock();
+    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->an_agent_needs_this_single_path_iteration && !G->revert_to_single_robot_path)
+    //{
+    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+    //  now_time = clock(); 
+    //}
+    usleep(G->sync_message_wait_time*1000000);
+
   }
 
-  while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset) // until we have the min number of the other robot's data
+
+  if(G->master_reset)
+  {
+    printf("(startup sender) sender thread exiting due to master reset 0 \n");
+    return NULL;
+  }
+  
+  if(G->revert_to_single_robot_path)
+  {
+    printf("(startup sender) sender thread exiting due to revert to single robot path 0\n");
+    return NULL;
+  }
+
+
+  while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset && !G->revert_to_single_robot_path) // until we have the min number of the other robot's data
   {   
     printf("here -0- %d\n", max_message_size);
         
     int final_index = G->populate_buffer_with_data(buffer);
-    if(G->an_agent_needs_this_single_path_iteration)
-    {
+    //if(G->an_agent_needs_this_single_path_iteration)
+    //{
       //printf("here 4 \n");
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
       G->an_agent_needs_this_single_path_iteration = false;
-    }
+    //}
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
-    start_wait_t = clock();
-    now_time = clock();
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration)
-      now_time = clock(); 
-    
+    usleep(G->sync_message_wait_time*1000000);
     printf("(startup sender) waiting for agent start and goal coords -(sending data)- \n");
   }
   printf("(startup sender) we have min number of start and goal locations to start planning\n");  
@@ -1546,10 +1616,16 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     return NULL;
   }
   
-  G->non_planning_yet = false;
+  if(G->revert_to_single_robot_path)
+  {
+    printf("(startup sender) sender thread exiting due to revert to single robot path 1\n");
+    return NULL;
+  }
+
+  G->not_planning_yet = false;
   
   // now we start path planning, but this thread still keeps broadcasting the data to agents in our team who are not yet ready to plan
-  while(!G->all_team_ready_to_plan() && !G->master_reset) // until the rest of the team is ready to plan
+  while(!G->all_team_ready_to_plan() && !G->master_reset && !G->revert_to_single_robot_path) // until the rest of the team is ready to plan
   {       
     printf("here -1-, %d\n", max_message_size);
     int final_index = G->populate_buffer_with_data(buffer);
@@ -1561,11 +1637,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     }
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
-    start_wait_t = clock();
-    now_time = clock();
-    
-    while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration)
-      now_time = clock(); 
+    //start_wait_t = clock();
+    //now_time = clock();   
+    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration && !G->revert_to_single_robot_path)
+    //{
+    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
+    //  now_time = clock(); 
+    //}
+    usleep(G->sync_message_wait_time*1000000);
   }
   
   if(G->master_reset)
@@ -1574,6 +1653,12 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     return NULL;
   }
   
+  if(G->revert_to_single_robot_path)
+  {
+    printf("(startup sender) sender thread exiting due to revert to single robot path 2\n");
+    return NULL;
+  }
+
   // now we know the team is all planning, so we exit this thread
   printf("(startup sender) all members of team are planning, exiting ad-hoc sender startup thread \n"); 
   

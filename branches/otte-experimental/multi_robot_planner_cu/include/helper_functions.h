@@ -64,6 +64,12 @@ int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer); // e
 // returns the 2D eudlidian distance between two points (using first 2 dims)
 float euclid_dist(const vector<float> & A, const vector<float> &B);
 
+// finds the closest point along the edge [edge0, edge1] to the point within resolution, returns false if closest_point is not populated
+bool find_closest_point_along_edge(const vector<float> & point, const vector<float> & edge0, const vector<float> & edge1, float resolution, vector<float> & closest_point, float & best_dist_to_point);
+
+// finds the closest point along the path to the point within resolution, returns false if closest_point is not populated
+bool find_closest_point_along_path(const vector<float> & point, const vector<vector<float> > & path, float resolution, vector<float> & closest_point, float & best_dist_to_point);
+
 // helps the function below, returns true of the point is within robot_rad of the edge to within resolution
 bool edge_and_point_conflict(const vector<float> & point, const vector<vector<float> > & edge, float robot_rad, float resolution);
 
