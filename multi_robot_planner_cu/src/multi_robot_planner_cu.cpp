@@ -165,10 +165,16 @@ unsigned int the_seed; // rand seed
  
 int min_num_agents = 1; // waits until this many agents have contact before planning (this number includes this agent), -1 means wait for all
 
+// this map stuff may no longer be used
 float map_resolution = -1; // reset later to proper value
 float map_width = 0;
 float map_height = 0;
         
+
+// this map stuff is used
+float default_map_x_size = -1;  // used only when finding single robot path, reset 
+float default_map_y_size = -1;  // used only when finding single robot path, reset
+
 float DISTANCE_METRIC = 0; // used only to calculate and compare path lengths, 0 = sum of all robots path segments, 1 = max robot segment length per time step (tends to cause robots to move at same time)
 
 vector<float> x_temp_vec; // used to help debug
@@ -912,7 +918,11 @@ int main(int argc, char** argv)
     target_mps = (float)double_input;                                                // target speed m/s
   if(ros::param::get("multi_robot_planner_cu/target_turn", double_input))
     target_rps = (float)double_input;                                                // target turn speed rad/s
-  
+  if(ros::param::get("mapper_cu/map_x_size", double_input))
+    default_map_x_size = (float)double_input;                                                // default map size x
+  if(ros::param::get("mapper_cu/map_y_size", double_input))
+    default_map_y_size = (float)double_input;                                                // default map size y
+
   printf("I am agent #%d of %d, and can plan for %f seconds\nmessages sent with probability %f\nmessage_wait_time: %f, sync_message_wait_time: %f\n", agent_number, total_agents, min_clock_to_plan, prob_success, message_wait_time, sync_message_wait_time);
   
   if(min_clock_to_plan <= 0) // use smart planning, where we plan for max(MX,N) where M and N are defined up near the top of this file
@@ -1089,6 +1099,9 @@ int main(int argc, char** argv)
   pthread_t Listener_thread, Sender_thread;
   pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         // listens for incomming messages, will sleep when and as long as master_reset = true but not terminate
  
+  Globals.default_map_x_size = default_map_x_size;
+  Globals.default_map_y_size = default_map_y_size;
+
   while(!Globals.kill_master)
   {   
     // at this point master_reset is true because globals may be changing and being reset, it will only be set to false lower down in this loop

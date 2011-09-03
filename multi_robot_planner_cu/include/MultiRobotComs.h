@@ -119,4 +119,7 @@ class GlobalVariables
                                                    // gets set to false after a hard broadcast of that data
 
    bool revert_to_single_robot_path;       // set to true if no team's single robot paths conflict
+
+   float default_map_x_size;  // used only when finding single robot path
+   float default_map_y_size;  // used only when finding single robot path
 };
