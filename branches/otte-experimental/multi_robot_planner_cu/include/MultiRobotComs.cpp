@@ -74,7 +74,11 @@ void GlobalVariables::Populate(int num_of_agents)
   
   planning_time_remaining.resize(number_of_agents, LARGE);
   last_update_time.resize(number_of_agents);
-  
+
+  printf("resetting planning start time\n");
+  gettimeofday(&start_time_of_planning, NULL);  
+  min_clock_to_plan = 10; // reset later
+
   last_known_dist.resize(number_of_agents, LARGE);
   last_known_time.resize(number_of_agents, clock());
   
@@ -795,26 +799,43 @@ void GlobalVariables::tell_master_we_are_moving(void * inG) // tells the master 
 
 float GlobalVariables::calculate_time_left_for_planning()  // based on info from all agents, this returns the time that remains for planning
 {
-  float min_time_for_planning = LARGE;   
-  
+  float time_for_planning_remaining = LARGE;      
+  timeval time_now;  
+  gettimeofday(&time_now, NULL);
+
+  float time_elapsed_since_last = difftime_timeval(time_now, last_update_time[agent_number]);
+
+  if(time_elapsed_since_last < .01) // if not much time has elapsed since the last update, then just return based on that
+    return planning_time_remaining[agent_number] - time_elapsed_since_last;
+
+  // otherwize update remaining time for all agents
+
   // find minimum planning time left considering all agents
   for(int i = 0; i < number_of_agents; i++)
   {
     if(planning_time_remaining[i] == LARGE) // no planning time data from this agent yet
       continue;
-      
-    clock_t time_now = clock(); 
-    planning_time_remaining[i] -= difftime_clock(time_now, last_update_time[i]);
-    last_update_time[i] = time_now;
-    
-    if(planning_time_remaining[i] < min_time_for_planning)
-      min_time_for_planning = planning_time_remaining[i];
+ 
+    if(i == agent_number)
+    {
+      float time_elapsed_since_planning_started = difftime_timeval(time_now, start_time_of_planning);
+      planning_time_remaining[i] = min_clock_to_plan - time_elapsed_since_planning_started;
+      last_update_time[i] = time_now;
+    }
+    else
+    {
+      planning_time_remaining[i] -= time_elapsed_since_last;
+      last_update_time[i] = time_now;
+    }
+
+    if(planning_time_remaining[i] < time_for_planning_remaining)
+      time_for_planning_remaining = planning_time_remaining[i];
   }
   
-  // reset this agent's time left for planning to be equal to the minimum ammount of time left for planning
-  planning_time_remaining[agent_number] = min_time_for_planning;
+  // reset this agent's time left for planning to be equal to the (minimum) ammount of time left for planning by anybody
+  planning_time_remaining[agent_number] = time_for_planning_remaining;
   
-  return min_time_for_planning;
+  return time_for_planning_remaining;
 }
 
 
@@ -1207,7 +1228,8 @@ void output_pulse(clock_t & last_listener_pulse, float pulse_time, const char* s
   if(difftime_clock(now_time_pulse, last_listener_pulse) > pulse_time)
   {
     last_listener_pulse = now_time_pulse;
-    printf(str);
+
+    printf("%s", str);
   }
 }
 
@@ -1489,8 +1511,6 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->my_out_sock < 0)        // failed to create socket
     error("(startup sender) problems creating socket");
 
-  clock_t start_wait_t, now_time;
-
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset -2 \n");
@@ -1512,7 +1532,6 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
     // send all prefered paths we know about
 
-    //printf("here 2 \n");
     int index = G->populate_buffer_with_single_robot_paths(buffer);
 
     buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
@@ -1522,13 +1541,6 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
     printf("(startup sender) waiting until we know all team members single paths\n");
 
-    //start_wait_t = clock();
-    //now_time = clock();
-    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->revert_to_single_robot_path)
-    //{
-    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-    //  now_time = clock(); 
-    //}
     usleep(G->sync_message_wait_time*1000000);
 
   }
@@ -1556,7 +1568,6 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     {
       // send all prefered paths we know about
 
-      //printf("here 3 \n");
       int index = G->populate_buffer_with_single_robot_paths(buffer);
 
       buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
@@ -1567,13 +1578,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     }
 
     printf("(startup sender) waiting to calculate this agents start and goal\n");
-    //start_wait_t = clock();
-    //now_time = clock();
-    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->an_agent_needs_this_single_path_iteration && !G->revert_to_single_robot_path)
-    //{
-    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-    //  now_time = clock(); 
-    //}
+
     usleep(G->sync_message_wait_time*1000000);
 
   }
@@ -1594,7 +1599,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset && !G->revert_to_single_robot_path) // until we have the min number of the other robot's data
   {   
-    printf("here -0- %d\n", max_message_size);
+    //printf("here -0- %d\n", max_message_size);
         
     int final_index = G->populate_buffer_with_data(buffer);
     //if(G->an_agent_needs_this_single_path_iteration)
@@ -1637,13 +1642,6 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
     }
     G->hard_broadcast((void *)buffer, sizeof(buffer));
     
-    //start_wait_t = clock();
-    //now_time = clock();   
-    //while(difftime_clock(now_time, start_wait_t) < G->sync_message_wait_time && !G->master_reset && !G->an_agent_needs_this_single_path_iteration && !G->revert_to_single_robot_path)
-    //{
-    //  usleep(G->sync_message_wait_time*100000); // *1000000 / 10, want to poll average 10 times, so that have resolution of .1 sec
-    //  now_time = clock(); 
-    //}
     usleep(G->sync_message_wait_time*1000000);
   }
   
