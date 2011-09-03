@@ -111,6 +111,9 @@ void GlobalVariables::Populate(int num_of_agents)
   an_agent_needs_this_single_path_iteration = false;
 
   revert_to_single_robot_path = false;
+
+  Globals.default_map_x_size = -1;
+  Globals.default_map_y_size = -1;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string

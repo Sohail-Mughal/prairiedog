@@ -624,35 +624,50 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   float max_x = -LARGE;
   float max_y = -LARGE;  
     
-  for(int i = 0; i < G.team_size; i++)
+  if(!G.found_single_robot_solution) // for a single robot we need to plan in the entire area
   {
-    if(min_x > G.start_coords[i][0])
-      min_x = G.start_coords[i][0];
-    if(min_x > G.goal_coords[i][0])
-      min_x = G.goal_coords[i][0]; 
-    
-    if(min_y > G.start_coords[i][1])
-      min_y = G.start_coords[i][1];
-    if(min_y > G.goal_coords[i][1])
-      min_y = G.goal_coords[i][1];
-    
-    if(max_x < G.start_coords[i][0])
-      max_x = G.start_coords[i][0];
-    if(max_x < G.goal_coords[i][0])
-      max_x = G.goal_coords[i][0]; 
-    
-    if(max_y < G.start_coords[i][1])
-      max_y = G.start_coords[i][1];
-    if(max_y < G.goal_coords[i][1])
-      max_y = G.goal_coords[i][1];    
+    if(G.default_map_x_size <= 0 || G.default_map_y_size <= 0)
+    {
+      printf("WARNING: map size unset, set with paramiter server\n");
+    }
+
+    min_x = 0;
+    min_y = 0;
+    max_x = G.default_map_x_size;
+    max_y = G.default_map_y_size;
   }
+  else // for multi robot only plan in a sub area
+  {
+    for(int i = 0; i < G.team_size; i++)
+    {
+      if(min_x > G.start_coords[i][0])
+        min_x = G.start_coords[i][0];
+      if(min_x > G.goal_coords[i][0])
+        min_x = G.goal_coords[i][0]; 
     
-  // we want to add a frame of free space around the configuration (obstacles handled later)
-  min_x -= G.planning_border_width;
-  max_x += G.planning_border_width;
-  min_y -= G.planning_border_width;
-  max_y += G.planning_border_width;
-  
+      if(min_y > G.start_coords[i][1])
+        min_y = G.start_coords[i][1];
+      if(min_y > G.goal_coords[i][1])
+        min_y = G.goal_coords[i][1];
+    
+      if(max_x < G.start_coords[i][0])
+        max_x = G.start_coords[i][0];
+      if(max_x < G.goal_coords[i][0])
+        max_x = G.goal_coords[i][0]; 
+    
+      if(max_y < G.start_coords[i][1])
+        max_y = G.start_coords[i][1];
+      if(max_y < G.goal_coords[i][1])
+        max_y = G.goal_coords[i][1];    
+    }
+    
+    // we want to add a frame of free space around the configuration (obstacles handled later)
+    min_x -= G.planning_border_width;
+    max_x += G.planning_border_width;
+    min_y -= G.planning_border_width;
+    max_y += G.planning_border_width;
+  }
+
   float min_theta = 0;
   float max_theta = 2*PI; 
   
