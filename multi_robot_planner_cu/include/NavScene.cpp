@@ -746,7 +746,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   }
   
   printf("adjusted goal: \n");
-  print_float_vector(startC);
+  print_float_vector(goalC);
   
   // get prob_at_goal
   prob_at_goal = G.prob_at_goal;

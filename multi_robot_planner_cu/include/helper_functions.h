@@ -73,6 +73,7 @@ bool find_closest_point_along_path(const vector<float> & point, const vector<vec
 // helps the function below, returns true of the point is within robot_rad of the edge to within resolution
 bool edge_and_point_conflict(const vector<float> & point, const vector<vector<float> > & edge, float robot_rad, float resolution);
 
+
 // used in the function below
 bool edge_and_edges_conflict(const vector<vector<float> > & robot_forward_conflict, 
                              const vector<vector<vector<float> > > & obstacle_forward_conflicts,
@@ -88,13 +89,26 @@ vector<float> &last_r_conflict, float &dist_to_last_r_conflict,
 vector<float> &first_o_conflict, float &dist_to_first_o_conflict,  
 vector<float> &last_o_conflict,  float &dist_to_last_o_conflict);
 
-// find edge that mot likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
+// moves the point that is located on edge with inds [i , i+1] time resolution along the path P
+void move_time_res_along_path(const vector<vector<float> > & P, float time_res, int &i, vector<float> & point, bool & at_end_P);
+
+// finds the first conflict (with respect to time) between paths (A and B) accounting for time (unlike the above function),  each path point is assumed [x y time]. time_res is the time granularity to use
+bool find_first_time_conflict_points(const vector<vector<float> > &A, const vector<vector<float> > &B, float robot_rad, float time_res, vector<float> &A_conflict, vector<float> &B_conflict);
+
+
+// find edge that most likely contains point and return the index of that edge or -1 if nothing is found, and also return the point in the path that was the best match
 int find_edge_containing_point(const vector<vector<float> > & robot_path, const vector<float> & point, vector<float> & best_point_found);
 
-// given data about a robot's path, start point along that path, and a planning region, this returns the last point along the path in the region
-// also handles conflicts with existing sub-goals in case that point is already used (note, may put slightly out of region in that case)
-bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, const vector<vector<float> > sub_goals, const vector<bool> & sub_goal_found, float robot_rad, float resolution, vector<float> & exit_point);
 
-// calculates the sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal
-bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_min_planning_area_side_length, float preferred_max_planning_area_side_length, float robot_rad, float resolution, vector<float> & sub_start, vector<float> & sub_goal);
+// given data about a robot's path, start point along that path, and a planning region, this returns the last point along the path in the region
+bool calculate_exit_point(const vector<vector<float> > & robot_path, const vector<float> & start_point, float area_min_x, float area_max_x, float  area_min_y, float area_max_y, float resolution, float robot_rad, vector<float> & exit_point);
+
+// returns true if any two points in sub_goals conflict within robot_rad, returns their inds in conflicting_ind_a, conflicting_ind_b
+bool any_two_points_conflict(const vector<vector<float> > & sub_goals, const vector<bool> & InTeam, float robot_rad, int & conflicting_ind_a, int & conflicting_ind_b);
+
+// moves the point step along the path, assumes that point is already on path
+void move_point_along_path(vector<float> & point, const vector<vector<float> > & path, float step);
+
+// calculates the sub_start and sub goal that this robot should use for multi-robot path planning based on single robot paths, returns true if finds a new sub_start and sub_goal. no_conflicts_between_single_paths gets set to true if there is no conflicts between anybody
+bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, const vector<bool> & InTeam, int this_agent_id, float preferred_min_planning_area_side_length, float preferred_max_planning_area_side_length, float robot_rad, float resolution, float time_res, vector<float> & sub_start, vector<float> & sub_goal, bool & no_conflicts_between_single_paths);
 

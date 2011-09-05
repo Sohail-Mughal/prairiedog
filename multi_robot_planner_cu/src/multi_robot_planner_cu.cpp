@@ -1219,13 +1219,14 @@ int main(int argc, char** argv)
       float preferred_min_planning_area_side_length = 1;
       float preferred_max_planning_area_side_length = 1.5;
       float accuracy_resolution = .05;
+      float time_resolution = .05;
 
       printf("calculating sub_start and sub_goals \n");
 
       bool no_conflicts_between_sub_paths = false;
       if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
                             preferred_min_planning_area_side_length,  preferred_max_planning_area_side_length, 
-                            robot_radius*2, accuracy_resolution, sub_start, sub_goal, no_conflicts_between_sub_paths) )
+                            robot_radius, accuracy_resolution, time_resolution, sub_start, sub_goal, no_conflicts_between_sub_paths) )
       {
         // if here then sub_start and sub_goal have changed
         printf("new sub area \n");
