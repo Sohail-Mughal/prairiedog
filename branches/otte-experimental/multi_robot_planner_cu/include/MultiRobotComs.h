@@ -26,7 +26,7 @@ class GlobalVariables
    int populate_buffer_with_single_robot_paths(char* buffer); // puts single robot paths in buffer, returns the number of chars that it required
 
    int populate_buffer_with_data(char* buffer); // puts this agents ip, start, and goal positions into the buffer
-   bool recover_data_from_buffer(char* buffer, int &index); // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution, index holds the index directly after data
+   bool recover_data_from_buffer(char* buffer, int &index, vector<int> & robots_in_senders_team); // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution, index holds the index directly after data
    void tell_master_we_are_moving(void * inG); // tells the master that this robot is moving
    
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning

@@ -436,13 +436,14 @@ int GlobalVariables::populate_buffer_with_data(char* buffer) // puts this agents
   return index;
 }
 
-bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that overlaps (just simple quad) with our solution, index holds the index directly after data
+bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<int> & robots_in_senders_team) // gets an agents ip, start, and goal position out of the buffer, returns true if we get a message from another team that should be joined with our team, index holds the index directly after data
 {  
   index = 0;
   
   if(master_reset)
     return false;
     
+  bool need_to_join_teams = false;      
   bool overlap = false;
   if(buffer[0] == 'A') // message type 'A'  
   { 
@@ -482,7 +483,6 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
       return false;
     index++;
 
-    vector<int> robots_in_senders_team;
     if(buffer[index] == 'T')
     {
       // find out who is in the sending robot's team 
@@ -586,48 +586,32 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
     }
     else
       index--; // hack to make next buffer read a little easier in case planning area bounds not sent    
-        
+
     // check if message planning bounds intersects with this agent's team's planning bounds
     if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
       overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
             
-    
-    if(dist_to_sender > combine_dist ) ///////////////////
-     overlap = false;   
-    
-    
-    bool need_to_join_solutions = false;
+
     if(!InTeam[sending_agent] && overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
-      need_to_join_solutions = true;
+    {
+      printf("Planning area overlaps with an agent not yet in our team\n");
+      need_to_join_teams = true;
+    }
+
+    if(dist_to_sender > combine_dist )
+    {
+      printf("... but it is too far away to care about right now\n");
+      overlap = false;   
+      need_to_join_teams = false;
+    }
+
     if(!InTeam[sending_agent] && team_includes_this_ag && senders_planning_iteration > planning_iteration[sending_agent])   // need to join because the sending agent thinks we are in its team, but we currently don't think so, and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
     {
-       printf("here here here %d >? %d, %d\n", senders_planning_iteration, planning_iteration[sending_agent], sending_agent);
-        need_to_join_solutions = true;
-    
+      printf("Recieved a message from an agent that has added us to their team\n");
+      need_to_join_teams = true;
+      return need_to_join_teams;
     }
-    
-    if(need_to_join_solutions)    
-    {
-      printf("----------------------- need to join teams -------------------------\n");
-
-      for(uint k = 0; k < robots_in_senders_team.size(); k++)
-      {
-        int temp_ag = robots_in_senders_team[k];
-              
-        if(!InTeam[temp_ag])
-        {    
-          InTeam[temp_ag] = true;
-          local_ID[temp_ag] = team_size;
-          global_ID.push_back(temp_ag);
-          team_size++;
-        } 
-      }
-      
-      planning_iteration[agent_number]++; // the problem has changed, so update our planning iteration number
-      
-      master_reset = true;   
-      return overlap;
-    }
+   
         
     // if we are here then the solutions don't need to be merged
     while(true) // break out when done
@@ -724,11 +708,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
     
     if(!InTeam[sending_agent])
     {
-      // the sending agent is not in our team, if the robots are far away from each other, then we'll say that they do not overlap, even if they do--- chances of collision small, we'll deal with it when they get closer to each other, this reduces complexity considerably      
-      if(dist_to_sender > combine_dist )
-        overlap = false;    
-      
-     // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %f >? %f \n", dist_to_sender,  combine_dist );
+      // nothing goes here
       
     }
     #ifdef drop_old_robots_from_teams
@@ -738,32 +718,16 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index) // gets
       {  
         if(dist_to_sender > drop_dist )  // the two agents are far enough away that they are no longer in the same team
         { 
-          overlap = false;    
+          need_to_join_teams = false;    
         }
       }
     }
     #endif
-
-    /*  NOTE the following was moved to after the call to this function
-    if(buffer[index] == 'A')
-    {
-      if(buffer[index+1] == 'V')
-      {
-        index += 2;
-        
-        // extract the sending robot's prefered single robot path
-
-        index += extract_2d_vector_from_buffer(other_robots_single_solutions[sending_agent], (void*)((size_t)buffer + (size_t)index));
-
-      }
-
-    }
-    */
   }
   else
     printf("asked to parse unknown message type \n");
    
-  return overlap;
+  return need_to_join_teams;
 }
 
 void GlobalVariables::tell_master_we_are_moving(void * inG) // tells the master that this robot is moving
@@ -1317,11 +1281,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
       {   
         //printf("(listener) Received data: %c\n", (char)planning_message_buffer[message_ptr]);
         
-        bool overlapping = false;
+        bool need_to_join_teams = false;
+        vector<int> robots_in_senders_team; // gets populated from buffer data
+
         if(planning_message_buffer[message_ptr] == 'A') // it has start up message in it
         {
           //printf("-Received start-up data from an agent:\n%s\n", planning_message_buffer);
-          overlapping = G->recover_data_from_buffer(planning_message_buffer, message_ptr);
+          need_to_join_teams = G->recover_data_from_buffer(planning_message_buffer, message_ptr, robots_in_senders_team);
         
           //printf("trying to recover data \n");
         
@@ -1343,13 +1309,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           int pln_itr;
           message_ptr += extract_int_from_buffer(pln_itr, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
 
-          printf("(listener) extract maybe? %d[%d] \n", ag_gbl_id, pln_itr);
+          //printf("(listener) extract maybe? %d[%d] \n", ag_gbl_id, pln_itr);
 
           if(ag_gbl_id == G->agent_number) // what the sending agent thinks about this agent
           {
             if(pln_itr < G->planning_iteration_single_solutions[G->agent_number]) // the sending agent is incorrect about this agent's iteration
             {
-              printf("(listener) another agent is incorrect about (my) planning iteration \n");
+              //printf("(listener) another agent is incorrect about (my) planning iteration \n");
               G->an_agent_needs_this_single_path_iteration = true;
             }
 
@@ -1380,10 +1346,29 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           //printf("did extract? \n");
         }
 
-        //printf("this is the message as it will be passed to other parts: \n%s", &(message_buffer[message_ptr]));
+        if(need_to_join_teams)     // for overlap or because we were in their team, based on what was found above
+        {
+          printf("----------------------- need to join teams -------------------------\n");
+
+          for(uint k = 0; k < robots_in_senders_team.size(); k++)
+          {
+            int temp_ag = robots_in_senders_team[k];
+              
+            if(!G->InTeam[temp_ag])
+            {    
+              G->InTeam[temp_ag] = true;
+              G->local_ID[temp_ag] = G->team_size;
+              G->global_ID.push_back(temp_ag);
+              G->team_size++;
+            } 
+          }
       
-        //printf("this is the next chars: -1:%c, 0:%c, 1:%c, 2:%c, 3:%c \n", message_buffer[message_ptr-1], message_buffer[message_ptr], message_buffer[message_ptr+1], message_buffer[message_ptr+2], message_buffer[message_ptr+3]);
-        
+          G->planning_iteration[G->agent_number]++; // the problem has changed, so update our planning iteration number
+      
+          G->master_reset = true;   
+          continue;
+        }
+
         if(planning_message_buffer[message_ptr] == '2') // it has planning data in it;
         {
           //printf("contains planning data \n");
@@ -1407,47 +1392,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
              // don't know who sent the message, so ignore 
              //printf("s:%d (b)\n", agent_sending);
           }
-          else if(!G->InTeam[agent_sending] && !JOIN_ON_OVERLAPPING_AREAS && overlapping)
-          {
-            // recieved a message from a robot that is not yet part of this team
-            // (if we do not join on overlapping areas, then we join on intersecting paths, so we want the message to be saved so we can check for this later)
-            // the final case above is because we can save time by automatically dropping from groups that do not overlap (as this is a precondition for intersection)
-            // printf("recieved a message from a robot that is not yet part of this team\n");  
-            
-            //printf("s:%d (c)\n", agent_sending);
-              
-            // printf(" <<<<<<<<<<<<<<<<<<<<<<< == \n");
-              
-            char this_file[100];
-          
-            if((MultiAgentSolution*)(G->MAgSln) == NULL)
-              continue;
-          
-            if(agent_sending >= (int)((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.size())
-              ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr.resize(agent_sending);  // because this may not be big enough -- not sure why I thought this
-            
-            ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending] = 1;
-            sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_sending, G->agent_number, ((MultiAgentSolution*)(G->MAgSln))->in_msg_ctr[agent_sending]);
-          
-            //printf("attempting to open: %s \n",this_file);      
-            FILE* ofp = fopen(this_file,"w");
-
-            if(ofp == NULL) // problem opening file
-            {
-              printf("(listener) cannot open message file for writing\n");
-              continue;
-            }
-              
-            fprintf(ofp, "%s\n", &(planning_message_buffer[message_ptr]));
-            fclose(ofp);
-          }
           else if((MultiAgentSolution*)G->MAgSln == NULL )  // this case keeps the next check from exploding, especially after a master reset
           {
             // can also get in here after a rever to single robot path, in which case we do not need to worry about path-planning messages
 
             //printf("(listener) waiting while things reset \n"); 
           }
-          //else if(G->local_ID[agent_sending] < G->team_size && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
           else if(G->InTeam[agent_sending] && agent_sending < (int)(((MultiAgentSolution*)G->MAgSln)->in_msg_ctr.size())) // last case checks for when messages are recieved before MultAgSln is populated
           { 
             // put the message into a file             
@@ -1490,6 +1440,11 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         }
         else if(planning_message_buffer[message_ptr] != '\0')   
         {
+          if(G->master_reset)
+          {
+            // during a master reset not all of a message will be read
+            continue;
+          }
           printf("(listener) recieved unknown message type --\n%s\n",  &(planning_message_buffer[message_ptr]));    
         }
       }     
