@@ -207,7 +207,7 @@ GlobalVariables Globals;       // note, GlobalVariables defined in MultiRobotCom
 vector<vector<float> > ThisAgentsPath; // holds the path that is sent to the controller each point is [x y rotation]
 vector<float> Parametric_Times; // holds time parametry of best solution
   
-bool JOIN_ON_OVERLAPPING_AREAS = true; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
+bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
 float team_combine_dist = 20;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
@@ -1136,9 +1136,11 @@ int main(int argc, char** argv)
     Globals.agent_ready[0] = 1;
           
     Globals.last_update_time.resize(0);
+    Globals.last_path_conflict_check_time.resize(0);
     timeval temp_time;
     gettimeofday(&temp_time, NULL);
     Globals.last_update_time.resize(Globals.number_of_agents, temp_time);
+    Globals.last_path_conflict_check_time.resize(Globals.number_of_agents, temp_time);
 
     printf("resetting planning start time\n");
     Globals.start_time_of_planning = temp_time;
@@ -1932,6 +1934,11 @@ int main(int argc, char** argv)
           Globals.single_robot_solution = new_single_robot_solution;
 
           printf("Done concatonating sub paths\n");
+
+        for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
+          printf("%f %f %f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2], Globals.single_robot_solution[p][3]);
+        printf("\n");
+
         }
         else // are not using a sub area
         {
@@ -1939,7 +1946,7 @@ int main(int argc, char** argv)
           // reset single robot solution [x y time angle] based on the new ThisAgentsPath [x y angle] and Parametric_Times [time]
           vector<float> temp(4, -1);   
           vector<vector<float> > new_single_robot_solution(ThisAgentsPath.size(), temp);
-          for(uint p = 1; p < ThisAgentsPath.size(); p++)
+          for(uint p = 0; p < ThisAgentsPath.size(); p++)
           {
             new_single_robot_solution[p][0] = ThisAgentsPath[p][0];  // x
             new_single_robot_solution[p][1] = ThisAgentsPath[p][1];  // y
@@ -1969,7 +1976,7 @@ int main(int argc, char** argv)
           {      
             if(first_i_of_edge == 0) // just repace first point in path with temp_best_point_found
             {
-              printf("adjusting an edge\n");
+              //printf("adjusting an edge\n");
               // calculate the time associated with that point
               if(Globals.single_robot_solution.size() > 1) // ... if there is at least one edge
               {
@@ -1987,7 +1994,7 @@ int main(int argc, char** argv)
             }
             else // need to remove at least one edge (take care of removing more of the next edge on next loop)
             {
-              printf("removing an edge\n");
+              //printf("removing an edge\n");
               uint orig_size = Globals.single_robot_solution.size();
               uint new_size = orig_size - first_i_of_edge;
               vector<vector<float> > new_single_robot_solution(new_size);
@@ -2002,10 +2009,6 @@ int main(int argc, char** argv)
             }
           }
         }
-
-        for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
-          printf("%f %f %f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2], Globals.single_robot_solution[p][3]);
-        printf("\n");
       }
 
       publish_global_path(ThisAgentsPath, Parametric_Times); 

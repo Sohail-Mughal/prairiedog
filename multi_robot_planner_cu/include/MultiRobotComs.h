@@ -60,6 +60,8 @@ class GlobalVariables
    timeval start_time_of_planning;
    float min_clock_to_plan;
 
+   vector<timeval> last_path_conflict_check_time; // holds the last time we checked if this agent conflicts with each other agent
+
    bool not_planning_yet; // is true when this agen is not planning
    
    int agent_number;    // this agent's global id
