@@ -1385,9 +1385,13 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     if(BestSolution.size() < 1)
     {
       //printf(" sending here ! \n");
-      Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
+      out_buffer[sp] = 4; // this signals that all this message contained was the prefered robot path 
+      sp++;
+
+      Gbls->hard_broadcast((void *)out_buffer, sizeof(char) * sp);  // note, changed to hard broadcast when we started doing dynamic team sizes
       return;
     }
+
     sprintf(temp_buffer,"2%d",agent_id);
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     
@@ -1616,6 +1620,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       
       //printf(" out 7\n");
     }
+
     Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
     out_msg_ctr[i]++;
   }
