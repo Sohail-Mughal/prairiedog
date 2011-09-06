@@ -103,8 +103,8 @@ class GlobalVariables
    void* MAgSln;   // pointer to the multi agent solution
 
    bool found_single_robot_solution;             // starts false, turns true when single_robot_solution is found
-   vector<vector<float> > single_robot_solution; // a single robot solution for this robot from its start to goal, 
-                                                 // always updated to incoporate new multi-robot path stuff 
+   vector<vector<float> > single_robot_solution; // a single robot solution for this robot from its start to goal, where points are [x y time angle], 
+                                                 // always updated to incoporate new multi-robot path stuff and current time/robot location
 
    vector<vector<vector<float> > > other_robots_single_solutions; //  other_robots_single_solutions[i] holds the single robot solution for robot i
                                                                   //  where i is indexed by global ID (i.e. agent number). 
