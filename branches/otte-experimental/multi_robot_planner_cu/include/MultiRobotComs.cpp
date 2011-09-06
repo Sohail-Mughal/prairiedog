@@ -74,6 +74,7 @@ void GlobalVariables::Populate(int num_of_agents)
   
   planning_time_remaining.resize(number_of_agents, LARGE);
   last_update_time.resize(number_of_agents);
+  last_path_conflict_check_time.resize(number_of_agents);
 
   printf("resetting planning start time\n");
   gettimeofday(&start_time_of_planning, NULL);  
@@ -587,33 +588,33 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
     else
       index--; // hack to make next buffer read a little easier in case planning area bounds not sent    
 
-    // check if message planning bounds intersects with this agent's team's planning bounds
-    if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
-      overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
-            
-
-    if(!InTeam[sending_agent] && overlap && JOIN_ON_OVERLAPPING_AREAS)              // need to join due to overlap
+    // if the sending agent is not in our team, check if it should be
+    if(!InTeam[sending_agent] && JOIN_ON_OVERLAPPING_AREAS)
     {
-      printf("Planning area overlaps with an agent not yet in our team\n");
-      need_to_join_teams = true;
-    }
+      // check if message planning bounds intersects with this agent's team's planning bounds
+      if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
+        overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
-    if(dist_to_sender > combine_dist )
-    {
-      printf("... but it is too far away to care about right now\n");
-      overlap = false;   
-      need_to_join_teams = false;
+      if(overlap)              // need to join due to overlap
+      {
+        printf("Planning area overlaps with an agent not yet in our team\n");
+        need_to_join_teams = true;
+
+        if(dist_to_sender > combine_dist )
+        {
+          printf("... but it is too far away to care about right now\n");
+          overlap = false;   
+          need_to_join_teams = false;
+        }
+      }
     }
 
     if(!InTeam[sending_agent] && team_includes_this_ag && senders_planning_iteration > planning_iteration[sending_agent])   // need to join because the sending agent thinks we are in its team, but we currently don't think so, and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
     {
       printf("Recieved a message from an agent that has added us to their team\n");
       need_to_join_teams = true;
-      return need_to_join_teams;
     }
-   
         
-    // if we are here then the solutions don't need to be merged
     while(true) // break out when done
     {
       // get to start of next line
@@ -628,8 +629,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
       // read this data
       if(sscanf(&(buffer[index]),"%d %d %f %f %f %f %f %f\n", &an_id, &ag_pln_it, &sx, &sy, &st, &gx, &gy, &gt) < 8) 
         continue;
-      //printf("read data: %d %d %f %f %f %f %f %f\n", an_id, ag_pln_it, sx, sy, st, gx, gy, gt);
-      
+      //printf("read data: %d %d %f %f %f %f %f %f\n", an_id, ag_pln_it, sx, sy, st, gx, gy, gt);   
       
       num++;
       
@@ -1298,7 +1298,8 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             message_ptr++;
         }
       
-        // extract prefered single robot paths knowen to sending agent
+        // extract prefered single robot paths known to sending agent
+        bool extracted_at_least_one_path = false;
         while(planning_message_buffer[message_ptr] == 'V')
         {
           message_ptr++;
@@ -1321,7 +1322,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
           }
 
-          if(pln_itr > G->planning_iteration_single_solutions[ag_gbl_id])
+          if(pln_itr > G->planning_iteration_single_solutions[ag_gbl_id]) // new planning iteration
           {
             if(pln_itr > G->planning_iteration_single_solutions[G->agent_number] && G->InTeam[ag_gbl_id])
             {
@@ -1329,21 +1330,67 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             }
 
             G->planning_iteration_single_solutions[ag_gbl_id] = pln_itr;
-            message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
-
-            //printf("extracted agent %d prefered path \n", ag_gbl_id);
-         
-            // NOTE, this agent's path will never be used from other_robots_single_solutions, so ok to extract it to here
           }
-          else // old planning iteration
+           
+          // if this is current data from a different agent then us 
+          if(ag_gbl_id != G->agent_number && pln_itr == G->planning_iteration_single_solutions[ag_gbl_id])
+          {
+            message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+            extracted_at_least_one_path = true;
+          } 
+          else // either data about us or really old data
           {
             // extract to temp to advance in buffer 
             vector<vector<float> > temp;
             message_ptr += extract_2d_vector_from_buffer(temp, (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
-
-            //printf("old agent %d prefered path \n", ag_gbl_id);
-          }
+          } 
           //printf("did extract? \n");
+        }
+
+        // if we are not joining teams based on overlapping planning areas, then we need to periodically 
+        // check if any other_robots_single_solutions conflict with our single robot solution
+        if(!JOIN_ON_OVERLAPPING_AREAS && extracted_at_least_one_path && robots_in_senders_team.size() > 0)
+        {
+          if(!G->InTeam[robots_in_senders_team[0]] && G->found_single_robot_solution) // the senders team is different from ours and we have a solution
+          {
+            // check for conflicts vs robots in the senders team
+
+            timeval time_now;  
+            gettimeofday(&time_now, NULL);
+            for(uint k = 0; k < robots_in_senders_team.size(); k++)
+            {
+              int temp_ag = robots_in_senders_team[k];
+
+              if(true) //difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .5)  // only check vs each agent every .5 secs
+              { 
+                if(G->other_robots_single_solutions[temp_ag].size() < 1) // make sure we have temp_ag's solution
+                  continue;
+
+                vector<float> A_conflict; // dummy data holder 
+                vector<float> B_conflict; // dummy data holder
+                float time_resolution = .05;
+
+                printf("__________________ checking for conflicts vs agent %d ____________\n", temp_ag);
+
+                if(find_first_time_conflict_points(G->other_robots_single_solutions[temp_ag], G->single_robot_solution, G->robot_radius, time_resolution, A_conflict, B_conflict)) 
+                {
+                  // the paths conflicts, calculate distance to that agent's last known point based on the first point in either path
+
+                  if(euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]) > G->combine_dist)
+                  {
+                    printf("Path conflicts with an agent not yet in our team\n");
+                    printf("... but it is too far away to care about right now\n");
+                  }
+                  else
+                  {
+                    printf("Path conflicts with an agent not yet in our team\n");
+                    need_to_join_teams = true;
+                  }
+                }
+                G->last_path_conflict_check_time[temp_ag] = time_now;
+              }
+            }
+          }
         }
 
         if(need_to_join_teams)     // for overlap or because we were in their team, based on what was found above
