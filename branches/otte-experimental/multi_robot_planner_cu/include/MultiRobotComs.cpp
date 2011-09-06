@@ -1361,7 +1361,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             {
               int temp_ag = robots_in_senders_team[k];
 
-              if(true) //difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .5)  // only check vs each agent every .5 secs
+              if(difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .5)  // only check vs each agent every .5 secs
               { 
                 if(G->other_robots_single_solutions[temp_ag].size() < 1) // make sure we have temp_ag's solution
                   continue;
@@ -1370,7 +1370,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
                 vector<float> B_conflict; // dummy data holder
                 float time_resolution = .05;
 
-                printf("__________________ checking for conflicts vs agent %d ____________\n", temp_ag);
+                //printf("__________________ checking for conflicts vs agent %d ____________\n", temp_ag);
 
                 if(find_first_time_conflict_points(G->other_robots_single_solutions[temp_ag], G->single_robot_solution, G->robot_radius, time_resolution, A_conflict, B_conflict)) 
                 {
@@ -1612,9 +1612,12 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
       //printf("here 4 \n");
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
       G->an_agent_needs_this_single_path_iteration = false;
-    //}
-    G->hard_broadcast((void *)buffer, sizeof(buffer));
-    
+      buffer[final_index] = 4; // this signals that all this message contained was the prefered robot path 
+      final_index++;
+   //}
+
+    G->hard_broadcast((void *)buffer, sizeof(char) * final_index);
+
     usleep(G->sync_message_wait_time*1000000);
     printf("(startup sender) waiting for agent start and goal coords -(sending data)- \n");
   }
@@ -1644,8 +1647,10 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
       //printf("here 5 \n");
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
       G->an_agent_needs_this_single_path_iteration = false;
+      buffer[final_index] = 4; // this signals that all this message contained was the prefered robot path 
+      final_index++;
     }
-    G->hard_broadcast((void *)buffer, sizeof(buffer));
+    G->hard_broadcast((void *)buffer, sizeof(char) * final_index);
     
     usleep(G->sync_message_wait_time*1000000);
   }
