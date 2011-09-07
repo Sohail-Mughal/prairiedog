@@ -2016,16 +2016,29 @@ int main(int argc, char** argv)
                 if(dist_moved_since_last > 0)
                 {
                   float diff_time = dist_moved_since_last/old_edge_dist * (Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2]);
-                  Globals.single_robot_solution[0][0] = temp_robot_position[0];               // x
-                  Globals.single_robot_solution[0][1] = temp_robot_position[1];               // y
-                  Globals.single_robot_solution[0][2] += diff_time;                           // time
-                  // angle remains unchanged
 
-                  ThisAgentsPath[0][0] = temp_robot_position[0];                              // x   
-                  ThisAgentsPath[0][1] = temp_robot_position[1];                              // y
-                  // angle remains unchanged
+                  // calculate target angle
+                  float target_angle = Globals.single_robot_solution[0][4];
+                  if(Globals.single_robot_solution.size() > 1) // at least one edge
+                  {
+                    if(Globals.single_robot_solution[0][0] != Globals.single_robot_solution[1][0] || 
+                       Globals.single_robot_solution[0][1] != Globals.single_robot_solution[1][1]) // not on a rotate point
+                    {
+                      target_angle = atan2(Globals.single_robot_solution[1][1] - Globals.single_robot_solution[0][1], 
+                                           Globals.single_robot_solution[1][0] - Globals.single_robot_solution[0][0]);
+                    }
+                  }
 
-                  Parametric_Times[0] += diff_time;                                           // time  
+                  Globals.single_robot_solution[0][0] = temp_best_point_found[0];               // x
+                  Globals.single_robot_solution[0][1] = temp_best_point_found[1];               // y
+                  Globals.single_robot_solution[0][2] += diff_time;                             // time
+                  Globals.single_robot_solution[0][3] = target_angle;                           // angle
+
+                  ThisAgentsPath[0][0] = temp_best_point_found[0];                              // x   
+                  ThisAgentsPath[0][1] = temp_best_point_found[1];                              // y
+                  ThisAgentsPath[0][2] = target_angle;                                          // angle
+
+                  Parametric_Times[0] += diff_time;                                             // time  
                 }
               }
             }
@@ -2087,7 +2100,7 @@ int main(int argc, char** argv)
               Globals.local_ID[j_global] = -1; 
           
               // swap local index with the last one
-              Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1]    ;         
+              Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1];         
               Globals.local_ID[Globals.global_ID[j]] = j;
    
               Globals.team_size--;

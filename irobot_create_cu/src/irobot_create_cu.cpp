@@ -417,10 +417,14 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
   {     
     if(!recieved_first_path || safe_path_exists == 0)
     {
-      if(!recieved_first_path)
+      //if(!recieved_first_path)
         move_start_time = ros::Time::now();
       
       recieved_first_path = true;
+
+}
+if(true)
+{
 
       // save into first_path
       first_path.resize(length);
@@ -448,7 +452,7 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       //printf("(%u points) \n", trajectory.size());
       //getchar();
     }
-    else // check to make sure this is the same as the first path we recieved
+/*    else // check to make sure this is the same as the first path we recieved
     {
       bool is_the_same = true;
       
@@ -460,7 +464,7 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
         if(first_path[i][0] != global_path[i].x || first_path[i][1] != global_path[i].y || first_path[i][2] != global_path[i].alpha || first_path[i][3] != global_path[i].z)
           is_the_same = false;
       }
-    }
+    }*/
   }
   
   //ros::Duration elapsed_time = ros::Time::now() - move_start_time;
@@ -677,7 +681,11 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
   t.push_back(p[0]);
   for(int i = 1; i < (int)p.size(); i++)
   {    
-    if(p[i][3] - p[i-1][3] < time_granularity) // just use next point
+    if(p[i-1][0] == p[i][0] && p[i-1][1] == p[i][1]) // i is just a rotation from i-1, don't worry about increasing time granularity
+    {
+      t.push_back(p[i]);
+    }
+    else if(p[i][3] - p[i-1][3] < time_granularity) // just use next point
     {
       t.push_back(p[i]);
     }
@@ -688,8 +696,6 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
       
       float alpha_start = p[i-1][2]; // should already be between -PI and PI
       float alpha_end = p[i][2];     // should already be between -PI and PI
-      
-      // in case it is not
       
       while(alpha_start < 0)
         alpha_start += 2*PI;
@@ -723,7 +729,7 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
       }
           
       vector<float> this_path_point(4);
-      for(float this_time = start_time + time_granularity; this_time < end_time; this_time += time_granularity)
+      for(float this_time = start_time; this_time < end_time; this_time += time_granularity)
       {
         
         float percentage_through =  (this_time - start_time)/(end_time - start_time);
@@ -747,7 +753,27 @@ void extract_trajectory(vector<vector<float> >& t, vector<vector<float> >& p, fl
         
         t.push_back(this_path_point);
       }
+
+
+
       t.push_back(p[i]);
+    }
+  }
+
+
+  // adjust angle of non rotation points
+  for(int i = 0; i < (int)t.size()-1; i++)
+  {
+    if(t[i][0] == t[i+1][0] && t[i][1] == t[i+1][1]) // on rotation point
+    {
+      if(i > 0) // last point on straight edge
+      {
+        t[i-1][2] = atan2(t[i][1] - t[i-1][1], t[i][0] - t[i-1][0]);
+      }    
+    }
+    else // on straight edge
+    {
+      t[i][2] = atan2(t[i+1][1] - t[i][1], t[i+1][0] - t[i][0]);
     }
   }
 }
@@ -1494,8 +1520,11 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     on_a_point = true; 
   }
   else if(T[carrot_index][1] == T[carrot_index+1][1] && T[carrot_index][0] == T[carrot_index+1][0])  // steering at a point
+  {
     on_a_point = true; 
-    
+  }
+
+ 
   if(near_the_goal || was_near_the_goal)
   {
     was_near_the_goal = true;
@@ -1514,16 +1543,11 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     if(dist_factor > 1)
       dist_factor = 1;
         
-    //printf("moving toward goal, %f \n", dist_factor);  
-    
-    // TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2));
-
     TARGET_SPEED = 0;
     TARGET_TURN = DEFAULT_TURN;
-        
-    //return move_toward_pose_fast(T[length-1], .05, PI/12, PI/12);
 
     setSpeed(TARGET_SPEED);
+ 
     return turn_toward_heading(T[length-1], PI/12);
   }
   else if(on_a_point) // going toward a point !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
@@ -1532,8 +1556,6 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     if(!too_far_away) // basically at point
     {
       TARGET_SPEED = 0;
-
-      //printf("here --1-- \n");
     }
     else // not at point yet
     {
@@ -1548,13 +1570,13 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
         dist_factor = 1;
         
       //printf("moving toward point, %f \n", dist_factor);  
-      //printf("here --2-- \n");
 
       TARGET_SPEED = DEFAULT_SPEED*(1-sin(dist_factor*PI/2+PI/2)); 
     }
   }
   else // going toward a segment
   {
+
     float delta_time = T[carrot_index+1][3] -  T[carrot_index][3];
       
     float temp_x = T[carrot_index+1][0] - T[carrot_index][0];
@@ -1572,10 +1594,14 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   // find approperiate heading
   float desired_direction;
   if(too_far_away) // desired dirction is directly at carrot
+  {
     desired_direction = atan2(T[carrot_index][1] - robot_pose->y, T[carrot_index][0] - robot_pose->x);
+  }
   else // desired direction is along carrot
+  {
     desired_direction = T[carrot_index][2];
-   
+  }
+
   float current_direction = robot_pose->alpha;
   float diff_direction = desired_direction - current_direction;  
   // find diff_direction on range -PI to PI
@@ -1585,8 +1611,10 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     diff_direction += 2*PI;
     
   if(diff_direction < -PI/3 || diff_direction > PI/3) // if not facing kind of in the correct direction, just rotate
+  {
     TARGET_SPEED = 0;
-  
+  }
+
   diff_direction = .5*atan(diff_direction); // scale a bit
     
   if(diverging && !too_far_away)  // we want to add add aditional turning based on how far the robot is away from the segment
@@ -1814,19 +1842,14 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
      // if there is a location difference between current_place_index and carrot_index we need to turn at the new place we want to go
       
     move_toward_pose_fast(T[carrot_index], 0, PI/6, PI/6); 
-printf("case 1 \n");
   }
   else if(carrot_index > current_place_index)
   {
-printf("case 2 \n");
-
     // othersise, we just want to turn to face the heading of carrot_index
     turn_toward_heading(T[carrot_index],  PI/24);
   }
   else // we are at the carrot index already
   {
-    printf("case 3 \n");
-
     // keep going at previously set speed
     turn_toward_heading(T[carrot_index],  PI/24);
   }
