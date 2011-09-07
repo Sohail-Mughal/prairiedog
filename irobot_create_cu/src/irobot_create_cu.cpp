@@ -59,6 +59,7 @@
 #include "std_msgs/Float32.h"
 
 #include "intercom_cu/Float32_CU_ID.h"
+#include "multi_robot_planner_cu/TeamList_CU.h"
 
 #ifndef PI
   #define PI 3.1415926535897
@@ -109,6 +110,7 @@ ros::Subscriber goal_sub; // global goal
 ros::Subscriber global_path_sub;
 ros::Subscriber system_update_sub;
 ros::Subscriber user_state_sub;
+ros::Subscriber team_list_sub;
 ros::Subscriber time_ahead_sub;
 
 // globals for defining robot velocity
@@ -157,6 +159,8 @@ int t_target_ind = -1;             // used in multi robot mode
 
 float TARGET_SPEED = DEFAULT_SPEED;
 float TARGET_TURN = DEFAULT_TURN;
+
+vector<bool> InTeam;               // if InTeam[i] == true, then agent i is in our dynamic team (used in multi robot mode)
 
 /* Print the current state info to the console
 void print_state() 
@@ -459,7 +463,7 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       if(!is_the_same)
       {
         printf(" warning: recieved different multi_robot path than first path \n");
-        return;
+       // return;
       }
     }
   }
@@ -493,12 +497,39 @@ void user_state_callback(const std_msgs::Int32::ConstPtr& msg)
   }
 }
 
+
+void team_list_callback(const multi_robot_planner_cu::TeamList_CU::ConstPtr& msg)
+{
+  
+  uint length = msg->data.size();
+
+  if(length > InTeam.size())
+    InTeam.resize(length, false);
+
+  //printf("team includes: ");
+  for(uint i = 0; i < length; i++)
+  {
+    InTeam[i] = (bool)msg->data[i];
+    //printf("%d,", (int)InTeam[i]);
+  }
+  //printf("\n");
+}
+
 void time_ahead_callback(const intercom_cu::Float32_CU_ID::ConstPtr& msg)
 {      
   int sender_id = msg->id.data;
+
+  if(sender_id >= (int)InTeam.size()) // id is too big, not in our team
+    return;
+  if(!InTeam[sender_id])
+  {
+    printf("irobot_create_cu: data from agent not in our team \n");
+    return;
+  }
+
   float time_adjust_other_robot = msg->data.data;
 
-  printf("data from agent %d: %f \n", sender_id, time_adjust_other_robot);
+  printf("irobot_create_cu: data from agent %d: %f \n", sender_id, time_adjust_other_robot);
 
   if(time_adjust_other_robot > time_adjust + 2) // the other robot is behind schedual by more than 2 seconds (more than this robot)
   {  
@@ -1890,8 +1921,10 @@ int main(int argc, char * argv[])
   user_state_sub = nh.subscribe("/cu/user_state_cu", 1, user_state_callback);
 
   if(multi_robot_mode)
+  {
+    team_list_sub = nh.subscribe("/cu/team_list_cu", 1, team_list_callback);
     time_ahead_sub = nh.subscribe("/cu_multi/time_ahead_cu", 1, time_ahead_callback);
-
+  }
   // init pose and local goal
   robot_pose = make_pose(0,0,0);
   local_goal_pose = make_pose(0,0,0);
@@ -2066,9 +2099,10 @@ int main(int argc, char * argv[])
   global_path_sub.shutdown();
   system_update_sub.shutdown();
   user_state_sub.shutdown(); 
- 
+
   if(multi_robot_mode)
   {
+    team_list_sub.shutdown();
     time_ahead_pub.shutdown();
 
     time_ahead_sub.shutdown();
