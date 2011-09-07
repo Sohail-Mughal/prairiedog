@@ -609,6 +609,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
       }
     }
 
+    
     if(!InTeam[sending_agent] && team_includes_this_ag && senders_planning_iteration > planning_iteration[sending_agent])   // need to join because the sending agent thinks we are in its team, but we currently don't think so, and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
     {
       printf("Recieved a message from an agent that has added us to their team\n");
@@ -1335,7 +1336,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           // if this is current data from a different agent then us 
           if(ag_gbl_id != G->agent_number && pln_itr == G->planning_iteration_single_solutions[ag_gbl_id])
           {
+            printf("--recieved other agent's new path %d\n", pln_itr);
             message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
+            printf("it was %u points long \n", G->other_robots_single_solutions[ag_gbl_id].size());
+
             extracted_at_least_one_path = true;
           } 
           else // either data about us or really old data

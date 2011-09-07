@@ -65,6 +65,7 @@
 
 #include "geometry_msgs/Polygon.h"
 #include "multi_robot_planner_cu/PolygonArray.h"
+#include "multi_robot_planner_cu/TeamList_CU.h"
 
 using namespace std;
 
@@ -224,6 +225,8 @@ bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then thi
 float plan_time_mult = 3;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
 float smart_min_time_to_plan = 5; // if(use_smart_plan_time) then plan for at least smart_min_time_to_plan
 
+vector<float> drop_point;         // stores the point on the map at which we can drop team members
+
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
 {
@@ -314,6 +317,7 @@ ros::Publisher global_path_pub;
 ros::Publisher system_update_pub;
 ros::Publisher planning_area_pub;   
 ros::Publisher obstacles_pub; 
+ros::Publisher team_list_pub;
 
 // globals for robot and goal
 POSE* robot_pose = NULL;
@@ -541,6 +545,23 @@ void publish_obstacles(const NavScene& S)
   }
 
   obstacles_pub.publish(msg); 
+}
+
+void publish_team_list(const vector<bool>& TL)
+{
+  printf("publishing team list:\n");
+  multi_robot_planner_cu::TeamList_CU msg;
+  msg.data.resize(TL.size());
+
+  for(uint i = 0; i < TL.size(); i++)
+  {
+    msg.data[i] = TL[i];
+    printf("[%d], ", msg.data[i]);
+  }
+
+printf("\n");
+
+  team_list_pub.publish(msg); 
 }
 
 
@@ -784,6 +805,7 @@ int main(int argc, char** argv)
   system_update_pub = nh.advertise<std_msgs::Int32>("/cu/system_update_cu", 10);
   planning_area_pub = nh.advertise<geometry_msgs::Polygon>("/cu/planning_area_cu", 1);
   obstacles_pub = nh.advertise<multi_robot_planner_cu::PolygonArray>("/cu/obstacles_cu", 1);
+  team_list_pub = nh.advertise<multi_robot_planner_cu::TeamList_CU>("/cu/team_list_cu", 1);
   
   // spin ros once
   ros::spinOnce();
@@ -1340,6 +1362,7 @@ int main(int argc, char** argv)
       Scene.PrintSceneInfo(); 
       publish_planning_area(Scene);
       publish_obstacles(Scene);
+      publish_team_list(Globals.InTeam);
       ros::spinOnce();
   
       int num_robots = Scene.num_robots;
@@ -1459,7 +1482,7 @@ int main(int argc, char** argv)
       
         publish_planning_area(Scene);
         //publish_obstacles(Scene);
-           
+        publish_team_list(Globals.InTeam);   
         ros::spinOnce();
       }
       float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
@@ -1557,6 +1580,7 @@ int main(int argc, char** argv)
           // ROS stuff
           publish_planning_area(Scene);
           publish_obstacles(Scene);
+          publish_team_list(Globals.InTeam);
           ros::spinOnce();
       
       
@@ -1666,7 +1690,7 @@ int main(int argc, char** argv)
       
         publish_planning_area(Scene);
        // publish_obstacles(Scene);
-            
+        publish_team_list(Globals.InTeam);   
         ros::spinOnce();
       }
       now_time = clock();
@@ -1939,6 +1963,10 @@ int main(int argc, char** argv)
           printf("%f %f %f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2], Globals.single_robot_solution[p][3]);
         printf("\n");
 
+         // remember the first point beyond the sub_area path as the point that we can drop these team members
+
+         drop_point = single_robot_solution_from_sub_goal[0];
+
         }
         else // are not using a sub area
         {
@@ -1959,7 +1987,6 @@ int main(int argc, char** argv)
       }
       else // update single robot solution to reflect the robot's current location (shorten path to reflect distance traveled
       {
-
         // find closest point on path to robot's current position
         //printf("robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
         vector<float> temp_robot_position(2);
@@ -1985,10 +2012,16 @@ int main(int argc, char** argv)
                 if(dist_moved_since_last > 0)
                 {
                   float diff_time = dist_moved_since_last/old_edge_dist * (Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2]);
-                  Globals.single_robot_solution[0][0] = temp_best_point_found[0];               // x
-                  Globals.single_robot_solution[0][1] = temp_best_point_found[1];               // y
-                  Globals.single_robot_solution[0][2] += diff_time;                             // time
-                  //Globals.single_robot_solution[0][4] = Globals.single_robot_solution[0][4];  // angle remains unchanged
+                  Globals.single_robot_solution[0][0] = temp_robot_position[0];               // x
+                  Globals.single_robot_solution[0][1] = temp_robot_position[1];               // y
+                  Globals.single_robot_solution[0][2] += diff_time;                           // time
+                  // angle remains unchanged
+
+                  ThisAgentsPath[0][0] = temp_robot_position[0];                              // x   
+                  ThisAgentsPath[0][1] = temp_robot_position[1];                              // y
+                  // angle remains unchanged
+
+                  Parametric_Times[0] += diff_time;                                           // time  
                 }
               }
             }
@@ -1998,15 +2031,57 @@ int main(int argc, char** argv)
               uint orig_size = Globals.single_robot_solution.size();
               uint new_size = orig_size - first_i_of_edge;
               vector<vector<float> > new_single_robot_solution(new_size);
+              vector<vector<float> > new_ThisAgentsPath(new_size);
+              vector<float> new_Parametric_Times(new_size);
 
               uint p = first_i_of_edge;
               for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
               {
                 new_single_robot_solution[q] = Globals.single_robot_solution[p];
+                new_ThisAgentsPath[q] = ThisAgentsPath[p];
+                new_Parametric_Times[q] = Parametric_Times[p];
               }
 
               Globals.single_robot_solution = new_single_robot_solution;
+              ThisAgentsPath = new_ThisAgentsPath;
+              Parametric_Times = new_Parametric_Times;
             }
+
+
+            // update other robots as we eat up the path
+            char buffer[max_message_size];
+            int index = Globals.populate_buffer_with_single_robot_paths(buffer);
+            buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
+            index++;
+            Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
+            Globals.an_agent_needs_this_single_path_iteration = false;
+          }
+        }
+
+
+        // check the distance to the point at which we can reset team (end of last sub area we planned for)
+        if(drop_point.size() >= 2) // drop point exists
+        {
+          if(euclid_dist(drop_point, temp_best_point_found) < Globals.robot_radius) // close enough point to drop team members
+          {
+            printf("__________________Dropping all members from team__________________\n");
+            for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
+            {
+              int j_global = Globals.global_ID[j];
+      
+              // drop this agent from our team
+          
+              Globals.InTeam[j_global] = false;
+              Globals.local_ID[j_global] = -1; 
+          
+              // swap local index with the last one
+              Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1]    ;         
+              Globals.local_ID[Globals.global_ID[j]] = j;
+   
+              Globals.team_size--;
+              Globals.global_ID.resize(Globals.team_size);
+            }
+            drop_point.resize(0);
           }
         }
       }
@@ -2016,6 +2091,7 @@ int main(int argc, char** argv)
               
       publish_planning_area(Scene);
       publish_obstacles(Scene);
+      publish_team_list(Globals.InTeam);
 
       ros::spinOnce(); ///////////////// error only happens when spinning
     
@@ -2053,6 +2129,7 @@ int main(int argc, char** argv)
   system_update_pub.shutdown();
   planning_area_pub.shutdown();
   obstacles_pub.shutdown();
+  team_list_pub.shutdown();
   
   destroy_pose(robot_pose);
   destroy_pose(goal_pose);
