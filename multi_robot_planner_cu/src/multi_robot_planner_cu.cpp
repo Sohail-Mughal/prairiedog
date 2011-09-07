@@ -549,17 +549,17 @@ void publish_obstacles(const NavScene& S)
 
 void publish_team_list(const vector<bool>& TL)
 {
-  printf("publishing team list:\n");
+  //printf("publishing team list:\n");
   multi_robot_planner_cu::TeamList_CU msg;
   msg.data.resize(TL.size());
 
   for(uint i = 0; i < TL.size(); i++)
   {
     msg.data[i] = TL[i];
-    printf("[%d], ", msg.data[i]);
+    //printf("[%d], ", msg.data[i]);
   }
 
-printf("\n");
+//printf("\n");
 
   team_list_pub.publish(msg); 
 }
@@ -1754,7 +1754,7 @@ int main(int argc, char** argv)
       if(Globals.revert_to_single_robot_path) // reverting to old path
       {
         // do nothing
-
+        printf("revert to single  robot path 1 \n");
         Globals.revert_to_single_robot_path = false;
         need_to_calculate_path_to_broadcast = false;
       }
@@ -1957,11 +1957,10 @@ int main(int argc, char** argv)
           Parametric_Times = NewParametric_Times;
           Globals.single_robot_solution = new_single_robot_solution;
 
-          printf("Done concatonating sub paths\n");
-
-        for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
-          printf("%f %f %f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2], Globals.single_robot_solution[p][3]);
-        printf("\n");
+          printf("Done concatonating sub paths:\n");
+          for(uint p = 0; p < Globals.single_robot_solution.size(); p++)
+            printf("%f %f %f %f\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1], Globals.single_robot_solution[p][2], Globals.single_robot_solution[p][3]);
+          printf("\n");
 
          // remember the first point beyond the sub_area path as the point that we can drop these team members
 
@@ -1970,7 +1969,7 @@ int main(int argc, char** argv)
         }
         else // are not using a sub area
         {
-
+          //printf("not using a sub area --->\n");
           // reset single robot solution [x y time angle] based on the new ThisAgentsPath [x y angle] and Parametric_Times [time]
           vector<float> temp(4, -1);   
           vector<vector<float> > new_single_robot_solution(ThisAgentsPath.size(), temp);
@@ -1982,23 +1981,28 @@ int main(int argc, char** argv)
             new_single_robot_solution[p][3] = ThisAgentsPath[p][2];  // angle
           }
           Globals.single_robot_solution = new_single_robot_solution;
+          //printf("not using a sub area <---\n");
         }
+        
         need_to_calculate_path_to_broadcast = false;
       }
       else // update single robot solution to reflect the robot's current location (shorten path to reflect distance traveled
       {
         // find closest point on path to robot's current position
-        //printf("robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
+        //printf("updating path for robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
         vector<float> temp_robot_position(2);
         temp_robot_position[0] = robot_pose->x;
         temp_robot_position[1] = robot_pose->y;
 
-        vector<float> temp_best_point_found;
+        vector<float> temp_best_point_found(0);
 
-
+        //printf("finding edge containing the start point \n");
         int first_i_of_edge = find_edge_containing_point(Globals.single_robot_solution, temp_robot_position, temp_best_point_found);
+        //printf("done finding edge containing the start point \n");
+
         if(first_i_of_edge >= 0) //found an edge
         {
+          //printf("found an edge \n");
           if(euclid_dist(temp_robot_position, temp_best_point_found) < Globals.robot_radius) // robot is within radius of the closest point on the path
           {      
             if(first_i_of_edge == 0) // just repace first point in path with temp_best_point_found
@@ -2027,14 +2031,15 @@ int main(int argc, char** argv)
             }
             else // need to remove at least one edge (take care of removing more of the next edge on next loop)
             {
+              // only drop one edge at a time in order to allow for paths that cross each other
               //printf("removing an edge\n");
               uint orig_size = Globals.single_robot_solution.size();
-              uint new_size = orig_size - first_i_of_edge;
+              uint new_size = orig_size - 1;
               vector<vector<float> > new_single_robot_solution(new_size);
               vector<vector<float> > new_ThisAgentsPath(new_size);
               vector<float> new_Parametric_Times(new_size);
 
-              uint p = first_i_of_edge;
+              uint p = 1;
               for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
               {
                 new_single_robot_solution[q] = Globals.single_robot_solution[p];
@@ -2057,11 +2062,18 @@ int main(int argc, char** argv)
             Globals.an_agent_needs_this_single_path_iteration = false;
           }
         }
+        else
+        {
+          //printf("did not find an edge \n");
+        }
 
+        //printf("Done updating path for robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
 
         // check the distance to the point at which we can reset team (end of last sub area we planned for)
-        if(drop_point.size() >= 2) // drop point exists
+        if(drop_point.size() >= 2 && temp_best_point_found.size() >= 2) // drop point exists and so does temp_best_point_found
         {
+          //printf("Checking position vs. drop point\n");
+
           if(euclid_dist(drop_point, temp_best_point_found) < Globals.robot_radius) // close enough point to drop team members
           {
             printf("__________________Dropping all members from team__________________\n");
@@ -2083,6 +2095,7 @@ int main(int argc, char** argv)
             }
             drop_point.resize(0);
           }
+          //printf("Done checking position vs. drop point");
         }
       }
 

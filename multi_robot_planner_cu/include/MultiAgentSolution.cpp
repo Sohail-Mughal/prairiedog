@@ -981,7 +981,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         if(best_solution_length <= file_best_solution_length && best_solution_length != -1)
         {
           // the solution we already have is better than or equal to the one in the message (and we already have a solution)
-          printf("recieved a worse or equal path in a message\n");        
+          //printf("recieved a worse or equal path in a message\n");        
         }
         else // the solution in the file is the best so far
         {
@@ -1006,7 +1006,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
             Votes[j] = best_solution_agent;
         }
         Votes[agent_id] = best_solution_agent;  
-        printf("have everybody's solution\n");  
+        //printf("have everybody's solution\n");  
       }
     
       if(mode == 0 || mode == 2) // pss or baseline
@@ -1059,10 +1059,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         }
     
         if(best_solution_length > file_best_solution_length)
+        {
           printf("recieved a better path in a message, length %f created by agent #%d (moving = %d)\n", best_solution_length, file_best_solution_agent,file_move_flag);  
+        }
         else
-          printf("recieved a worse or equal path in a message, but decided to use it anyway\n");
-    
+        {
+          // printf("recieved a worse or equal path in a message, but decided to use it anyway\n");
+        }
+
         best_solution_length = file_best_solution_length;
         best_solution_agent = file_best_solution_agent;
     

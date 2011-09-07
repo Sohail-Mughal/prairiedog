@@ -460,11 +460,6 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
         if(first_path[i][0] != global_path[i].x || first_path[i][1] != global_path[i].y || first_path[i][2] != global_path[i].alpha || first_path[i][3] != global_path[i].z)
           is_the_same = false;
       }
-      if(!is_the_same)
-      {
-        printf(" warning: recieved different multi_robot path than first path \n");
-       // return;
-      }
     }
   }
   
@@ -523,13 +518,13 @@ void time_ahead_callback(const intercom_cu::Float32_CU_ID::ConstPtr& msg)
     return;
   if(!InTeam[sender_id])
   {
-    printf("irobot_create_cu: data from agent not in our team \n");
+    //printf("irobot_create_cu: data from agent not in our team \n");
     return;
   }
 
   float time_adjust_other_robot = msg->data.data;
 
-  printf("irobot_create_cu: data from agent %d: %f \n", sender_id, time_adjust_other_robot);
+  //printf("irobot_create_cu: data from agent %d: %f \n", sender_id, time_adjust_other_robot);
 
   if(time_adjust_other_robot > time_adjust + 2) // the other robot is behind schedual by more than 2 seconds (more than this robot)
   {  

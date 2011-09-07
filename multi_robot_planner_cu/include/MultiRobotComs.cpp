@@ -1336,9 +1336,9 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           // if this is current data from a different agent then us 
           if(ag_gbl_id != G->agent_number && pln_itr == G->planning_iteration_single_solutions[ag_gbl_id])
           {
-            printf("--recieved other agent's new path %d\n", pln_itr);
+            //printf("--recieved other agent's new path %d\n", pln_itr);
             message_ptr += extract_2d_vector_from_buffer(G->other_robots_single_solutions[ag_gbl_id], (void*)((size_t)planning_message_buffer + (size_t)message_ptr));
-            printf("it was %u points long \n", G->other_robots_single_solutions[ag_gbl_id].size());
+            //printf("it was %u points long \n", G->other_robots_single_solutions[ag_gbl_id].size());
 
             extracted_at_least_one_path = true;
           } 
@@ -1365,6 +1365,9 @@ void *Robot_Listner_Ad_Hoc(void * inG)
             {
               int temp_ag = robots_in_senders_team[k];
 
+              if(temp_ag == G->agent_number) // don't check for conflicts vs self (can happen after we drop other robot from our team)
+                continue;
+
               if(difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .5)  // only check vs each agent every .5 secs
               { 
                 if(G->other_robots_single_solutions[temp_ag].size() < 1) // make sure we have temp_ag's solution
@@ -1379,6 +1382,8 @@ void *Robot_Listner_Ad_Hoc(void * inG)
                 if(find_first_time_conflict_points(G->other_robots_single_solutions[temp_ag], G->single_robot_solution, G->robot_radius, time_resolution, A_conflict, B_conflict)) 
                 {
                   // the paths conflicts, calculate distance to that agent's last known point based on the first point in either path
+
+                  printf("agent %d conflicts with me (%d)\n",temp_ag, G->agent_number);
 
                   if(euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]) > G->combine_dist)
                   {
