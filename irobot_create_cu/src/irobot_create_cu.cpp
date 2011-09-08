@@ -1417,6 +1417,9 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     y = T[i][1] - robot_pose->y;
     this_dist = sqrt(x*x + y*y);
       
+    if(T[i][3] - T[0][3] > carrot_time_ahead)  // realying on fact that path is shortened to ~ current location before it is sent from planner 
+      break;
+
     if(this_dist < min_dist)
     {
       min_dist = this_dist;
