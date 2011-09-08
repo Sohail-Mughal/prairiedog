@@ -1132,20 +1132,7 @@ int main(int argc, char** argv)
     }
 
     Globals.done_planning = false;
-    if(robot_is_moving) // master_reset = true while robot is moving
-    {
-      unused_result = system(system_call);  // remove old files
-      start_time = clock();
-      now_time = clock(); 
-      while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
-      {
-        publish_system_update(1); // if we've reset, then tell the controller
-        ros::spinOnce();  
-        now_time = clock(); 
-      }
-    }  
-    robot_is_moving = false;  
-    
+
     Globals.planning_iteration[Globals.agent_number]++;
     printf("increasing planning_iteration_single_solutions of me \n");
     Globals.planning_iteration_single_solutions[Globals.agent_number] = Globals.planning_iteration[Globals.agent_number];        
@@ -1249,6 +1236,26 @@ int main(int argc, char** argv)
         // if here then sub_start and sub_goal have changed
         printf("new sub area \n");
 
+
+
+ 
+        if(robot_is_moving) // master_reset = true while robot is moving
+        {
+          unused_result = system(system_call);  // remove old files
+          start_time = clock();
+          now_time = clock(); 
+          while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
+          {
+            publish_system_update(1); // if we've reset, then tell the controller
+            ros::spinOnce();  
+            now_time = clock(); 
+          }
+        }  
+        robot_is_moving = false;  
+    
+
+
+
         Globals.start_coords[0].resize(3, 0); 
         Globals.start_coords[0][0] = sub_start[0];
         Globals.start_coords[0][1] = sub_start[1];
@@ -1272,6 +1279,32 @@ int main(int argc, char** argv)
       else if(Globals.use_sub_sg)
       {
         printf("old sub area \n");
+
+
+
+
+
+ 
+        if(robot_is_moving) // master_reset = true while robot is moving
+        {
+          unused_result = system(system_call);  // remove old files
+          start_time = clock();
+          now_time = clock(); 
+          while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
+          {
+            publish_system_update(1); // if we've reset, then tell the controller
+            ros::spinOnce();  
+            now_time = clock(); 
+          }
+        }  
+        robot_is_moving = false;  
+    
+
+
+
+
+
+
 
         // continue using old sub_start and sub_goal (which we have saved)
         Globals.start_coords[0].resize(3, 0); 
@@ -1725,16 +1758,23 @@ int main(int argc, char** argv)
     else // (Globals.revert_to_single_robot_path)
     {
       printf("using old single robot path \n");
+
+
+
+
+
+
     }
 
     Globals.done_planning = true;
     bool need_to_calculate_path_to_broadcast = true;
+    printf("enter move loop\n");
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part, otherwise loop here until goal or path conflict
     {       
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
       //printf("%f %f %f \n", elookup_sum/en_lookup, eout_collision/en_collision, eout_sum/en_out );
    
-      //printf("----------------------\n");
+      printf("----------------------\n");
   
       //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       
@@ -1746,10 +1786,11 @@ int main(int argc, char** argv)
       if(mode == 2 && agent_number != 0) 
         continue; 
 
+      printf("get messages\n");
       MultAgSln.GetMessages(startc, goalc);
-    
+      printf("send messages\n");
       MultAgSln.SendMessageUDP(prob_success);
-
+      printf("done messages\n");
       
       // now extract this robot's path and calculate times 
 
@@ -2123,9 +2164,9 @@ int main(int argc, char** argv)
 
       ros::spinOnce(); ///////////////// error only happens when spinning
     
-      //printf("sleeping \n");
+      printf("sleeping \n");
       loop_rate.sleep();
-      // printf("moving\n");
+       printf("moving\n");
 
       if(Globals.master_reset)
       {
