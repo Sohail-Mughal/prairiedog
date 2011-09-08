@@ -95,6 +95,7 @@ void GlobalVariables::Populate(int num_of_agents)
   planning_border_width = 1;
   
   master_reset = true;
+  printf("master reset in populate\n");
   kill_master = false;
   done_planning = false;
   
@@ -651,37 +652,40 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
           else if(ag_pln_it >= planning_iteration[an_id]) //we already had info, but this is potentially new info
           {
             planning_iteration[an_id] = ag_pln_it; 
-            
-            vector<float> temp_vec(3);
-            temp_vec[0] = sx;
-            temp_vec[1] = sy;
-            temp_vec[2] = st;
-            
-            if(!equal_float_vector(temp_vec, start_coords[local_an_id], change_plase_thresh)) // start is different
-              need_to_add_info = true; 
-            
-            temp_vec[0] = gx;
-            temp_vec[1] = gy;
-            temp_vec[2] = gt;
-            
-            if(!equal_float_vector(temp_vec, goal_coords[local_an_id], change_plase_thresh)) // goal is different
-              need_to_add_info = true; 
-            
-            #ifdef drop_old_robots_from_teams
-            if(difftime_clock(clock(), last_known_time[an_id]) > drop_time || last_known_dist[an_id] > drop_dist)
+           
+            if(!done_planning) // the following only matters if we are in the middle of planning (not moving)
             {
-              // either the drop distance or time has been reached, so drop this agent from our team
-              need_to_add_info = false; 
-            }
-            #endif
+
+              vector<float> temp_vec(3);
+              temp_vec[0] = sx;
+              temp_vec[1] = sy;
+              temp_vec[2] = st;
+            
+              if(!equal_float_vector(temp_vec, start_coords[local_an_id], change_plase_thresh)) // start is different
+              {           
+                printf("not same start from agent %d and we are not moving\n", an_id);
+                need_to_add_info = true; 
+              }
+
+              temp_vec[0] = gx;
+              temp_vec[1] = gy;
+              temp_vec[2] = gt;
+            
+              if(!equal_float_vector(temp_vec, goal_coords[local_an_id], change_plase_thresh)) // goal is different
+              {
+                printf("not same goal from agent and we are not moving%d\n", an_id);
+                need_to_add_info = true; 
+              }
                     
-            if(need_to_add_info) // start or goal of one of the agents has changed (and the robots are still close enough to matter), so it is a new planning problem, update our planning iteration
-            {
-              planning_iteration[agent_number]++;
-              master_reset = true;
-            }
-          } 
-          
+              if(need_to_add_info) // start or goal of one of the agents has changed (and the robots are still close enough to matter), so it is a new planning problem, update our planning iteration
+              {
+                planning_iteration[agent_number]++;
+                master_reset = true;
+                printf("master reset for a number of possible reasons 1\n" );
+              }
+            } 
+          }
+
           if(need_to_add_info && !master_reset)
           {
             if(start_coords[local_an_id].size() < 3)
@@ -706,24 +710,6 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
         }
       }
     }
-    
-    if(!InTeam[sending_agent])
-    {
-      // nothing goes here
-      
-    }
-    #ifdef drop_old_robots_from_teams
-    else // sending agent is in our team
-    {   
-      if(done_planning) // (i.e. not in the middle of calculating a solution)
-      {  
-        if(dist_to_sender > drop_dist )  // the two agents are far enough away that they are no longer in the same team
-        { 
-          need_to_join_teams = false;    
-        }
-      }
-    }
-    #endif
   }
   else
     printf("asked to parse unknown message type \n");
@@ -1422,6 +1408,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           G->planning_iteration[G->agent_number]++; // the problem has changed, so update our planning iteration number
       
           G->master_reset = true;   
+          printf("master reset due to team join \n");
           continue;
         }
 

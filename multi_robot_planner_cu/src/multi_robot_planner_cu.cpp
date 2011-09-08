@@ -98,8 +98,7 @@ typedef struct UPDATE UPDATE;
 #include "helper_functions.h"
 
 #define pre_calculated_free_space
-//#define drop_old_robots_from_teams
-        
+      
 bool want_clean_start = true;  // if true, we wait for other ros procs to start and also until pose and goal are recieved before doing anything else
 
 float lookup_sum = 0;
@@ -429,6 +428,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   
   //Globals.planning_iteration[Globals.agent_number]++;
   Globals.master_reset = true; // goal change, so reset
+  printf("master reset due to goal change \n");
   change_token_used = false;
 }
 
@@ -1049,12 +1049,9 @@ int main(int argc, char** argv)
     ros::spinOnce();  // check in on callbacks
   }
   
-  // each of the following loops is a complete planning cycle
   clock_t start_time, now_time, last_time;  
   Globals.Populate(total_agents);  // sets master_reset to true, so globals are not used as they are being changed
       
-  // enter into communication with other robots to get their start and goal positions
-  
   // set up globals used by communication threads
   Globals.agent_number = agent_number;
   Globals.InTeam[agent_number] = true;
@@ -1118,6 +1115,7 @@ int main(int argc, char** argv)
   Globals.default_map_x_size = default_map_x_size;
   Globals.default_map_y_size = default_map_y_size;
 
+  // each trip throught the loop is a complete planning and move cycle
   while(!Globals.kill_master)
   {   
     // at this point master_reset is true because globals may be changing and being reset, it will only be set to false lower down in this loop
@@ -1160,29 +1158,6 @@ int main(int argc, char** argv)
     Globals.planning_time_remaining.resize(0);
     Globals.planning_time_remaining.resize(Globals.number_of_agents, LARGE);
     
-    #ifdef drop_old_robots_from_teams
-    // get rid of outdated team members
-    for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
-    {
-      int j_global = Globals.global_ID[j];
-      
-      if(difftime_clock(now_time, Globals.last_known_time[j_global]) > Globals.drop_time || Globals.last_known_dist[j_global] > Globals.drop_dist)
-      {
-        // either the drop distance or time has been reached, so drop this agent from our team
-          
-        Globals.InTeam[j_global] = false;
-        Globals.local_ID[j_global] = -1; 
-          
-        // swap local index with the last one
-        Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1]    ;         
-        Globals.local_ID[Globals.global_ID[j]] = j;
-   
-        Globals.team_size--;
-        Globals.global_ID.resize(Globals.team_size);
-      }
-    }
-    #endif
-    
     Globals.MAgSln = NULL;
     Globals.not_planning_yet = true;  
     Globals.master_reset = false;  // now set master_reset to false indicating that "perminate" robot data in globals is stable
@@ -1194,6 +1169,7 @@ int main(int argc, char** argv)
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots, will terminate on master_reset
 
     // reset start and goal data
+    printf("setting start and goal data\n");
     Globals.start_coords.resize(0);
     Globals.start_coords.resize(Globals.number_of_agents);
 
@@ -1340,6 +1316,8 @@ int main(int argc, char** argv)
       Globals.start_coords[0][2] = robot_pose->alpha;
     }
 
+    printf("Done setting start and goal data\n");
+
     printf("My IP: %s\n",Globals.my_IP);
     printf("My start: %f %f %f\n", Globals.start_coords[0][0], Globals.start_coords[0][1], Globals.start_coords[0][2]);
     printf("My goal: %f %f %f\n", Globals.goal_coords[0][0], Globals.goal_coords[0][1], Globals.goal_coords[0][2]);
@@ -1416,6 +1394,7 @@ int main(int argc, char** argv)
         Globals.master_reset = true;
 
         printf("!!!!!!!!!!!!! INVALID START OR GOAL !!!!!!!!!!!!!!\n");
+        printf("master reset due to infalid start or goal \n");
         sleep(1);
         continue;
       }
@@ -1774,7 +1753,7 @@ int main(int argc, char** argv)
       //printf("%f %f %f \n", lookup_sum/n_lookup, out_collision/n_collision, out_sum/n_out );
       //printf("%f %f %f \n", elookup_sum/en_lookup, eout_collision/en_collision, eout_sum/en_out );
    
-      printf("----------------------\n");
+      //printf("----------------------\n");
   
       //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       
@@ -1786,18 +1765,18 @@ int main(int argc, char** argv)
       if(mode == 2 && agent_number != 0) 
         continue; 
 
-      printf("get messages\n");
+      //printf("get messages\n");
       MultAgSln.GetMessages(startc, goalc);
-      printf("send messages\n");
+      //printf("send messages\n");
       MultAgSln.SendMessageUDP(prob_success);
-      printf("done messages\n");
+      //printf("done messages\n");
       
       // now extract this robot's path and calculate times 
 
       if(Globals.revert_to_single_robot_path) // reverting to old path
       {
         // do nothing
-        printf("revert to single  robot path 1 \n");
+        printf("revert to single robot path 1 \n");
         Globals.revert_to_single_robot_path = false;
         need_to_calculate_path_to_broadcast = false;
       }
@@ -2043,11 +2022,39 @@ int main(int argc, char** argv)
         int first_i_of_edge = find_edge_containing_point(Globals.single_robot_solution, temp_robot_position, temp_best_point_found);
         //printf("done finding edge containing the start point \n");
 
-        if(first_i_of_edge >= 0) //found an edge
+        if(first_i_of_edge >= 0 && Globals.single_robot_solution.size() > 1) //found an edge and at least one edge
         {
-          //printf("found an edge \n");
-          if(euclid_dist(temp_robot_position, temp_best_point_found) < Globals.robot_radius) // robot is within radius of the closest point on the path
-          {      
+          if(euclid_dist(temp_robot_position, Globals.single_robot_solution[1]) < Globals.robot_radius/2)  // robot is close to the end of the current edge
+          {
+            //printf("removing an edge\n");
+            uint orig_size = Globals.single_robot_solution.size();
+            uint new_size = orig_size - 1;
+            vector<vector<float> > new_single_robot_solution(new_size);
+            vector<vector<float> > new_ThisAgentsPath(new_size);
+            vector<float> new_Parametric_Times(new_size);
+
+            uint p = 1;
+            for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
+            {
+              new_single_robot_solution[q] = Globals.single_robot_solution[p];
+              new_ThisAgentsPath[q] = ThisAgentsPath[p];
+              new_Parametric_Times[q] = Parametric_Times[p];
+            }
+
+            Globals.single_robot_solution = new_single_robot_solution;
+            ThisAgentsPath = new_ThisAgentsPath;
+            Parametric_Times = new_Parametric_Times;
+
+            // update other robots as we eat up the path
+            char buffer[max_message_size];
+            int index = Globals.populate_buffer_with_single_robot_paths(buffer);
+            buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
+            index++;
+            Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
+            Globals.an_agent_needs_this_single_path_iteration = false;
+          }
+          else if(euclid_dist(temp_robot_position, temp_best_point_found) < Globals.robot_radius) // robot is within radius of the closest point on the path
+          {     
             if(first_i_of_edge == 0) // just repace first point in path with temp_best_point_found
             {
               //printf("adjusting an edge\n");
@@ -2085,30 +2092,6 @@ int main(int argc, char** argv)
                 }
               }
             }
-            else // need to remove at least one edge (take care of removing more of the next edge on next loop)
-            {
-              // only drop one edge at a time in order to allow for paths that cross each other
-              //printf("removing an edge\n");
-              uint orig_size = Globals.single_robot_solution.size();
-              uint new_size = orig_size - 1;
-              vector<vector<float> > new_single_robot_solution(new_size);
-              vector<vector<float> > new_ThisAgentsPath(new_size);
-              vector<float> new_Parametric_Times(new_size);
-
-              uint p = 1;
-              for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
-              {
-                new_single_robot_solution[q] = Globals.single_robot_solution[p];
-                new_ThisAgentsPath[q] = ThisAgentsPath[p];
-                new_Parametric_Times[q] = Parametric_Times[p];
-              }
-
-              Globals.single_robot_solution = new_single_robot_solution;
-              ThisAgentsPath = new_ThisAgentsPath;
-              Parametric_Times = new_Parametric_Times;
-            }
-
-
             // update other robots as we eat up the path
             char buffer[max_message_size];
             int index = Globals.populate_buffer_with_single_robot_paths(buffer);
@@ -2164,9 +2147,9 @@ int main(int argc, char** argv)
 
       ros::spinOnce(); ///////////////// error only happens when spinning
     
-      printf("sleeping \n");
+      //printf("sleeping \n");
       loop_rate.sleep();
-       printf("moving\n");
+       //printf("moving\n");
 
       if(Globals.master_reset)
       {
