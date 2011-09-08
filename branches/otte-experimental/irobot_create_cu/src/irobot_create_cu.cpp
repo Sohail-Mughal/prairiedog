@@ -1525,7 +1525,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float t_x = robot_pose->x - T[length-1][0];
   float t_y = robot_pose->y - T[length-1][1];
   float d_diff = sqrt(t_x*t_x + t_y*t_y);
-  if(d_diff < near_goal_dist)
+  if(d_diff < near_goal_dist && T.size() < 2)
     near_the_goal = true;
   
   bool diverging = false; // this is set later depending on circumstance
@@ -1576,7 +1576,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     
   publish_turn_circle(T[carrot_index][0], T[carrot_index][1], .1); // publish for visualization
     
-  if(T[carrot_index][0] == T[length-1][0] && T[carrot_index][1] == T[length-1][1])  // steering at the goal (not considering orientation)
+  if(carrot_index == length-1)  // steering at the goal
   {
     //printf("goal -- %d:[%f, %f], %d:[%f, %f], %d \n", carrot_index, T[carrot_index][0], T[carrot_index][1], length-1, T[length-1][0], T[length-1][1], current_place_index);
     near_the_goal = true;
@@ -1630,7 +1630,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     
       // get a factor between 0 and 1 for how far away we are
       float dist_factor = dist_diff/max_dist_behind_allowed;
-      if(dist_factor > 1)
+     // if(dist_factor > 1)
         dist_factor = 1;
         
       //printf("moving toward point, %f \n", dist_factor);  

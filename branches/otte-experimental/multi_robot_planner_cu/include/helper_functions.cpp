@@ -1870,11 +1870,11 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     else
       printf("...and no other agents have conflicts \n");
   }
-
+printf("here 1\n");
   // init current_point to the conflict points and find the inds of edges that contain them
   vector<vector<float> > current_point = first_conflicts;
   vector<float> ind_of_current_edges(max_num_robots, -1); // find first edges that contain the conflict points for all robots
-
+printf("here 2\n");
   for(int r = 0; r < max_num_robots; r++)
   {
     if(!InTeam[r])
@@ -1892,10 +1892,14 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         else
           ind_of_current_edges[r] = i - 1;
         
+        if(ind_of_current_edges[r] < 0)
+          ind_of_current_edges[r] = 0;
+
         break;
       }
     }
   }
+printf("here 3\n");
 
   // expand the planning area up to the minimum size, we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
   bool need_to_expand_up_to_maximum = true;
@@ -1909,7 +1913,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   float total_distance = 0;
 
   vector<bool> at_goal(max_num_robots,false);
-
+printf("here 4\n");
   // now expand along each path at an equal rate based on resolution until we achieve the preferred planning area
   while( (max_x - min_x <= preferred_max_planning_area_side_length) && 
          (max_y - min_y <= preferred_max_planning_area_side_length) )
@@ -1922,7 +1926,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         break;
       }
     }
-
+printf("here 5\n");
     // check if some robots still have path left to traverse along
     bool some_not_at_goal = false;
     for(int r = 0; r < max_num_robots; r++)
@@ -1939,11 +1943,11 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
     if(!some_not_at_goal)
     {
-      //printf("everybody at goal \n");
+      printf("everybody at goal \n");
       break;
     }
 
-    //printf("total distance: %f \n", total_distance);
+    printf("total distance: %f \n", total_distance);
     
     // move each point resolution distance along path 
     for(int r = 0; r < max_num_robots; r++)
@@ -1961,6 +1965,13 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       while(dist_to_end_of_edge < resolution) // need to move to a new edge
       {
 
+        if(i+1 >= (int)robot_paths[r].size())
+        {
+          printf("here a \n");
+          at_goal[r] = true;
+          break;
+        }
+    printf("here b \n");
         // account for the end of the current edge
         if(robot_paths[r][i+1][0] > max_x)
           max_x = robot_paths[r][i+1][0];
@@ -1975,28 +1986,33 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
           min_y = robot_paths[r][i+1][1];
 
         i++;
-
+    printf("here c \n");
         // check if we've reached the end of the final edge
         if(i >= ((int)robot_paths[r].size()) - 1) // reached this robot's goal
         {
+    printf("here d \n");
           at_goal[r] = true;
           break;
         }
         else // not final edge, ok to move forward
         {
+    printf("here e \n");
           dist_to_move -= dist_to_end_of_edge;
           current_point[r] = robot_paths[r][i];
           dist_to_end_of_edge = euclid_dist(current_point[r], robot_paths[r][i+1]);
         }
-
+    printf("here f \n");
         total_distance += dist_to_move;
       }
-
+    printf("here g \n");
       // remember the index we are at
       ind_of_current_edges[r] = i;
 
       if(at_goal[r])
         continue;
+
+    printf("here h \n");
+
 
       current_point[r][0] += (dist_to_move/dist_to_end_of_edge)*(robot_paths[r][i+1][0] - current_point[r][0]);
       current_point[r][1] += (dist_to_move/dist_to_end_of_edge)*(robot_paths[r][i+1][1] - current_point[r][1]);
@@ -2012,9 +2028,11 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
       if(current_point[r][1] < min_y)
         min_y = current_point[r][1];
+    printf("here i \n");
     }
+    printf("here j \n");
   }
-
+    printf("here k \n");
   //printf("current_point 0: [%f, %f]\n", current_point[0][0], current_point[0][1]);
   //printf("current_point 1: [%f, %f]\n", current_point[1][0], current_point[1][1]);
 
