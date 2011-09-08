@@ -83,7 +83,7 @@ float BUMPER_BACKUP_DIST = .015;   //(m) after a bumper hit, the robot backs up 
 float BACKUP_SPEED = -.2;
 float DEFAULT_SPEED = 0.2;
 float DEFAULT_TURN = 0.2;
-float BUMPER_THETA_OFFSET = PI/6;  // rad in robot coordinate system
+float BUMPER_THETA_OFFSET = PI/6.0;  // rad in robot coordinate system
 float BUMPER_OFFSET = .35;         // (m) distance in robot coordinate system
 bool using_tf = true;              // when set to true, use the tf package
 
@@ -161,6 +161,36 @@ float TARGET_SPEED = DEFAULT_SPEED;
 float TARGET_TURN = DEFAULT_TURN;
 
 vector<bool> InTeam;               // if InTeam[i] == true, then agent i is in our dynamic team (used in multi robot mode)
+
+// stuff used to follow trajectory (multi robot mode)
+int it_count = 0;
+int current_place_index = 0;    // index of closest point to robot currently
+int current_time_index = 0;     // index of point where robot should be currently
+bool was_near_the_goal = false; // once we are near the goal this goes true
+
+
+
+
+float lateral_dist_ceiling = .1;    // max dist allowed to be laterally off path (values above this are set to this for deteremining control function)
+float extract_time_res = .01;       // the granularity used to create the trajectory that we follow 
+float carrot_dist_ahead = .2;       // the carrot (on the stick) used for controller is this far (distance) ahead of the robot along the path
+float carrot_time_ahead = .5;
+float max_accel = .1;               // max acceleration allowed
+float max_radial_accel = .1;        // max radial acceleration allowed
+float max_time_behind_allowed = 2.0;// max time behind that we allow this robot to get before adjusting our arrivial time by this much
+float max_dist_behind_allowed = 0.2;// max dist behind allowed
+float max_dist_ahead_allowed = 0.2;
+float near_goal_dist = 0.2;         // this close to the goal is at the goal
+float near_goal_rotation = PI/6.0;  // this close to the goal is at the goal
+
+float second_order_speed_increase_paramiter = .3;  // used in control function
+float second_order_turn_increase_paramiter = 1.0;  // used in control function
+
+float ahead_of_schedual_decelerate = 1.0;          // decelerate this much when we are ahead of schedual
+float ahead_of_schedual_radial_decelerate = 1.0;   // radial decelerate this much when we are ahead of schedual
+
+
+float robot_rad = 0.2;
 
 /* Print the current state info to the console
 void print_state() 
@@ -364,6 +394,20 @@ void pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 
 void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg) // global goal
 { 
+
+  if(global_goal_pose->x == msg->pose.position.x &&
+  global_goal_pose->y == msg->pose.position.y &&
+  global_goal_pose->z == msg->pose.position.z &&
+  global_goal_pose->qw == msg->pose.orientation.w &&
+  global_goal_pose->qx == msg->pose.orientation.x &&
+  global_goal_pose->qy == msg->pose.orientation.y &&
+  global_goal_pose->qz == msg->pose.orientation.z) // the same as old goal
+  {
+    return;
+  } 
+
+  printf("controller: new goal\n");
+
   global_goal_pose->x = msg->pose.position.x;
   global_goal_pose->y = msg->pose.position.y;
   global_goal_pose->z = msg->pose.position.z;
@@ -380,6 +424,27 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg) // global go
   global_goal_pose->cos_alpha = qw*qw + qx*qx - qy*qy - qz*qz;
   global_goal_pose->sin_alpha = 2*qw*qz + 2*qx*qy;
   global_goal_pose->alpha = atan2(global_goal_pose->sin_alpha, global_goal_pose->cos_alpha);
+
+  
+
+
+  if(multi_robot_mode)
+  {
+    // reset globals
+    safe_path_exists = 0;
+    global_path.resize(0);
+    first_path.resize(0);
+    trajectory.resize(0);
+    t_target_ind = -1;
+    recieved_first_path = false;
+    new_global_path = 1;
+    time_adjust = 0;
+
+    it_count = 0;
+    current_place_index = 0;
+    current_time_index = 0;
+    was_near_the_goal = false;
+  }
 }
 
 void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
@@ -445,7 +510,7 @@ if(true)
         //}
         
       }
-      extract_trajectory(trajectory, first_path, .1); 
+      extract_trajectory(trajectory, first_path, extract_time_res); 
 
       //print_2d_float_vector(first_path);
       //print_2d_float_vector(trajectory);
@@ -1203,8 +1268,8 @@ bool is_diverging(POSE* robot_pose, const vector<float>& s1, const vector<float>
   double segment_x2 = s2[0];
   double segment_y2 = s2[1];
 
-  double robot_x2 = robot_x1+(.2*sin(robot_theta)); // for robot radius approx .2
-  double robot_y2 = robot_y1+(.2*cos(robot_theta)); // for robot radius approx .2
+  double robot_x2 = robot_x1+(robot_rad*sin(robot_theta)); // for robot radius approx .2
+  double robot_y2 = robot_y1+(robot_rad*cos(robot_theta)); // for robot radius approx .2
 
   // find where the robot's current direction intersects the line that the segment is on
   float intersect_x, intersect_y;
@@ -1310,10 +1375,6 @@ int follow_path(vector<POSE>& path, float tolerance_distance, int new_path_flag)
 // it will speed up to try to get where it should currently be. new_path_flag = 1 means that a new path has been sent
 // time_look_ahead is the ammount of time into the future we consider to be now.
 
-int it_count = 0;
-int current_place_index = 0;    // index of closest point to robot currently
-int current_time_index = 0;     // index of point where robot should be currently
-bool was_near_the_goal = false; // once we are near the goal this goes true
 int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_path_flag)
 {
   if(robot_pose == NULL)
@@ -1418,9 +1479,9 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float dy_t = T[current_place_index][1] - T[current_time_index][1];
   float dist_away = sqrt(dx_t*dx_t + dy_t*dy_t);
 
-  if(!was_near_the_goal && dist_away > 0.2)
+  if(!was_near_the_goal && dist_away > max_dist_behind_allowed)
   {
-    if(time_ahead < -2.0) // this robot is more than 2 seconds behind and also more than 20 cm behind (including vs. all other robots)
+    if(time_ahead < -max_time_behind_allowed) // this robot is more than 2 seconds behind and also more than 20 cm behind (including vs. all other robots)
     {
       time_adjust -= time_ahead; // makes time_adjust get bigger
       time_now = time_now_not_adjusted - time_adjust;
@@ -1451,7 +1512,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     ahead_of_schedual = true;
     
   bool too_far_away = false;
-  if(min_dist > 0.2) // we are significantly off the path
+  if(min_dist > max_dist_behind_allowed) // we are significantly off the path
     too_far_away = true;
   
   bool on_a_point = false;  // this is set later depending on circumstance  
@@ -1461,7 +1522,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   float t_x = robot_pose->x - T[length-1][0];
   float t_y = robot_pose->y - T[length-1][1];
   float d_diff = sqrt(t_x*t_x + t_y*t_y);
-  if(d_diff < 0.2)
+  if(d_diff < near_goal_dist)
     near_the_goal = true;
   
   bool diverging = false; // this is set later depending on circumstance
@@ -1490,7 +1551,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   else // behind schedual or too far away
   {   
     // set carrot point based on a little ahead of where we are now
-    float time_ahead = .5;
+    float time_ahead = carrot_time_ahead;
     carrot_index = current_place_index;
     while(carrot_index < length - 1)
     {    
@@ -1539,7 +1600,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
     
     // get a factor between 0 and 1 for how far away we are
-    float dist_factor = dist_diff/0.2;
+    float dist_factor = dist_diff/max_dist_behind_allowed;
     if(dist_factor > 1)
       dist_factor = 1;
         
@@ -1565,7 +1626,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
       float dist_diff = sqrt(temp_x*temp_x + temp_y*temp_y);
     
       // get a factor between 0 and 1 for how far away we are
-      float dist_factor = dist_diff/0.2;
+      float dist_factor = dist_diff/max_dist_behind_allowed;
       if(dist_factor > 1)
         dist_factor = 1;
         
@@ -1620,11 +1681,11 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   if(diverging && !too_far_away)  // we want to add add aditional turning based on how far the robot is away from the segment
   {
     float lateral_dist = min_dist;  // not exactly lateral, but sideways from the segment
-    if(lateral_dist > 0.1)        
-      lateral_dist = 0.1;
+    if(lateral_dist > lateral_dist_ceiling)        
+      lateral_dist = lateral_dist_ceiling;
       
     // get on range 0 to 1
-    lateral_dist = (lateral_dist)/.1;
+    lateral_dist = (lateral_dist)/lateral_dist_ceiling;
         
     float diff_lateral = 1-sin(lateral_dist*PI/2+(PI/2));       
               
@@ -1765,7 +1826,7 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     float d_y = T[carrot_index][1] - robot_pose->y;
     float d_dist = sqrt(d_x*d_x + d_y*d_y); 
     
-    if(d_dist > .2)
+    if(d_dist > max_dist_ahead_allowed)
     {
       // stop and wait, maybe change this to just a slow down if faster speeds are used
       setSpeed(0); 
@@ -1784,10 +1845,10 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
   }
   else // we are behind schedule
   {
-    // while carrot_index is within 0.2, look further down the path
+    // while carrot_index is within carrot_dist_ahead, look further down the path
     carrot_index = current_place_index;  
     this_dist = min_dist;   
-    while(this_dist <= 0.2)
+    while(this_dist <= carrot_dist_ahead)
     { 
       if(carrot_index >= current_time_index)
       {
@@ -1805,20 +1866,18 @@ int follow_trajectory(vector<vector<float> >& T, float time_look_ahead, int new_
     // speed up based on how far behind we are
     float time_behind = T[current_time_index][3] - T[current_place_index][3];
     
-    float second_order_speed_increase_paramiter = .3;
-    float second_order_turn_increase_paramiter = 1.0;
     float speed_increase = time_behind*time_behind*second_order_speed_increase_paramiter;
-    if(speed_increase > .1)
-      speed_increase = .1;
+    if(speed_increase > max_accel)
+      speed_increase = max_accel;
             
     float turn_increase = time_behind*time_behind*second_order_turn_increase_paramiter;
-    if(turn_increase > .1)
-      turn_increase = .1;
+    if(turn_increase > max_radial_accel)
+      turn_increase = max_radial_accel;
     
     if(current_time_index < current_place_index) // ahead of schedual
     {
-      speed_increase *= -1.0;
-      turn_increase *= -1.0;
+      speed_increase *= -ahead_of_schedual_decelerate;
+      turn_increase *= -ahead_of_schedual_radial_decelerate;
       printf("%f secs ahead of schedule \n", -time_behind-time_look_ahead);
     }
     else
@@ -2032,18 +2091,17 @@ int main(int argc, char * argv[])
     {
       if(multi_robot_mode)
       {
-        //if(within_dist_of_goal(.2) == 0)
+        if(within_dist_of_goal(near_goal_dist) == 0)
           follow_trajectory(trajectory, 0, new_global_path); // last argument should be changed to 1 the first time and 0 after that for speed
-        //else
-        //{
-        //  move_toward_pose(global_goal_pose, .3, PI/12);
-          ///printf("here ---\n");
-
-        //}
+        else
+        {
+          // if near the goal, then get about the right direction and stop
+          move_toward_pose(global_goal_pose, near_goal_dist*2, near_goal_rotation);
+        }
       }
       else
       { 
-        if(within_dist_of_goal(.2) == 0)
+        if(within_dist_of_goal(near_goal_dist) == 0)
           follow_path(global_path, .3, new_global_path);
         else
           move_toward_pose(global_goal_pose, .3, PI/12);
