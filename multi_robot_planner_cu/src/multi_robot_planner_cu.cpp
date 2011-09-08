@@ -402,6 +402,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   
   printf("new goal -------------------------------------------------------------------\n");
   
+
   while(change_token_used)
     {printf(" change token used, goal \n");}
   change_token_used = true;
@@ -425,7 +426,8 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   
   //print_pose(goal_pose);
   new_goal = true;
-
+  
+  //Globals.planning_iteration[Globals.agent_number]++;
   Globals.master_reset = true; // goal change, so reset
   change_token_used = false;
 }
