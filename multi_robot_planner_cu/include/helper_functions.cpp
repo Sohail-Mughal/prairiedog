@@ -1958,13 +1958,15 @@ printf("here 5\n");
       if(at_goal[r])
         continue;
 
+      if(robot_paths[r].size() <= 1)
+        continue;
+
       int i = ind_of_current_edges[r];
       float dist_to_end_of_edge = euclid_dist(current_point[r], robot_paths[r][i+1]);
       float dist_to_move = resolution;
 
       while(dist_to_end_of_edge < resolution) // need to move to a new edge
       {
-
         if(i+1 >= (int)robot_paths[r].size())
         {
           printf("here a \n");

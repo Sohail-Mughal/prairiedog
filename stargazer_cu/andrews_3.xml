@@ -3,7 +3,7 @@
     <PseudoLite id="1076" x="30.0437" y="11.4752" angle="3.1776" />
     <PseudoLite id="1600" x="34.3668" y="7.9999" angle="3.1761" />
     <PseudoLite id="1602" x="25.4076" y="11.713" angle="1.5942" />
-    <PseudoLite id="1616" x="36.1433" y="7.4656" angle="3.1815" />
+    <PseudoLite id="592" x="36.1433" y="7.4656" angle="3.1815" />
     <PseudoLite id="1622" x="32.7044" y="11.3811" angle="4.7713" />
     <PseudoLite id="1632" x="28.0075" y="11.5343" angle="3.1318" />
     <PseudoLite id="1636" x="50.4108" y="1.2694" angle="1.5762" />
@@ -37,6 +37,7 @@
     <PseudoLite id="9250" x="34.2079" y="10.2565" angle="6.2504" />
     <PseudoLite id="9264" x="52.6207" y="1.3328" angle="1.5656" />
     <PseudoLite id="9266" x="32.2802" y="10.1539" angle="3.1816" />
+    <PseudoLite id="1794" x="31.0000" y="10.5539" angle="3.1816" />
     <PseudoLite id="9284" x="31.6564" y="12.0328" angle="4.7575" />
     <PseudoLite id="1170" x="31.3694" y="13.3671" angle="4.7706" />
     <PseudoLite id="1650" x="31.8649" y="20.3775" angle="4.7609" />
@@ -61,7 +62,7 @@
     <PseudoLite id="9236" x="11.6198" y="15.1595" angle="3.1228" />
     <PseudoLite id="9238" x="8.1229" y="9.8721" angle="1.5741" />
     <PseudoLite id="9248" x="10.5346" y="9.4064" angle="1.5312" />
-    <PseudoLite id="9252" x="4.176" y="12.6461" angle="-1.6372" />
+    <PseudoLite id="9252" x="14.176" y="12.6461" angle="-1.6372" />
     <PseudoLite id="9254" x="7.1692" y="15.573" angle="0.017505" />
     <PseudoLite id="9824" x="20.0312" y="9.863" angle="-0.063213" />
 </PseudoLiteMap>

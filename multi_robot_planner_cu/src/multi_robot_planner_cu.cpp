@@ -209,7 +209,7 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
-float team_combine_dist = 20;  // distance robots have to be near to each other to combine teams
+float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 3;     // distance robots have to be away from each other to dissolve teams
 float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
         
@@ -1197,8 +1197,8 @@ int main(int argc, char** argv)
       vector<float> sub_start;
       vector<float> sub_goal;
       Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
-      float preferred_min_planning_area_side_length = 1;
-      float preferred_max_planning_area_side_length = 1.5;
+      float preferred_min_planning_area_side_length = .5*Globals.team_size;
+      float preferred_max_planning_area_side_length = 1*Globals.team_size;
       float accuracy_resolution = .05;
       float time_resolution = .05;
 
@@ -1499,9 +1499,10 @@ int main(int argc, char** argv)
         publish_team_list(Globals.InTeam);   
         ros::spinOnce();
       }
+      now_time = clock();
       float actual_solution_time = difftime_clock(now_time,start_time); // time for first solution
     
-      printf("found first path \n");
+      printf("found first path in %f seconds\n", actual_solution_time);
               
 
       if(use_smart_plan_time)
@@ -2030,20 +2031,20 @@ int main(int argc, char** argv)
             uint orig_size = Globals.single_robot_solution.size();
             uint new_size = orig_size - 1;
             vector<vector<float> > new_single_robot_solution(new_size);
-            vector<vector<float> > new_ThisAgentsPath(new_size);
-            vector<float> new_Parametric_Times(new_size);
+            //vector<vector<float> > new_ThisAgentsPath(new_size);
+            //vector<float> new_Parametric_Times(new_size);
 
             uint p = 1;
             for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
             {
               new_single_robot_solution[q] = Globals.single_robot_solution[p];
-              new_ThisAgentsPath[q] = ThisAgentsPath[p];
-              new_Parametric_Times[q] = Parametric_Times[p];
+              //new_ThisAgentsPath[q] = ThisAgentsPath[p];
+              //new_Parametric_Times[q] = Parametric_Times[p];
             }
 
             Globals.single_robot_solution = new_single_robot_solution;
-            ThisAgentsPath = new_ThisAgentsPath;
-            Parametric_Times = new_Parametric_Times;
+            //ThisAgentsPath = new_ThisAgentsPath;
+            //Parametric_Times = new_Parametric_Times;
 
             // update other robots as we eat up the path
             char buffer[max_message_size];
@@ -2065,7 +2066,9 @@ int main(int argc, char** argv)
                 float dist_moved_since_last = euclid_dist(Globals.single_robot_solution[0], temp_best_point_found);
                 if(dist_moved_since_last > 0)
                 {
-                  float diff_time = dist_moved_since_last/old_edge_dist * (Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2]);
+                  // the following line computes time as it is used by this robot's controller, which is different than that 
+                  // used by other robots to check collisions (when we planned to be there vs when we now plan to be there)
+                  //float diff_time = dist_moved_since_last/old_edge_dist * (Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2]);
 
                   // calculate target angle
                   float target_angle = Globals.single_robot_solution[0][4];
@@ -2081,14 +2084,13 @@ int main(int argc, char** argv)
 
                   Globals.single_robot_solution[0][0] = temp_best_point_found[0];               // x
                   Globals.single_robot_solution[0][1] = temp_best_point_found[1];               // y
-                  Globals.single_robot_solution[0][2] += diff_time;                             // time
                   Globals.single_robot_solution[0][3] = target_angle;                           // angle
 
-                  ThisAgentsPath[0][0] = temp_best_point_found[0];                              // x   
-                  ThisAgentsPath[0][1] = temp_best_point_found[1];                              // y
-                  ThisAgentsPath[0][2] = target_angle;                                          // angle
+                 // ThisAgentsPath[0][0] = temp_best_point_found[0];                              // x   
+                 // ThisAgentsPath[0][1] = temp_best_point_found[1];                              // y
+                 // ThisAgentsPath[0][2] = target_angle;                                          // angle
 
-                  Parametric_Times[0] += diff_time;                                             // time  
+                 // Parametric_Times[0] += diff_time;                                             // time  
                 }
               }
             }
@@ -2099,6 +2101,15 @@ int main(int argc, char** argv)
             index++;
             Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
             Globals.an_agent_needs_this_single_path_iteration = false;
+          }
+
+
+          // update Globals.single_robot_solution time to reflect the time (from now) that we plan to be there 
+          // (since this is used by other agents for collision checking)
+          float delta_time_for_collision_checks = Globals.single_robot_solution[0][2];
+          for(uint i = 0; i < Globals.single_robot_solution.size(); i++)
+          {
+            Globals.single_robot_solution[i][2] -= delta_time_for_collision_checks;
           }
         }
         else
