@@ -603,7 +603,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
 
         if(dist_to_sender > combine_dist )
         {
-          printf("... but it is too far away to care about right now\n");
+          printf("... but it is too far away to care about right now (%f) \n", combine_dist);
           overlap = false;   
           need_to_join_teams = false;
         }
@@ -1371,10 +1371,11 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
                   printf("agent %d conflicts with me (%d)\n",temp_ag, G->agent_number);
 
-                  if(euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]) > G->combine_dist)
+                  float this_dist = euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]);
+                  if(this_dist > G->combine_dist)
                   {
                     printf("Path conflicts with an agent not yet in our team\n");
-                    printf("... but it is too far away to care about right now\n");
+                    printf("... but it is too far away to care about right now (%f)\n", this_dist);
                   }
                   else
                   {
@@ -1565,8 +1566,8 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   {
     // wait until we have calculated the start and goal
 
-    if(G->an_agent_needs_this_single_path_iteration) // some agent is incorrect about this agent's single robot path planning iteration
-    {
+    //if(G->an_agent_needs_this_single_path_iteration) // some agent is incorrect about this agent's single robot path planning iteration
+    //{
       // send all prefered paths we know about
 
       int index = G->populate_buffer_with_single_robot_paths(buffer);
@@ -1576,7 +1577,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
       G->hard_broadcast((void *)buffer, sizeof(char) * index);
       G->an_agent_needs_this_single_path_iteration = false;
-    }
+    //}
 
     printf("(startup sender) waiting to calculate this agents start and goal\n");
 
@@ -1638,14 +1639,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   {       
     printf("here -1-, %d\n", max_message_size);
     int final_index = G->populate_buffer_with_data(buffer);
-    if(G->an_agent_needs_this_single_path_iteration)
-    {
+    //if(G->an_agent_needs_this_single_path_iteration)
+    //{
       //printf("here 5 \n");
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
       G->an_agent_needs_this_single_path_iteration = false;
       buffer[final_index] = 4; // this signals that all this message contained was the prefered robot path 
       final_index++;
-    }
+    //}
     G->hard_broadcast((void *)buffer, sizeof(char) * final_index);
     
     usleep(G->sync_message_wait_time*1000000);
