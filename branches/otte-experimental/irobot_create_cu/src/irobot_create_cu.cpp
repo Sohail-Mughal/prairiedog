@@ -185,6 +185,8 @@ float near_goal_dist = 0.2;         // this close to the goal is at the goal
 float near_goal_rotation = PI/6.0;  // this close to the goal is at the goal
 
 float time_ahead_rad = 0.50; // time within this time of now is also considered now
+float time_behind_adjust_thresh = 1; // if we get more than this far behind, we'll tell the other robots
+float time_ahead_wait_max = 4; // if more then this ahead and on path, then turn around and go to where we should be
 
 float second_order_speed_increase_paramiter = .3;  // used in control function
 float second_order_turn_increase_paramiter = 1.0;  // used in control function
@@ -210,7 +212,7 @@ void print_state()
 }
 */
 
-float time_adjust = 0;          // if other robots fall behind schedual, use this to help this agent slow down to accomodate them
+float time_adjust = 0;          // if other robots fall behind schedual, use this to help this agent slow down to accomodate them and vise versa
 
 /* ------------------- a few function headers ---------------------------*/
 float setSpeed(float newspeed);
@@ -1492,9 +1494,11 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   float time_ahead_of_schedual = 0.0; // the time difference between where we are (approx) on path and where we should be, negative if we are behind schedual
   bool on_a_point = false;
 
+  publish_time_ahead(time_adjust);
+
   // find the index that we "should" be at based on time
   ros::Duration elapsed_time = ros::Time::now() - move_start_time;
-  float current_time = elapsed_time.toSec();
+  float current_time = elapsed_time.toSec() - time_adjust;
   int current_time_index = find_time_index(T, current_time);
   //printf("current_time = %f, current_time_index = %d\n", current_time, current_time_index);
   publish_turn_circle(T[current_time_index][0], T[current_time_index][1], .1); // publish for visualization
@@ -1522,8 +1526,11 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
     //publish_turn_circle(T[closest_ind_within_radius_of_robot][0], T[closest_ind_within_radius_of_robot][1], .1); // publish for visualization
 
     if(closest_ind_within_radius_of_robot < current_time_index) // then we are running behind schedual
+    {
+      //printf("possible problem turn case 1\n");
       ahead_of_schedual = false;
-    
+    }
+
     time_ahead_of_schedual = T[closest_ind_within_radius_of_robot][3] - T[current_time_index][3];
   }
 
@@ -1579,10 +1586,11 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   if(T[carrot_index][0] == T[carrot_index+1][0] && T[carrot_index][1] == T[carrot_index+1][1]) // on a point
   {
     on_a_point = true;
+    //printf("on a point \n");
   }
 
   // calculate speed
-  if(time_ahead_of_schedual > time_ahead_rad && on_path) // too far ahead of schedual and on path
+  if(time_ahead_of_schedual > time_ahead_rad && on_path && time_ahead_of_schedual < time_ahead_wait_max) // too far ahead of schedual and on path and not so far ahead that we might be on the wrong part of the path
   {
     TARGET_SPEED = 0;
   }
@@ -1695,15 +1703,32 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   setTurn(TARGET_TURN);   
 
 
-  if(on_path) // remove the part of the path that we have already traversed from the start up to the current time index or the first point within robot radius, whichever is first
+  if(on_path && first_ind_within_radius_of_robot >= 1) // remove the part of the path that we have already traversed from the start up to the current time index or the last point at the same location as the first point within robot radius, whichever is first
   {
-    int new_first_ind = first_ind_within_radius_of_robot - 1;
+    int new_first_ind = first_ind_within_radius_of_robot-1;
     if(first_ind_within_radius_of_robot > current_time_index-1)
       new_first_ind = current_time_index-1;
+
+    //printf("here 1 %d\n", new_first_ind);
+    // if new_first_ind is a point, go to the end of the point
+
+    if(new_first_ind >= 0 && new_first_ind+1 < (int)T.size())
+    {
+      for(/*nothing goes here*/ ; new_first_ind+1 < (int)T.size(); new_first_ind++)
+      {
+        if(T[new_first_ind][0] != T[new_first_ind+1][0] || T[new_first_ind][1] != T[new_first_ind+1][1])
+          break;
+      }
+   }
+   //printf("here 2\n");
 
     if(new_first_ind > 0 && new_first_ind < ((int)T.size())-1)
       remove_first_part_of_path(T, new_first_ind);
   }
+
+  // adjust time if we get too far behind
+  if(time_ahead_of_schedual < -time_behind_adjust_thresh && !on_a_point) // points have been problematic due to much time near the same location
+    time_adjust += -time_ahead_of_schedual;
 }
 
 // this causes the robot to follow the trajectory T, where point T[i] has the form [x, y, alpha, time]

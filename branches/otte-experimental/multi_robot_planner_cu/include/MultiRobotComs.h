@@ -124,4 +124,7 @@ class GlobalVariables
 
    float default_map_x_size;  // used only when finding single robot path
    float default_map_y_size;  // used only when finding single robot path
+
+   bool sender_Ad_Hoc_running;  // true when the sender ad hoc thread is running, used to avoid memory problems on reset
+   bool listener_active;        // true when the listener thread is doing stuff, used to avoid memory problems on reset
 };
