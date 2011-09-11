@@ -106,6 +106,7 @@ class GlobalVariables
 
    bool found_single_robot_solution;             // starts false, turns true when single_robot_solution is found
    vector<vector<float> > single_robot_solution; // a single robot solution for this robot from its start to goal, where points are [x y time angle], 
+                                                 // and x and y are in global coords
                                                  // always updated to incoporate new multi-robot path stuff and current time/robot location
 
    vector<vector<vector<float> > > other_robots_single_solutions; //  other_robots_single_solutions[i] holds the single robot solution for robot i

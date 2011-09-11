@@ -210,7 +210,7 @@ vector<float> Parametric_Times; // holds time parametry of best solution
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
 float team_combine_dist = 3;  // distance robots have to be near to each other to combine teams
-float team_drop_dist = 4;     // distance robots have to be away from each other to dissolve teams
+float team_drop_dist = 5;     // distance robots have to be away from each other to dissolve teams
 float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
         
 bool robot_is_moving = false;
@@ -1120,19 +1120,22 @@ int main(int argc, char** argv)
   {   
     // at this point master_reset is true because globals may be changing and being reset, it will only be set to false lower down in this loop
 
-
-    if(robot_is_moving)
-    {
-      printf("stopping robot from moving \n");
-      publish_system_update(1); // if we've reset, then tell the controller
-      ros::spinOnce();  
-      robot_is_moving = false; 
-    }
+    printf("stopping robot from moving \n");
+    publish_system_update(1); // if we've reset, then tell the controller
+    ros::spinOnce();  
+    robot_is_moving = false; 
      
     // on reset we wait here until it is safe to continue
     while(Globals.sender_Ad_Hoc_running || Globals.listener_active)
     {
+      printf("waiting for sender and listener to stop and wait, respectively\n");
+      publish_system_update(1); // if we've reset, then tell the controller
+      ros::spinOnce();  
+      robot_is_moving = false; 
       ros::spinOnce(); 
+
+      if(!Globals.kill_master)
+        break;
     }
     
 
@@ -1199,6 +1202,11 @@ int main(int argc, char** argv)
       while(!Globals.have_all_team_single_paths() && !Globals.master_reset)
       {
         printf("waiting for other member's single paths\n");
+
+        publish_system_update(1); // if we've reset, then tell the controller
+        ros::spinOnce();  
+        robot_is_moving = false; 
+
         sleep(1);
       }
       if(Globals.master_reset)
@@ -1364,6 +1372,9 @@ int main(int argc, char** argv)
         // broadcast tf
         //broadcast_map_tf();
     
+        publish_system_update(1); // if we've reset, then tell the controller
+        ros::spinOnce(); 
+
         usleep(Globals.sync_message_wait_time*1000000);
  
       }
@@ -1817,12 +1828,28 @@ int main(int argc, char** argv)
 
         printf("done extracting path from planning area\n");
 
-        if(Globals.use_sub_sg) // if we were planning in a sub area
+        if(!Globals.use_sub_sg)
+        {
+          // now we need to set single_robot_solution based on the extracted and translated solution
+          // reset single robot solution [x y time angle] based on the new ThisAgentsPath [x y angle] and Parametric_Times [time]
+          vector<float> temp(4, -1);   
+          vector<vector<float> > new_single_robot_solution(ThisAgentsPath.size(), temp);
+          for(uint p = 0; p < ThisAgentsPath.size(); p++)
+          {
+            new_single_robot_solution[p][0] = ThisAgentsPath[p][0];  // x
+            new_single_robot_solution[p][1] = ThisAgentsPath[p][1];  // y
+            new_single_robot_solution[p][2] = Parametric_Times[p];   // time
+            new_single_robot_solution[p][3] = ThisAgentsPath[p][2];  // angle
+          }
+          Globals.single_robot_solution = new_single_robot_solution;
+        }
+        else // if(Globals.use_sub_sg) // if we were planning in a sub area
         {
           printf("sandwitching new path between valid old path parts\n");
 
           // if this is a multi-agent solution that used sub-area selection, then need to account for getting to and from the sub area
           // assume that the time at wich the teams starts moving through the sub-ara is 0, so adjust time to be negative before entering the sub-area
+          // (let controllers worry about how far behind 0 they are and how to adjust accordingly)
 
           // extract paths to sub-area from the old single robot solution (note points in old solution are [x y old_time angle]
           printf("extracting path to planning sub area from old path\n");
@@ -1853,23 +1880,29 @@ int main(int argc, char** argv)
           single_robot_solution_to_sub_start[ind_with_sub_start+1][1] = ThisAgentsPath[0][1];  // y
           single_robot_solution_to_sub_start[ind_with_sub_start+1][3] = ThisAgentsPath[0][2];  // angle
 
+
           // calculate the time that we would have reached sub_start given old path and set the last point in the path to sub area to be that    
           float dist_of_entire_old_edge = euclid_dist(Globals.single_robot_solution[ind_with_sub_start], 
                                                       Globals.single_robot_solution[ind_with_sub_start+1]);
-          float dist_of_new_edge = euclid_dist(Globals.single_robot_solution[ind_with_sub_start], ThisAgentsPath[0]);
+          float dist_of_new_edge = euclid_dist(single_robot_solution_to_sub_start[ind_with_sub_start], single_robot_solution_to_sub_start[ind_with_sub_start+1]);
 
-          if(dist_of_entire_old_edge <= SMALL) // no movement from start of edge
-            single_robot_solution_to_sub_start[ind_with_sub_start+1][2] = Globals.single_robot_solution[ind_with_sub_start][2];
-          else                                 // movement from start of edge
-            single_robot_solution_to_sub_start[ind_with_sub_start+1][2] = Globals.single_robot_solution[ind_with_sub_start][2] + dist_of_new_edge/dist_of_entire_old_edge*(Globals.single_robot_solution[ind_with_sub_start+1][2] - Globals.single_robot_solution[ind_with_sub_start][2]);
+
+          Globals.single_robot_solution[ind_with_sub_start+1][2] = Globals.single_robot_solution[ind_with_sub_start][2] + dist_of_new_edge*0.2; //////////////!!!!!!!!!!!!!!!! hardcoded speed here !!!!!
+     
+
+          // fix wierd bug /// !!!!!!!!!!!!!!!!!! hard coded speed here
+          float temp_dist_of_first_edge = euclid_dist(single_robot_solution_to_sub_start[0], single_robot_solution_to_sub_start[1]);
+          if(single_robot_solution_to_sub_start[0][2] > single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge*0.2)
+            single_robot_solution_to_sub_start[0][2] = single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge*0.2;
+
 
           // calculate parametric time of path to the sub area
           uint size_to_sub_start = single_robot_solution_to_sub_start.size();
 
-          // need to make the final time of the path to sub area = -sub_start_rotate_time_adjust, 
+          // need to make the final time of the path to sub area = 0, 
           // and the rest negative but with the same delta time that they had before
  
-          float final_time = single_robot_solution_to_sub_start[size_to_sub_start-1][2]; // + sub_start_rotate_time_adjust;
+          float final_time = single_robot_solution_to_sub_start[size_to_sub_start-1][2];
 
           for(uint i = 0; i < size_to_sub_start; i++)
             single_robot_solution_to_sub_start[i][2] -= final_time;
@@ -2010,28 +2043,11 @@ int main(int argc, char** argv)
          // remember the first point beyond the sub_area path as the point that we can drop these team members
 
          drop_point = single_robot_solution_from_sub_goal[0];
-
-        }
-        else // are not using a sub area
-        {
-          //printf("not using a sub area --->\n");
-          // reset single robot solution [x y time angle] based on the new ThisAgentsPath [x y angle] and Parametric_Times [time]
-          vector<float> temp(4, -1);   
-          vector<vector<float> > new_single_robot_solution(ThisAgentsPath.size(), temp);
-          for(uint p = 0; p < ThisAgentsPath.size(); p++)
-          {
-            new_single_robot_solution[p][0] = ThisAgentsPath[p][0];  // x
-            new_single_robot_solution[p][1] = ThisAgentsPath[p][1];  // y
-            new_single_robot_solution[p][2] = Parametric_Times[p];   // time
-            new_single_robot_solution[p][3] = ThisAgentsPath[p][2];  // angle
-          }
-          Globals.single_robot_solution = new_single_robot_solution;
-          //printf("not using a sub area <---\n");
         }
         
         need_to_calculate_path_to_broadcast = false;
       }
-      else // update single robot solution to reflect the robot's current location (shorten path to reflect distance traveled
+      else // update single robot solution to reflect the robot's current location and time (shorten path to reflect distance traveled)
       {
         // find closest point on path to robot's current position
         //printf("updating path for robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
@@ -2044,126 +2060,136 @@ int main(int argc, char** argv)
         //printf("finding edge containing the start point \n");
         int first_i_of_edge = find_edge_containing_point(Globals.single_robot_solution, temp_robot_position, temp_best_point_found);
         //printf("done finding edge containing the start point \n");
-
-        if(first_i_of_edge >= 0 && Globals.single_robot_solution.size() > 1) //found an edge and at least one edge
+ 
+        // the following was taken out to reflect the rational that we should explicitly shorten Globals.single_robot_solution to reflect the starting position
+        // of the robot when a new plan is made based on what was actually used
+  
+        if(first_i_of_edge >= 0 && Globals.single_robot_solution.size() > 1) //found the first edge and at least one edge
         {
-          if(euclid_dist(temp_robot_position, Globals.single_robot_solution[1]) < Globals.robot_radius/2)  // robot is close to the end of the current edge
-          {
-            //printf("removing an edge\n");
-            uint orig_size = Globals.single_robot_solution.size();
-            uint new_size = orig_size - 1;
-            vector<vector<float> > new_single_robot_solution(new_size);
-
-            uint p = 1;
-            for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
-            {
-              new_single_robot_solution[q] = Globals.single_robot_solution[p];
-            }
-
-            Globals.single_robot_solution = new_single_robot_solution;
-
-            // update other robots as we eat up the path
-            char buffer[max_message_size];
-            int index = Globals.populate_buffer_with_single_robot_paths(buffer);
-            buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
-            index++;
-            Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
-            Globals.an_agent_needs_this_single_path_iteration = false;
-          }
-          else if(euclid_dist(temp_robot_position, temp_best_point_found) < Globals.robot_radius) // robot is within radius of the closest point on the path
+          if(euclid_dist(temp_robot_position, temp_best_point_found) < 2*Globals.robot_radius) // robot is within 2*radius of the closest point on the path
           {     
-            if(first_i_of_edge == 0) // just repace first point in path with temp_best_point_found
+      
+            // move backward until we are not too far ahead of scheual (in case paths cross themselves)
+            while(first_i_of_edge > 0 && Globals.single_robot_solution[first_i_of_edge][2] - Globals.single_robot_solution[first_i_of_edge][0] > 2.0)  // two secs hard coded here !!!!!!!!!!!!!!!!!!!!!!!! // this means we cannot be too ahead of schecual of the points we remove
+            {
+              first_i_of_edge --; 
+            } 
+
+            if(first_i_of_edge > 0) // we can remove all points up until now
+            {
+              //printf("removing edges\n");
+              uint orig_size = Globals.single_robot_solution.size();
+              uint new_size = orig_size - first_i_of_edge;
+              vector<vector<float> > new_single_robot_solution(new_size);
+
+              uint p = first_i_of_edge;
+              for(uint q = 0; p < Globals.single_robot_solution.size(); q++, p++)
+              {
+                //printf("removing an edge [%f %f]\n", Globals.single_robot_solution[p][0], Globals.single_robot_solution[p][1]);
+                new_single_robot_solution[q] = Globals.single_robot_solution[p];
+              }
+
+              Globals.single_robot_solution = new_single_robot_solution;
+            }
+            else if(first_i_of_edge == 0) // we are somewhere along the first edge
             {
               //printf("adjusting an edge\n");
               // calculate the time associated with that point
-              if(Globals.single_robot_solution.size() > 1) // ... if there is at least one edge
+        
+              float old_edge_dist = euclid_dist(Globals.single_robot_solution[0], Globals.single_robot_solution[1]);
+              float new_edge_dist = euclid_dist(Globals.single_robot_solution[0], temp_robot_position);
+              float time_of_old_edge = Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2];
+              //float time_of_new_edge = new_edge_dist/old_edge_dist*time_of_old_edge;
+              float time_of_new_edge = new_edge_dist*0.2;  // NOTE !!!!!!!!!!!!!!!!!!!!!!!!!! 0.2 is expected robot speed (change from hard coded later)
+
+              // calculate target angle
+              float target_angle = Globals.single_robot_solution[0][4];
+          
+              if(Globals.single_robot_solution[0][0] != Globals.single_robot_solution[1][0] || 
+                 Globals.single_robot_solution[0][1] != Globals.single_robot_solution[1][1]) // not on a rotate point
               {
-                float old_edge_dist = euclid_dist(Globals.single_robot_solution[0], Globals.single_robot_solution[1]);
-                float dist_moved_since_last = euclid_dist(Globals.single_robot_solution[0], temp_best_point_found);
-                float time_of_old_edge = Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2];
-                float time_lost_from_old_edge = (dist_moved_since_last/old_edge_dist)*time_of_old_edge;
-
-               
-
-
-                if(dist_moved_since_last > 0)
-                {
-                  // calculate target angle
-                  float target_angle = Globals.single_robot_solution[0][4];
-                  if(Globals.single_robot_solution.size() > 1) // at least one edge
-                  {
-                    if(Globals.single_robot_solution[0][0] != Globals.single_robot_solution[1][0] || 
-                       Globals.single_robot_solution[0][1] != Globals.single_robot_solution[1][1]) // not on a rotate point
-                    {
-                      target_angle = atan2(Globals.single_robot_solution[1][1] - Globals.single_robot_solution[0][1], 
-                                           Globals.single_robot_solution[1][0] - Globals.single_robot_solution[0][0]);
-                    }
-                  }
-
-                  // replaced the following with what comes after since this is used for collision detection with other robots
-                  // Globals.single_robot_solution[0][0] = temp_best_point_found[0];               // x
-                  // Globals.single_robot_solution[0][1] = temp_best_point_found[1];               // y
-                  // Globals.single_robot_solution[0][3] = target_angle;                           // angle 
-
-                  Globals.single_robot_solution[0][0] = temp_robot_position[0];               // x
-                  Globals.single_robot_solution[0][1] = temp_robot_position[1];               // y
-                  Globals.single_robot_solution[0][2] -= time_lost_from_old_edge;             // time
-                  Globals.single_robot_solution[0][3] = target_angle;                         // angle 
-
-
-                }
+                target_angle = atan2(Globals.single_robot_solution[1][1] - Globals.single_robot_solution[0][1], 
+                                     Globals.single_robot_solution[1][0] - Globals.single_robot_solution[0][0]);
               }
+                
+              Globals.single_robot_solution[0][0] = temp_robot_position[0];                                  // x
+              Globals.single_robot_solution[0][1] = temp_robot_position[1];                                  // y
+              Globals.single_robot_solution[0][2] = Globals.single_robot_solution[1][2] - time_of_new_edge;  // time
+              Globals.single_robot_solution[0][3] = target_angle;                                            // angle 
+
+              //printf("modifying first edge [%f %f]\n", Globals.single_robot_solution[0][0], Globals.single_robot_solution[0][1]);
             }
-            // update other robots as we eat up the path
-            char buffer[max_message_size];
-            int index = Globals.populate_buffer_with_single_robot_paths(buffer);
-            buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
-            index++;
-            Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
-            Globals.an_agent_needs_this_single_path_iteration = false;
-          }
-
-
-          // update Globals.single_robot_solution time to reflect the time (from now) that we plan to be there 
-          // (since this is used by other agents for collision checking)
-          float delta_time_for_collision_checks = Globals.single_robot_solution[0][2];
-          for(uint i = 0; i < Globals.single_robot_solution.size(); i++)
-          {
-            Globals.single_robot_solution[i][2] -= delta_time_for_collision_checks;
           }
         }
         else
         {
-          //printf("did not find an edge \n");
+          //printf("did not find the first edge \n");
         }
+       
+
+        if(Globals.single_robot_solution.size() > 0)
+        {
+          // update Globals.single_robot_solution time to reflect the time (from now) that we plan to be there 
+          // (since this is used by other agents for collision checking)
+          float delta_time_for_collision_checks = Globals.single_robot_solution[0][2];
+          
+          for(uint i = 0; i < Globals.single_robot_solution.size(); i++)
+          {
+            Globals.single_robot_solution[i][2] -= delta_time_for_collision_checks;
+            //printf("---> [%f %f %f]\n", Globals.single_robot_solution[i][0], Globals.single_robot_solution[i][1], Globals.single_robot_solution[i][2]);
+          }
+
+          // update other robots as we eat up the path
+          char buffer[max_message_size];
+          int index = Globals.populate_buffer_with_single_robot_paths(buffer);
+          buffer[index] = 4; // this signals that all this message contained was the prefered robot path 
+          index++;
+          Globals.hard_broadcast((void *)buffer, sizeof(char) * index);
+          Globals.an_agent_needs_this_single_path_iteration = false;
+        }
+
 
         //printf("Done updating path for robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
 
         // check the distance to the point at which we can reset team (end of last sub area we planned for)
         if(drop_point.size() >= 2 && temp_best_point_found.size() >= 2) // drop point exists and so does temp_best_point_found
         {
-          //printf("Checking position vs. drop point\n");
-
-          if(euclid_dist(drop_point, temp_best_point_found) < Globals.robot_radius) // close enough point to drop team members
+          if(euclid_dist(drop_point, temp_best_point_found) < Globals.robot_radius) // close enough point to drop team members based on path conflicts
           {
-            printf("__________________Dropping all members from team__________________\n");
-            for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
-            {
-              int j_global = Globals.global_ID[j];
+             drop_point.resize(0); // resizing to 0 signals we can drop agents
+          }
+        }
+
+        if(drop_point.size() == 0)
+        {
+          for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
+          {
+            int j_global = Globals.global_ID[j];
       
-              // drop this agent from our team
+            if(Globals.other_robots_single_solutions[j_global].size() > 0 && Globals.single_robot_solution.size() > 1)
+            {
+              // make sure we can drop without just adding back in
+              if(team_drop_dist < euclid_dist(Globals.other_robots_single_solutions[j_global][0], Globals.single_robot_solution[0]) )
+              {
+                // drop this agent from our team
+                printf("__________________Dropping agent %d from team__________________\n", j_global);          
+
+                Globals.InTeam[j_global] = false;
+                Globals.local_ID[j_global] = -1; 
           
-              Globals.InTeam[j_global] = false;
-              Globals.local_ID[j_global] = -1; 
-          
-              // swap local index with the last one
-              Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1];         
-              Globals.local_ID[Globals.global_ID[j]] = j;
+                // swap local index with the last one
+                Globals.global_ID[j] = Globals.global_ID[Globals.team_size-1];         
+                Globals.local_ID[Globals.global_ID[j]] = j;
    
-              Globals.team_size--;
-              Globals.global_ID.resize(Globals.team_size);
+                Globals.team_size--;
+                Globals.global_ID.resize(Globals.team_size);
+
+                if(Globals.team_size == 1)
+                {
+                  printf("only member of team is us \n");
+                }
+              }
             }
-            drop_point.resize(0);
           }
           //printf("Done checking position vs. drop point");
         }

@@ -482,17 +482,18 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       //printf("path theta: %f (%f, %f, %f, %f)\n", global_path[i].alpha, qw, qx, qy, qz);
     }
   } 
-  
   if(multi_robot_mode) 
   {     
+
     if(!recieved_first_path || safe_path_exists == 0)
     {
+
       move_start_time = ros::Time::now();
       recieved_first_path = true;
 
       // save into first_path
       first_path.resize(length);
-      
+
       for(int i = 0; i < length; i++)
       {
         first_path[i].resize(4);  // (x, y, alpha, time)
@@ -509,16 +510,23 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
         //}
         
       }
-      printf("extracting path\n");
-      extract_trajectory(trajectory, first_path, extract_time_res); 
-      //print_2d_float_vector(first_path);
+      printf("controller: extracting path\n");
+
+      extract_trajectory(trajectory, first_path, extract_time_res);
+
+      print_2d_float_vector(first_path);
       //print_2d_float_vector(trajectory);
       //printf("(%u points) \n", trajectory.size());
-      printf("done extracting path\n");
+      printf("controller: done extracting path\n");
+
+
+      time_adjust = -first_path[0][3];
+      printf("need to adjust time by : %f \n", time_adjust);
 
     }
-  /*  else // check to make sure this is the same as the first path we recieved
+    else // check to make sure this is the same as the first path we recieved
     {
+      /*
       bool is_the_same = true;
       
       if((int)first_path.size() != length)
@@ -531,10 +539,17 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       }
 
       if(is_the_same)
-        printf("recieved the same path \n");
+      {
+        printf("recieved the same path, no need to extract again \n");
+      }
       else
-        printf("recieved a different path \n");
-    } */
+      {
+        printf("recieved a different path but we were never told to stop (and it is not the first path), so we are ignoring it\n");
+      }
+      */
+
+      return;
+    }
   }
   
   //ros::Duration elapsed_time = ros::Time::now() - move_start_time;
@@ -1513,6 +1528,9 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   int last_ind_within_radius_of_robot = find_last_ind_within_radius_of_robot_starting_at(T, robot_rad, first_ind_within_radius_of_robot); 
   int closest_ind_within_radius_of_robot = find_closest_ind_between(T, first_ind_within_radius_of_robot, last_ind_within_radius_of_robot);
 
+  if(T.size()-10 < last_ind_within_radius_of_robot && last_ind_within_radius_of_robot < T.size()) 
+    printf("on the goal %d\n", T.size());
+
   if(first_ind_within_radius_of_robot < 0)
   {
     // at least robot rad away from any point on the path
@@ -1729,6 +1747,10 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   // adjust time if we get too far behind
   if(time_ahead_of_schedual < -time_behind_adjust_thresh && !on_a_point) // points have been problematic due to much time near the same location
     time_adjust += -time_ahead_of_schedual;
+
+
+  if(T.size() < 10)
+    printf("size of T: %u", T.size());
 }
 
 // this causes the robot to follow the trajectory T, where point T[i] has the form [x, y, alpha, time]
