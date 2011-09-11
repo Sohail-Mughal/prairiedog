@@ -314,7 +314,7 @@ void GlobalVariables::recover_ips_from_buffer(char* buffer) // gets everybody's 
 
 int GlobalVariables::populate_buffer_with_single_robot_paths(char* buffer) // puts single robot paths in buffer, returns the number of chars that it required
 {
-  //printf("populating buffer with paths \n");
+  //printf("populating buffer with paths, robots start at \n");
   int index = 0;
 
   buffer[index] = 'V';
@@ -340,6 +340,23 @@ int GlobalVariables::populate_buffer_with_single_robot_paths(char* buffer) // pu
 
     index += add_2d_vector_to_buffer(other_robots_single_solutions[glbl_id], (void*)((size_t)buffer + (size_t)index));
   }
+
+  /*
+  printf("robots start at: ");
+  for(uint i = 0; i < other_robots_single_solutions.size(); i++)
+  {
+    if((int)i == agent_number && single_robot_solution.size() > 0)
+      printf("(%f %f), ", single_robot_solution[i][0], single_robot_solution[i][1]);
+    else if(InTeam[i] && other_robots_single_solutions[i].size() > 0)
+      printf("[%f %f], ", other_robots_single_solutions[i][0][0], other_robots_single_solutions[i][0][1]);
+    else if(other_robots_single_solutions[i].size() > 0)
+      printf("{%f %f}, ", other_robots_single_solutions[i][0][0], other_robots_single_solutions[i][0][1]);
+    else
+      printf("{---}");
+  }
+  printf("\n");
+  */
+
   return index;
 }
 
@@ -472,16 +489,19 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
     
     //printf("parsing header from %d \n", sending_agent);
 
-    if(dist_to_sender < robot_radius*3)
+    if(!InTeam[sending_agent])
     {
-      need_to_join_teams = true;
-      printf("need to join teams due to being too close \n"); 
-    }   
-    else
-    {
-      printf("robot %d is at [%f %f], I am at [%f %f]\n", sending_agent, sender_pose_x, sender_pose_y, robot_pose->x, robot_pose->y);
+      if(dist_to_sender < robot_radius*3)
+      {
+        need_to_join_teams = true;
+        printf("need to join teams due to being too close \n"); 
+      }   
+      else
+      {
+        printf("robot %d is at [%f %f], I am at [%f %f]\n", sending_agent, sender_pose_x, sender_pose_y, robot_pose->x, robot_pose->y);
+      }
     }
- 
+
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
     {
       printf("old problem --- %d %d\n", senders_planning_iteration, planning_iteration[sending_agent]);
@@ -608,12 +628,12 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
       if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
         overlap = quads_overlap(sx, gx, sy, gy, team_bound_area_min[0], team_bound_area_size[0], team_bound_area_min[1], team_bound_area_size[1]);
 
-      if(overlap)              // need to join due to overlap
+      if(overlap && !need_to_join_teams)              // need to join due to overlap
       {
         printf("Planning area overlaps with an agent not yet in our team\n");
         need_to_join_teams = true;
 
-        if(dist_to_sender > combine_dist )
+        if(dist_to_sender > combine_dist)
         {
           printf("... but it is too far away to care about right now (%f) \n", combine_dist);
           overlap = false;   
@@ -1630,24 +1650,22 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
 
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset && !G->revert_to_single_robot_path) // until we have the min number of the other robot's data
-  {   
-
-printf("here !0 \n");    
+  {    
     int final_index = G->populate_buffer_with_data(buffer);
     //if(G->an_agent_needs_this_single_path_iteration)
     //{
-printf("here !1 \n");
+
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
-printf("here !2 \n");
+
       G->an_agent_needs_this_single_path_iteration = false;
-printf("here !3 \n");
+
       buffer[final_index] = 4; // this signals that all this message contained was the prefered robot path 
-printf("here !4 \n");
+
       final_index++;
    //}
-printf("here !5 \n");
+
     G->hard_broadcast((void *)buffer, sizeof(char) * final_index);
-printf("here !6 \n");
+
     usleep(G->sync_message_wait_time*1000000);
 
     printf("(startup sender) waiting for agent start and goal coords -(sending data)- \n");
