@@ -602,6 +602,11 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         {
           printf("---ignoring message for a different problem (maps to higher dimension than we have)\n"); 
           fclose(ifp);
+
+          printf("master reset in multiagentsolution because of higer mapping problem \n");
+          Gbls->planning_iteration[Gbls->agent_number]++;
+          Gbls->master_reset = true;
+
           break; 
         }
       }

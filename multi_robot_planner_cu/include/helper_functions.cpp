@@ -1870,11 +1870,11 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     else
       printf("...and no other agents have conflicts \n");
   }
-printf("here 1\n");
+
   // init current_point to the conflict points and find the inds of edges that contain them
   vector<vector<float> > current_point = first_conflicts;
   vector<float> ind_of_current_edges(max_num_robots, -1); // find first edges that contain the conflict points for all robots
-printf("here 2\n");
+
   for(int r = 0; r < max_num_robots; r++)
   {
     if(!InTeam[r])
@@ -1899,7 +1899,6 @@ printf("here 2\n");
       }
     }
   }
-printf("here 3\n");
 
   // expand the planning area up to the minimum size, we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
   bool need_to_expand_up_to_maximum = true;
@@ -1913,7 +1912,7 @@ printf("here 3\n");
   float total_distance = 0;
 
   vector<bool> at_goal(max_num_robots,false);
-printf("here 4\n");
+
   // now expand along each path at an equal rate based on resolution until we achieve the preferred planning area
   while( (max_x - min_x <= preferred_max_planning_area_side_length) && 
          (max_y - min_y <= preferred_max_planning_area_side_length) )
@@ -1926,7 +1925,7 @@ printf("here 4\n");
         break;
       }
     }
-printf("here 5\n");
+
     // check if some robots still have path left to traverse along
     bool some_not_at_goal = false;
     for(int r = 0; r < max_num_robots; r++)
@@ -1962,6 +1961,13 @@ printf("here 5\n");
         continue;
 
       int i = ind_of_current_edges[r];
+
+      if(i+1 >= ((int)robot_paths[r].size()))
+      {
+        at_goal[r] = true;
+        break;
+      }
+
       float dist_to_end_of_edge = euclid_dist(current_point[r], robot_paths[r][i+1]);
       float dist_to_move = resolution;
 
@@ -1969,11 +1975,9 @@ printf("here 5\n");
       {
         if(i+1 >= (int)robot_paths[r].size())
         {
-          printf("here a \n");
           at_goal[r] = true;
           break;
         }
-    printf("here b \n");
         // account for the end of the current edge
         if(robot_paths[r][i+1][0] > max_x)
           max_x = robot_paths[r][i+1][0];
@@ -1988,25 +1992,20 @@ printf("here 5\n");
           min_y = robot_paths[r][i+1][1];
 
         i++;
-    printf("here c \n");
         // check if we've reached the end of the final edge
         if(i >= ((int)robot_paths[r].size()) - 1) // reached this robot's goal
         {
-    printf("here d \n");
           at_goal[r] = true;
           break;
         }
         else // not final edge, ok to move forward
         {
-    printf("here e \n");
           dist_to_move -= dist_to_end_of_edge;
           current_point[r] = robot_paths[r][i];
           dist_to_end_of_edge = euclid_dist(current_point[r], robot_paths[r][i+1]);
         }
-    printf("here f \n");
         total_distance += dist_to_move;
       }
-    printf("here g \n");
       // remember the index we are at
       ind_of_current_edges[r] = i;
 
@@ -2050,22 +2049,24 @@ printf("here 5\n");
   // record all robot goal locations
   //printf("(Recording all global goals) \n");
   vector<vector<float> > robot_global_goals(max_num_robots);
-
+printf("here l \n");
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
       continue;
+printf("here m \n");
 
     int goal_ind = ((int)robot_paths[i].size())-1;
     robot_global_goals[i] = robot_paths[i][goal_ind];
+printf("here n \n");
   }
-  //printf("(Done recording all goals)\n");
+  printf("(Done recording all goals)\n");
 
   // remember which goals we need to set
   vector<vector<float> > sub_goals(max_num_robots);
   vector<bool> sub_goal_found(max_num_robots, false);
 
-  //printf("(First pass)\n");
+  printf("(First pass)\n");
 
   // first pass, robot's with goals in planning area get priority as long as they are able to reach those goals without leaving the planning area
   for(int i = 0; i < max_num_robots; i++)
@@ -2082,9 +2083,9 @@ printf("here 5\n");
     }
   }
 
-  //printf("(Done with first pass)\n");
+  printf("(Done with first pass)\n");
 
-  //printf("(Second pass)\n");
+  printf("(Second pass)\n");
 
   // second pass, find goals for robots that do not yet have their goals set, this is the last point in the planning area that can be reached from the first conflict without leaving the planning area
   for(int i = 0; i < max_num_robots; i++)
@@ -2110,7 +2111,7 @@ printf("here 5\n");
       sub_goal_found[i] = true;
     }
   }  
-  //printf("(Done with second pass)\n");
+  printf("(Done with second pass)\n");
 
   if(!sub_goal_found[this_agent_id])
   {
@@ -2118,7 +2119,7 @@ printf("here 5\n");
     return false;
   }
 
-  //printf("This agents initial sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
+  printf("This agents initial sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
 
   // modify goals that conflict until they no longer conflict by moving the robot with lower id along its path toward its global goal
   // if robot with lower id is at its global goal, then move the robot with the higher id toward its global goal
@@ -2147,9 +2148,9 @@ printf("here 5\n");
       return false;
     }
   }
-  //printf("(Done removing sub_goal conflicts)\n");
+  printf("(Done removing sub_goal conflicts)\n");
 
-  //printf("This agents final sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
+  printf("This agents final sub_goal: [%f %f] \n",  sub_goals[this_agent_id][0],  sub_goals[this_agent_id][1]);
 
   // find sub start:
 
@@ -2163,10 +2164,10 @@ printf("here 5\n");
 
     robot_global_starts[i] = robot_paths[i][0];
   }
-  //printf("(Done recording global starts)\n");P{i}(:,2)
+  printf("(Done recording global starts)\n");
 
   // for coding ease I will use stuff I've already written, and just reverse all robot paths and then swap start and goals
-  //printf("(Reversing all paths)\n");
+  printf("(Reversing all paths)\n");
   vector<vector<vector<float> > > reverse_robot_paths = robot_paths;
   for(int r = 0; r < max_num_robots; r++)
   {
@@ -2177,13 +2178,13 @@ printf("here 5\n");
       reverse_robot_paths[r][i] = robot_paths[r][j];
     }
   }
-  //printf("(Done reversing all paths)\n");
+  printf("(Done reversing all paths)\n");
 
   // remember which starts we need to set
   vector<vector<float> > sub_starts(max_num_robots);
   vector<bool> sub_start_found(max_num_robots, false);
 
-  //printf("(Third pass)\n");
+  printf("(Third pass)\n");
 
   // third pass, robot's with starts in planning area get priority as long as they were able to reach the first intersect point without leaving the planning area
   vector<bool> at_start(max_num_robots,false);
@@ -2202,8 +2203,8 @@ printf("here 5\n");
     }
   }
 
-  //printf("(Done with third pass)\n");
-  //printf("(Fourth pass)\n");
+  printf("(Done with third pass)\n");
+  printf("(Fourth pass)\n");
 
   // fourth pass, find starts for robots that do not yet have their starts set
   for(int i = 0; i < max_num_robots; i++)
@@ -2228,7 +2229,7 @@ printf("here 5\n");
     }
   }
 
-  //printf("(Done with fourth pass)\n");
+  printf("(Done with fourth pass)\n");
 
   if(!sub_start_found[this_agent_id])
   {
@@ -2236,12 +2237,12 @@ printf("here 5\n");
     return false;
   }
 
-  //printf("This agents initial sub_start: [%f %f] \n",  sub_starts[this_agent_id][0],  sub_starts[this_agent_id][1]);
+  printf("This agents initial sub_start: [%f %f] \n",  sub_starts[this_agent_id][0],  sub_starts[this_agent_id][1]);
 
 
   // modify starts that conflict until they no longer conflict by moving the robot with lower id along its path toward its global start
   // if robot with lower id is at its global start, then move the robot with the higher id toward its global start
-  //printf("(Removing sub_start conflicts)\n");
+  printf("(Removing sub_start conflicts)\n");
   conflicting_ind_a = -1;
   conflicting_ind_b = -1;
   while(any_two_points_conflict(sub_starts, InTeam, robot_rad, conflicting_ind_a, conflicting_ind_b))
@@ -2270,14 +2271,14 @@ printf("here 5\n");
       //return false;
     }
   }
-  //printf("(Done removing sub_start conflicts)\n");
+  printf("(Done removing sub_start conflicts)\n");
 
   //printf("This agents final sub_start: [%f %f] \n",  sub_starts[this_agent_id][0],  sub_starts[this_agent_id][1]);
 
   sub_start = sub_starts[this_agent_id];
   sub_goal = sub_goals[this_agent_id];
 
-  //printf("This agents final sub_goal  : [%f %f] \n",  sub_goal[0],  sub_goal[1]);
-  //printf("This agents final sub_start : [%f %f] \n",  sub_start[0],  sub_start[1]);
+  printf("This agents final sub_goal  : [%f %f] \n",  sub_goal[0],  sub_goal[1]);
+  printf("This agents final sub_start : [%f %f] \n",  sub_start[0],  sub_start[1]);
   return true;
 }

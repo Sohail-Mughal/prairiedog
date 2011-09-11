@@ -114,8 +114,11 @@ void GlobalVariables::Populate(int num_of_agents)
 
   revert_to_single_robot_path = false;
 
-  Globals.default_map_x_size = -1;
-  Globals.default_map_y_size = -1;
+  default_map_x_size = -1;
+  default_map_y_size = -1;
+
+  sender_Ad_Hoc_running = false;
+  listener_active = false;
 }
 
 // sets up global address data for the agent with ag_id using the IP_string
@@ -469,7 +472,16 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
     
     //printf("parsing header from %d \n", sending_agent);
 
-    
+    if(dist_to_sender < robot_radius*3)
+    {
+      need_to_join_teams = true;
+      printf("need to join teams due to being too close \n"); 
+    }   
+    else
+    {
+      printf("robot %d is at [%f %f], I am at [%f %f]\n", sending_agent, sender_pose_x, sender_pose_y, robot_pose->x, robot_pose->y);
+    }
+ 
     if(senders_planning_iteration < planning_iteration[sending_agent]) // this message is for an old problem
     {
       printf("old problem --- %d %d\n", senders_planning_iteration, planning_iteration[sending_agent]);
@@ -1190,7 +1202,9 @@ void output_pulse(clock_t & last_listener_pulse, float pulse_time, const char* s
 // this thread always listens for incomming messages from other robots
 void *Robot_Listner_Ad_Hoc(void * inG)
 {
-  GlobalVariables* G = (GlobalVariables*)inG;  
+  GlobalVariables* G = (GlobalVariables*)inG; 
+  G->listener_active = true;
+ 
   struct sockaddr_in my_address, senders_address;
   int my_address_length, senders_address_length;
 //   char message_buffer[max_message_size];
@@ -1232,10 +1246,12 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   {
     if(G->master_reset)
     {
+      G->listener_active = false;
       output_pulse(last_listener_pulse, pulse_time, "(listener) sleeping due to master_reset \n");
 
       usleep(100000); // sleep for 1/10 sec
     }
+    G->listener_active = true;
 
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
     {  
@@ -1354,7 +1370,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
               if(temp_ag == G->agent_number) // don't check for conflicts vs self (can happen after we drop other robot from our team)
                 continue;
 
-              if(difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .5)  // only check vs each agent every .5 secs
+              if(difftime_timeval(time_now, G->last_path_conflict_check_time[temp_ag]) > .1)  // only check vs each agent every .1 secs
               { 
                 if(G->other_robots_single_solutions[temp_ag].size() < 1) // make sure we have temp_ag's solution
                   continue;
@@ -1365,13 +1381,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
                 //printf("__________________ checking for conflicts vs agent %d ____________\n", temp_ag);
 
+                float this_dist = euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]);
                 if(find_first_time_conflict_points(G->other_robots_single_solutions[temp_ag], G->single_robot_solution, G->robot_radius, time_resolution, A_conflict, B_conflict)) 
                 {
                   // the paths conflicts, calculate distance to that agent's last known point based on the first point in either path
 
                   printf("agent %d conflicts with me (%d)\n",temp_ag, G->agent_number);
 
-                  float this_dist = euclid_dist(G->other_robots_single_solutions[temp_ag][0], G->single_robot_solution[0]);
                   if(this_dist > G->combine_dist)
                   {
                     printf("Path conflicts with an agent not yet in our team\n");
@@ -1383,6 +1399,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
                     need_to_join_teams = true;
                   }
                 }
+
+                if(this_dist < 3*G->robot_radius)
+                {
+                   printf("join based on being too close right now (%f)\n", this_dist);
+                   need_to_join_teams = true;
+                }
+
                 G->last_path_conflict_check_time[temp_ag] = time_now;
               }
             }
@@ -1506,6 +1529,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   GlobalVariables* G = (GlobalVariables*)inG;  
   char buffer[max_message_size];    
    
+  G->sender_Ad_Hoc_running = true;
   printf("(startup sender) ad-hoc sender start-up thread \n");  
 
   // create an outgoing socket
@@ -1516,12 +1540,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset -2 \n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
   
   if(G->revert_to_single_robot_path)
   {
     printf("(startup sender) sender thread exiting due to revert to single robot path -2\n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
 
@@ -1552,12 +1578,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset -1 \n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
   
   if(G->revert_to_single_robot_path)
   {
     printf("(startup sender) sender thread exiting due to revert to single robot path -1\n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
 
@@ -1589,33 +1617,39 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset 0 \n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
   
   if(G->revert_to_single_robot_path)
   {
     printf("(startup sender) sender thread exiting due to revert to single robot path 0\n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
 
 
   while((!G->have_all_team_data() || G->team_size < G->min_team_size) && !G->master_reset && !G->revert_to_single_robot_path) // until we have the min number of the other robot's data
   {   
-    //printf("here -0- %d\n", max_message_size);
-        
+
+printf("here !0 \n");    
     int final_index = G->populate_buffer_with_data(buffer);
     //if(G->an_agent_needs_this_single_path_iteration)
     //{
-      //printf("here 4 \n");
+printf("here !1 \n");
       final_index += G->populate_buffer_with_single_robot_paths((char*)((size_t)buffer + (size_t)final_index));
+printf("here !2 \n");
       G->an_agent_needs_this_single_path_iteration = false;
+printf("here !3 \n");
       buffer[final_index] = 4; // this signals that all this message contained was the prefered robot path 
+printf("here !4 \n");
       final_index++;
    //}
-
+printf("here !5 \n");
     G->hard_broadcast((void *)buffer, sizeof(char) * final_index);
-
+printf("here !6 \n");
     usleep(G->sync_message_wait_time*1000000);
+
     printf("(startup sender) waiting for agent start and goal coords -(sending data)- \n");
   }
   printf("(startup sender) we have min number of start and goal locations to start planning\n");  
@@ -1623,12 +1657,14 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset 1 \n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
   
   if(G->revert_to_single_robot_path)
   {
     printf("(startup sender) sender thread exiting due to revert to single robot path 1\n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
 
@@ -1655,17 +1691,19 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   if(G->master_reset)
   {
     printf("(startup sender) sender thread exiting due to master reset 2 \n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
   
   if(G->revert_to_single_robot_path)
   {
     printf("(startup sender) sender thread exiting due to revert to single robot path 2\n");
+    G->sender_Ad_Hoc_running = false;
     return NULL;
   }
 
   // now we know the team is all planning, so we exit this thread
   printf("(startup sender) all members of team are planning, exiting ad-hoc sender startup thread \n"); 
-  
+  G->sender_Ad_Hoc_running = false;
   return NULL;
 } 
