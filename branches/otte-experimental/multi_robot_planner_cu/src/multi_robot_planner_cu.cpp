@@ -209,8 +209,9 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
+float path_conflict_combine_dist = 10; // distance robots have to be near each other to combine teams if thier paths conflict
 float team_combine_dist = 3;  // distance robots have to be near to each other to combine teams
-float team_drop_dist = 5;     // distance robots have to be away from each other to dissolve teams
+float team_drop_dist = 10;     // distance robots have to be away from each other to dissolve teams
 float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
         
 bool robot_is_moving = false;
@@ -966,36 +967,6 @@ int main(int argc, char** argv)
     while((goal_pose == NULL || robot_pose == NULL) && ros::ok())
     {
         
-        
-        
-        
-// 
-//     int num = free_space.size();
-//   if(num > 2000)
-//       num = 2000;
-// 
-//   multi_robot_planner_cu::PolygonArray msg;
-// 
-//   msg.header.frame_id = "/map_cu";
-//   msg.polygons.resize(1);
-// 
-//   int num_points = num;
-//   msg.polygons[0].points.resize(num_points);
-//     
-// 
-//   for(int j = 0; j < num_points; j++)
-//   {
-//     msg.polygons[0].points[j].x = free_space[j][0];
-//     msg.polygons[0].points[j].y = free_space[j][1];
-//     msg.polygons[0].points[j].z = 0;        
-//   }
-// 
-//   obstacles_pub.publish(msg); 
-// 
-//   
-//   
-  
-    
       printf("waiting for goal and/or pose \n");
       if(goal_pose == NULL)
       {
@@ -1059,6 +1030,7 @@ int main(int argc, char** argv)
   Globals.global_ID.push_back(agent_number);
   Globals.team_size = 1;  
   Globals.robot_pose = robot_pose;
+  Globals.path_conflict_combine_dist = path_conflict_combine_dist;
   Globals.combine_dist = team_combine_dist;
   Globals.drop_dist = team_drop_dist;
   Globals.drop_time = team_drop_time;
@@ -1119,25 +1091,13 @@ int main(int argc, char** argv)
   while(!Globals.kill_master)
   {   
     // at this point master_reset is true because globals may be changing and being reset, it will only be set to false lower down in this loop
+    // in case it is not, we'll make it true
+    Globals.master_reset = true;
 
     printf("stopping robot from moving \n");
     publish_system_update(1); // if we've reset, then tell the controller
     ros::spinOnce();  
     robot_is_moving = false; 
-     
-    // on reset we wait here until it is safe to continue
-    while(Globals.sender_Ad_Hoc_running || Globals.listener_active)
-    {
-      printf("waiting for sender and listener to stop and wait, respectively\n");
-      publish_system_update(1); // if we've reset, then tell the controller
-      ros::spinOnce();  
-      robot_is_moving = false; 
-      ros::spinOnce(); 
-
-      if(!Globals.kill_master)
-        break;
-    }
-    
 
     // if using smart plan time then reset min time to plan
     printf("-----------------------start of planning phase -----------------------\n");
@@ -1179,20 +1139,19 @@ int main(int argc, char** argv)
     
     Globals.MAgSln = NULL;
     Globals.not_planning_yet = true;  
+
+    Globals.have_calculated_start_and_goal = false;
+
+
     Globals.master_reset = false;  // now set master_reset to false indicating that "perminate" robot data in globals is stable
                                    // this should be the only place in the code where master_reset is set to false
-      
-    Globals.have_calculated_start_and_goal = false;
 
     // kick off sender threads
     pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots, will terminate on master_reset
 
     // reset start and goal data
-    printf("setting start and goal data\n");
-    Globals.start_coords.resize(0);
+    printf("init start and goal data\n");
     Globals.start_coords.resize(Globals.number_of_agents);
-
-    Globals.goal_coords.resize(0);
     Globals.goal_coords.resize(Globals.number_of_agents);
 
     // need to calculate own start and goals based on limited sub-region if there are other robots in team
@@ -1209,6 +1168,7 @@ int main(int argc, char** argv)
 
         sleep(1);
       }
+
       if(Globals.master_reset)
       {
         printf("restarting planning -1\n");
@@ -1216,17 +1176,31 @@ int main(int argc, char** argv)
       }
 
       // look at this agent's single path vs other agent's single paths and 
-      // calculate start and goal for this agent based on intersections with other agents
+      // calculate start and goal for us based on intersections with other agents
 
       vector<float> sub_start;
       vector<float> sub_goal;
       Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
-      float preferred_min_planning_area_side_length = 1; //.5*Globals.team_size;
-      float preferred_max_planning_area_side_length = 1.5; //1*Globals.team_size;
+      float preferred_min_planning_area_side_length = 0.5*Globals.team_size;
+      float preferred_max_planning_area_side_length = 1.0*Globals.team_size;
       float accuracy_resolution = .05;
       float time_resolution = .05;
 
       printf("calculating sub_start and sub_goals \n");
+
+      if(robot_is_moving) // robot is moving, so stop the robot
+      {
+        unused_result = system(system_call);  // remove old files
+        start_time = clock();
+        now_time = clock(); 
+        while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
+        {
+          publish_system_update(1); // if we've reset, then tell the controller
+          ros::spinOnce();  
+          now_time = clock(); 
+        }
+      }  
+      robot_is_moving = false;  
 
       bool no_conflicts_between_sub_paths = false;
       if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
@@ -1235,26 +1209,6 @@ int main(int argc, char** argv)
       {
         // if here then sub_start and sub_goal have changed
         printf("new sub area \n");
-
-
-
- 
-        if(robot_is_moving) // master_reset = true while robot is moving
-        {
-          unused_result = system(system_call);  // remove old files
-          start_time = clock();
-          now_time = clock(); 
-          while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
-          {
-            publish_system_update(1); // if we've reset, then tell the controller
-            ros::spinOnce();  
-            now_time = clock(); 
-          }
-        }  
-        robot_is_moving = false;  
-    
-
-
 
         Globals.start_coords[0].resize(3, 0); 
         Globals.start_coords[0][0] = sub_start[0];
@@ -1268,44 +1222,18 @@ int main(int argc, char** argv)
 
         Globals.use_sub_sg = true;
       }
-      else if(no_conflicts_between_sub_paths)
+      /*else if(no_conflicts_between_sub_paths)
       {
         printf("no conflicts between sub-paths\n");
 
         // reset single robot path 
         Globals.use_sub_sg = false;
         Globals.revert_to_single_robot_path = true;
-      }
+      }*/
       else if(Globals.use_sub_sg)
       {
         printf("old sub area \n");
-
-
-
-
-
- 
-        if(robot_is_moving) // master_reset = true while robot is moving
-        {
-          unused_result = system(system_call);  // remove old files
-          start_time = clock();
-          now_time = clock(); 
-          while(difftime_clock(now_time,start_time) < 2.0) // wait for two seconds so that robot can stop moving
-          {
-            publish_system_update(1); // if we've reset, then tell the controller
-            ros::spinOnce();  
-            now_time = clock(); 
-          }
-        }  
-        robot_is_moving = false;  
     
-
-
-
-
-
-
-
         // continue using old sub_start and sub_goal (which we have saved)
         Globals.start_coords[0].resize(3, 0); 
         Globals.start_coords[0][0] = sub_start[0];
@@ -1767,12 +1695,6 @@ int main(int argc, char** argv)
     else // (Globals.revert_to_single_robot_path)
     {
       printf("using old single robot path \n");
-
-
-
-
-
-
     }
 
     Globals.done_planning = true;
@@ -1803,14 +1725,7 @@ int main(int argc, char** argv)
       
       // now extract this robot's path and calculate times 
 
-      if(Globals.revert_to_single_robot_path) // reverting to old path
-      {
-        // do nothing
-        printf("revert to single robot path 1 \n");
-        Globals.revert_to_single_robot_path = false;
-        need_to_calculate_path_to_broadcast = false;
-      }
-      else if(need_to_calculate_path_to_broadcast)
+      if(need_to_calculate_path_to_broadcast)
       {
         printf("calculating path to broadcast \n");
 
@@ -1830,7 +1745,7 @@ int main(int argc, char** argv)
 
         if(!Globals.use_sub_sg)
         {
-          // now we need to set single_robot_solution based on the extracted and translated solution
+          // now we need to set single_robot_solusingle_robot_solution_to_sub_starttion based on the extracted and translated solution
           // reset single robot solution [x y time angle] based on the new ThisAgentsPath [x y angle] and Parametric_Times [time]
           vector<float> temp(4, -1);   
           vector<vector<float> > new_single_robot_solution(ThisAgentsPath.size(), temp);
@@ -1866,20 +1781,13 @@ int main(int argc, char** argv)
           }
 
           // store portion of path to the sub area
-          vector<vector<float> > single_robot_solution_to_sub_start(ind_with_sub_start+2);  // make empty path of the correct length
+          vector<vector<float> > single_robot_solution_to_sub_start = Globals.single_robot_solution;
+          single_robot_solution_to_sub_start.resize(ind_with_sub_start + 2);
 
-          // the following loop get us up to the start of the last edge in the path to the sub area (but times are incorrect)
-          for(int p = 0; p <= ind_with_sub_start; p++)
-          {
-            single_robot_solution_to_sub_start[p] = Globals.single_robot_solution[p];
-          }
-  
           // now we add the end of the last edge in the path to the sub area
-          single_robot_solution_to_sub_start[ind_with_sub_start+1].resize(4);
           single_robot_solution_to_sub_start[ind_with_sub_start+1][0] = ThisAgentsPath[0][0];  // x
           single_robot_solution_to_sub_start[ind_with_sub_start+1][1] = ThisAgentsPath[0][1];  // y
           single_robot_solution_to_sub_start[ind_with_sub_start+1][3] = ThisAgentsPath[0][2];  // angle
-
 
           // calculate the time that we would have reached sub_start given old path and set the last point in the path to sub area to be that    
           float dist_of_entire_old_edge = euclid_dist(Globals.single_robot_solution[ind_with_sub_start], 
@@ -1887,17 +1795,23 @@ int main(int argc, char** argv)
           float dist_of_new_edge = euclid_dist(single_robot_solution_to_sub_start[ind_with_sub_start], single_robot_solution_to_sub_start[ind_with_sub_start+1]);
 
 
-          Globals.single_robot_solution[ind_with_sub_start+1][2] = Globals.single_robot_solution[ind_with_sub_start][2] + dist_of_new_edge*0.2; //////////////!!!!!!!!!!!!!!!! hardcoded speed here !!!!!
+          single_robot_solution_to_sub_start[ind_with_sub_start+1][2] = single_robot_solution_to_sub_start[ind_with_sub_start][2] + (dist_of_new_edge/dist_of_entire_old_edge)*(single_robot_solution_to_sub_start[ind_with_sub_start+1][2]-single_robot_solution_to_sub_start[ind_with_sub_start][2]);
      
 
           // fix wierd bug /// !!!!!!!!!!!!!!!!!! hard coded speed here
           float temp_dist_of_first_edge = euclid_dist(single_robot_solution_to_sub_start[0], single_robot_solution_to_sub_start[1]);
-          if(single_robot_solution_to_sub_start[0][2] > single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge*0.2)
-            single_robot_solution_to_sub_start[0][2] = single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge*0.2;
+          if(single_robot_solution_to_sub_start[0][2] > single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge/0.2)
+            single_robot_solution_to_sub_start[0][2] = single_robot_solution_to_sub_start[1][2] - temp_dist_of_first_edge/0.2;
 
 
           // calculate parametric time of path to the sub area
           uint size_to_sub_start = single_robot_solution_to_sub_start.size();
+
+
+          printf("dist and time of the thing here : \n");
+          for(int i = 0; i < size_to_sub_start; i++)
+            printf("%f, %f, %f\n", single_robot_solution_to_sub_start[i][0], single_robot_solution_to_sub_start[i][1], single_robot_solution_to_sub_start[i][2]);
+          printf("\n");
 
           // need to make the final time of the path to sub area = 0, 
           // and the rest negative but with the same delta time that they had before
@@ -2100,7 +2014,7 @@ int main(int argc, char** argv)
               float new_edge_dist = euclid_dist(Globals.single_robot_solution[0], temp_robot_position);
               float time_of_old_edge = Globals.single_robot_solution[1][2] - Globals.single_robot_solution[0][2];
               //float time_of_new_edge = new_edge_dist/old_edge_dist*time_of_old_edge;
-              float time_of_new_edge = new_edge_dist*0.2;  // NOTE !!!!!!!!!!!!!!!!!!!!!!!!!! 0.2 is expected robot speed (change from hard coded later)
+              float time_of_new_edge = new_edge_dist/0.2;  // NOTE !!!!!!!!!!!!!!!!!!!!!!!!!! 0.2 is expected robot speed (change from hard coded later)
 
               // calculate target angle
               float target_angle = Globals.single_robot_solution[0][4];
@@ -2205,7 +2119,7 @@ int main(int argc, char** argv)
       ros::spinOnce(); ///////////////// error only happens when spinning
     
       //printf("sleeping \n");
-      loop_rate.sleep();
+      //loop_rate.sleep();
        //printf("moving\n");
 
       if(Globals.master_reset)
@@ -2226,7 +2140,7 @@ int main(int argc, char** argv)
     #endif     
    
     ros::spinOnce();
-    loop_rate.sleep();
+    //loop_rate.sleep();
     
     Globals.kill_master = true; // shutdown listener thread
   }

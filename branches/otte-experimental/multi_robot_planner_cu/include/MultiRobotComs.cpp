@@ -498,7 +498,7 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
       }   
       else
       {
-        printf("robot %d is at [%f %f], I am at [%f %f]\n", sending_agent, sender_pose_x, sender_pose_y, robot_pose->x, robot_pose->y);
+        //printf("robot %d is at [%f %f], I am at [%f %f]\n", sending_agent, sender_pose_x, sender_pose_y, robot_pose->x, robot_pose->y);
       }
     }
 
@@ -633,9 +633,9 @@ bool GlobalVariables::recover_data_from_buffer(char* buffer, int &index, vector<
         printf("Planning area overlaps with an agent not yet in our team\n");
         need_to_join_teams = true;
 
-        if(dist_to_sender > combine_dist)
+        if(dist_to_sender > path_conflict_combine_dist)
         {
-          printf("... but it is too far away to care about right now (%f) \n", combine_dist);
+          printf("... but it is too far away to care about right now \n");
           overlap = false;   
           need_to_join_teams = false;
         }
@@ -1264,17 +1264,16 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
   while(!G->kill_master)
   {
-    if(G->master_reset)
+    while(G->master_reset)
     {
-      G->listener_active = false;
-      output_pulse(last_listener_pulse, pulse_time, "(listener) sleeping due to master_reset \n");
-
-      usleep(100000); // sleep for 1/10 sec
+      printf("(listener) waiting until master reset is done \n");
+      sleep(1);
     }
-    G->listener_active = true;
 
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
     {  
+      G->listener_active = true;
+
       //printf("(listener) pulse\n");
 
       if(!Globals.have_all_team_single_paths())
@@ -1408,7 +1407,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
                   printf("agent %d conflicts with me (%d)\n",temp_ag, G->agent_number);
 
-                  if(this_dist > G->combine_dist)
+                  if(this_dist > G->path_conflict_combine_dist)
                   {
                     printf("Path conflicts with an agent not yet in our team\n");
                     printf("... but it is too far away to care about right now (%f)\n", this_dist);
@@ -1420,7 +1419,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
                   }
                 }
 
-                if(this_dist < 3*G->robot_radius)
+                if(this_dist < G->combine_dist)
                 {
                    printf("join based on being too close right now (%f)\n", this_dist);
                    need_to_join_teams = true;

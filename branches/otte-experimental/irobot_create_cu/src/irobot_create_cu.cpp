@@ -184,9 +184,9 @@ float max_dist_ahead_allowed = .2;
 float near_goal_dist = 0.2;         // this close to the goal is at the goal
 float near_goal_rotation = PI/6.0;  // this close to the goal is at the goal
 
-float time_ahead_rad = 0.50; // time within this time of now is also considered now
-float time_behind_adjust_thresh = 1; // if we get more than this far behind, we'll tell the other robots
-float time_ahead_wait_max = 4; // if more then this ahead and on path, then turn around and go to where we should be
+float time_ahead_rad = 2; // time within this time of now is also considered now
+float time_behind_adjust_thresh = 2; // if we get more than this far behind, we'll tell the other robots
+float time_ahead_wait_max = 2; // if more then this ahead and on path, then turn around and go to where we should be
 
 float second_order_speed_increase_paramiter = .3;  // used in control function
 float second_order_turn_increase_paramiter = 1.0;  // used in control function
@@ -487,10 +487,6 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
 
     if(!recieved_first_path || safe_path_exists == 0)
     {
-
-      move_start_time = ros::Time::now();
-      recieved_first_path = true;
-
       // save into first_path
       first_path.resize(length);
 
@@ -519,10 +515,11 @@ void global_path_callback(const nav_msgs::Path::ConstPtr& msg)
       //printf("(%u points) \n", trajectory.size());
       printf("controller: done extracting path\n");
 
+      move_start_time = ros::Time::now();
+      recieved_first_path = true;
 
       time_adjust = -first_path[0][3];
       printf("need to adjust time by : %f \n", time_adjust);
-
     }
     else // check to make sure this is the same as the first path we recieved
     {
@@ -616,7 +613,7 @@ void time_ahead_callback(const intercom_cu::Float32_CU_ID::ConstPtr& msg)
 
   //printf("irobot_create_cu: data from agent %d: %f \n", sender_id, time_adjust_other_robot);
 
-  if(time_adjust_other_robot > time_adjust + 2) // the other robot is behind schedual by more than 2 seconds (more than this robot)
+  if(time_adjust_other_robot > time_adjust) // the other robot is behind schedual then adjust to it
   {  
     time_adjust = time_adjust_other_robot;
   }
@@ -1518,6 +1515,8 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   //printf("current_time = %f, current_time_index = %d\n", current_time, current_time_index);
   publish_turn_circle(T[current_time_index][0], T[current_time_index][1], .1); // publish for visualization
 
+  float dist_to_time_target = Edist(T[current_time_index][0], T[current_time_index][1], robot_pose->x, robot_pose->y);
+
   // assume that we have removed portions of the path that have already been reached so T starts near the robot
   // find the first point that is within radius of the robot
   // then, starting at first_ind_within_radius_of_robot move along path to the last point still within radius of robot
@@ -1528,7 +1527,7 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   int last_ind_within_radius_of_robot = find_last_ind_within_radius_of_robot_starting_at(T, robot_rad, first_ind_within_radius_of_robot); 
   int closest_ind_within_radius_of_robot = find_closest_ind_between(T, first_ind_within_radius_of_robot, last_ind_within_radius_of_robot);
 
-  if(T.size()-10 < last_ind_within_radius_of_robot && last_ind_within_radius_of_robot < T.size()) 
+  if(((int)T.size())-10 < last_ind_within_radius_of_robot && last_ind_within_radius_of_robot < (int)T.size()) 
     printf("on the goal %d\n", T.size());
 
   if(first_ind_within_radius_of_robot < 0)
@@ -1572,10 +1571,16 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
       carrot_index = closest_point_on_path; // steer at the closest point along the path between the start of the path and where we should be now
     }
   }
+  //else if(dist_to_time_target < robot_rad)
+  //{
+  //  //printf("time target within rad \n");
+  //  carrot_index = current_time_index;       // steer at the time target;
+  //}
   else if(time_ahead_of_schedual > time_ahead_rad) // too far ahead of schedual
   {
     //printf("too far ahead of schedual\n");  
-    carrot_index = closest_ind_within_radius_of_robot;  // steer based on the closest point on the path
+    //carrot_index = closest_ind_within_radius_of_robot;  // steer based on the closest point on the path
+    carrot_index = last_ind_within_radius_of_robot;
   }
   else if(time_ahead_of_schedual >= 0) // slightly ahead of schedual or on schedual
   {
@@ -1585,7 +1590,8 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   else if(time_ahead_of_schedual > -time_ahead_rad) // slightly behind schedual
   {
     //printf("slightly behind schedual: %f\n", -time_ahead_of_schedual);
-    carrot_index = current_time_index;                 // steer based on where we should be
+    //carrot_index = current_time_index;                 // steer based on where we should be
+    carrot_index = last_ind_within_radius_of_robot;
   }
   else // too far behind schedual
   {
@@ -1745,9 +1751,11 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   }
 
   // adjust time if we get too far behind
-  if(time_ahead_of_schedual < -time_behind_adjust_thresh && !on_a_point) // points have been problematic due to much time near the same location
-    time_adjust += -time_ahead_of_schedual;
-
+  if(dist_to_time_target < robot_rad && time_ahead_of_schedual < -time_behind_adjust_thresh) // points have been problematic due to much time near the same location
+  {
+    time_adjust += fabs(time_ahead_of_schedual);
+    printf("time adjust: %f \n",time_adjust);
+  }
 
   if(T.size() < 10)
     printf("size of T: %u", T.size());

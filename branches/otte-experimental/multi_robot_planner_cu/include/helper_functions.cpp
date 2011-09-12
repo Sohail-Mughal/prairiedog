@@ -1847,7 +1847,16 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       // now that robots are in the same team, they will not try to recombine unless another robot conflicts with one or more of them
 
       no_conflicts_between_single_paths = true;
-      return false;
+      //return false; // NOTE, still want coords if we decide to plan with the other guys, so use start coords:
+
+      for(int i = 0; i < max_num_robots; i++)
+      {
+        if(!InTeam[i])
+          continue;
+
+        first_conflicts[i] = robot_paths[i][0];
+        time_of_first_conflicts[i] = robot_paths[i][0][2];
+      }
     }
   }
 
