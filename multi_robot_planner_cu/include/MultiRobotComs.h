@@ -97,7 +97,8 @@ class GlobalVariables
    
    POSE* robot_pose;  // most recent pose of the robot
    
-   float combine_dist;   // if paths intetsect, then we must be this close to the robot of the other path to join their team
+   float path_conflict_combine_dist; // if paths intetsect, then we must be this close to the robot of the other path to join their team
+   float combine_dist;   // also combine if robots are this close, even if their paths do not intersect
    float drop_dist;      // after we know a robot is this far away from us, we can drop them from our team (note: combine_dist < drop_dist)
    float drop_time;      // after this long without hearing from a robot we drop it from the team
            
