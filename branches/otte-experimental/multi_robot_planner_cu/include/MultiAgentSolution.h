@@ -17,7 +17,6 @@ class MultiAgentSolution
     void RoughAnimate(Workspace& W, bool draw_paths);          // animates the movement along best solution from start to goal, if draw_paths == true, then it draws the paths
         
     bool GetMessages(const vector<float>& start_config, const vector<float>& goal_config);  // checks for incomming messages, and updates things accordingly, returns true if a better path was found in the message, also makes sure that they use start and goal configs
-    void SendMessage(float send_prob);                         // sends a message containing the current best solution with probability send_prob
     void SendMessageUDP(float send_prob);                      // while above function just uses a file, this uses UDP
             
     bool StartMoving();                                        // returns true if this agent can start moving
