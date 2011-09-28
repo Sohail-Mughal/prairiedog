@@ -63,7 +63,7 @@ void GlobalVariables::Populate(int num_of_agents)
   MasterOutPort = 57002;
 
   have_info.resize(0);
-  have_info.resize(number_of_agents, 0);   // gets set to 1 when we get an agent's sub_start and sub_goal info
+  have_info.resize(number_of_agents, 0);   // gets set to 1 when we set agent's start and goal info
   agent_ready.resize(0);
   agent_ready.resize(number_of_agents, 0); // gets set to 1 when an agent is ready to plan
   other_addresses.resize(number_of_agents);
@@ -210,11 +210,26 @@ bool GlobalVariables::set_up_agent_address(int ag_id, const char* IP_string)
 // returns true if we have data for all members of the team
 bool GlobalVariables::have_all_team_start_and_goal_data()
 {
-  for(int i = 0; i < team_size; i++)
-  {         
-    if(have_info[i] == 0)
+
+  for(int i = 0; i < number_of_agents; i++)
+  {
+    if(!InTeam[i])
+      continue;
+    
+    if(planning_iteration[i] != planning_iteration[agent_number])
+      return false;
+
+    if(sub_start_and_goal_iteration[i] != planning_iteration[agent_number])
       return false;
   }
+
+
+  //for(int i = 0; i < team_size; i++)
+  //{         
+  //  if(have_info[i] == 0)
+  //    return false;
+  //}
+
   return true;
 }
 
@@ -224,11 +239,25 @@ bool GlobalVariables::have_all_team_start_and_goal_data()
 // returns true if all agents in the team are ready to plan
 bool GlobalVariables::all_team_ready_to_plan()
 {
-  for(int i = 0; i < team_size; i++)
+
+  for(int i = 0; i < number_of_agents; i++)
   {
-    if(agent_ready[i] == 0)
+    if(!InTeam[i])
+      continue;
+    
+    if(planning_iteration[i] != planning_iteration[agent_number])
+      return false;
+
+    if(nav_state[i] < 3)
       return false;
   }
+
+  //for(int i = 0; i < team_size; i++)
+  //{
+  //  if(agent_ready[i] == 0)
+  //    return false;
+  //}
+
   return true;
 }
 
@@ -290,6 +319,7 @@ int GlobalVariables::populate_buffer_with_all_robot_data(char* buffer)
   index += add_1d_float_vector_to_buffer(    sub_start_coords[agent_number],                      (void*)((size_t)buffer + (size_t)index));
   index += add_1d_float_vector_to_buffer(    sub_goal_coords[agent_number],                       (void*)((size_t)buffer + (size_t)index));
 
+
   // extra data about sender's team
   index += add_int_to_buffer(                team_size,                                           (void*)((size_t)buffer + (size_t)index));
   index += add_1d_int_vector_to_buffer(      global_ID,                                           (void*)((size_t)buffer + (size_t)index));
@@ -327,7 +357,7 @@ int GlobalVariables::populate_buffer_with_all_robot_data(char* buffer)
 }
 
 
-bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &index) // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
+bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &index, int &sender_id) // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
 {
   bool need_to_join_teams = false;
   bool planning_iteration_increase = false;
@@ -379,6 +409,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     index += extract_1d_float_vector_from_buffer(   senders_team_bound_area_min,  (void*)((size_t)buffer + (size_t)index));
     index += extract_1d_float_vector_from_buffer(   senders_team_bound_area_size, (void*)((size_t)buffer + (size_t)index));
 
+    sender_id = ag_gbl_id;
 
     bool overlap = false;
 
@@ -447,7 +478,9 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     // if we need to join teams, then join them here
     if(need_to_join_teams)
     {
-      printf("----------------------- need to join teams (due to message) -------------------------\n");
+      printf("-------------- need to join teams (due to message) -----------------\n");
+
+      printf("sender's team size: %d \n", senders_team_size);
 
       for(int i = 0; i < senders_team_size; i++)
       {   
@@ -455,9 +488,11 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
 
         if(!InTeam[temp_ag])
         {
+          printf("adding %d to our team \n", temp_ag);
+          global_ID.push_back(temp_ag);          
+          local_ID[temp_ag] = team_size;       
           InTeam[temp_ag] = true;
-          local_ID[temp_ag] = team_size;
-          global_ID.push_back(temp_ag);
+       
           team_size++; 
         }
       }
@@ -491,7 +526,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     {
       planning_iteration[ag_gbl_id] = pln_itr;
     }
-    else if(pln_itr > planning_iteration[ag_gbl_id] && nav_st_it > nav_state_iteration[ag_gbl_id]) // new planning state for this robot
+    else if(pln_itr == planning_iteration[ag_gbl_id] && nav_st_it > nav_state_iteration[ag_gbl_id]) // new planning state for this robot
     {
       nav_state_iteration[ag_gbl_id] = nav_st_it;
       nav_state[ag_gbl_id] = nav_st;
@@ -514,31 +549,9 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
       sub_start_and_goal_iteration[ag_gbl_id] = sub_s_and_g_it;
       sub_start_coords[ag_gbl_id] = sub_s;
       sub_goal_coords[ag_gbl_id] = sub_g;
-
-      if(InTeam[ag_gbl_id])
-      {
-        int local_an_id = local_ID[ag_gbl_id];
-
-        if(start_coords[local_an_id].size() < 3)
-          start_coords[local_an_id].resize(3); 
-        start_coords[local_an_id][0] = sub_s[0];
-        start_coords[local_an_id][1] = sub_s[1];
-        start_coords[local_an_id][2] = 0;
-        
-        if(goal_coords[local_an_id].size() < 3)
-          goal_coords[local_an_id].resize(3);
-        goal_coords[local_an_id][0] = sub_g[0];
-        goal_coords[local_an_id][1] = sub_g[1];
-        goal_coords[local_an_id][2] = 0;
-      
-        have_info[local_an_id] = 1;     
-        
-        printf("recieved new data directly from %d: \n", ag_gbl_id);
-        printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
-        printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
-     }
     }
   }
+
 
   while(buffer[index] == 'R') // contains other robot data
   {
@@ -567,7 +580,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     {
       planning_iteration[ag_gbl_id] = pln_itr;
     }
-    else if(pln_itr > planning_iteration[ag_gbl_id] && nav_st_it > nav_state_iteration[ag_gbl_id]) // new planning state for this robot
+    else if(pln_itr == planning_iteration[ag_gbl_id] && nav_st_it > nav_state_iteration[ag_gbl_id]) // new planning state for this robot
     {
       nav_state_iteration[ag_gbl_id] = nav_st_it;
       nav_state[ag_gbl_id] = nav_st;
@@ -590,29 +603,6 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
       sub_start_and_goal_iteration[ag_gbl_id] = sub_s_and_g_it;
       sub_start_coords[ag_gbl_id] = sub_s;
       sub_goal_coords[ag_gbl_id] = sub_g;
-
-      if(InTeam[ag_gbl_id])
-      {
-        int local_an_id = local_ID[ag_gbl_id];
-
-        if(start_coords[local_an_id].size() < 3)
-          start_coords[local_an_id].resize(3); 
-        start_coords[local_an_id][0] = sub_s[0];
-        start_coords[local_an_id][1] = sub_s[1];
-        start_coords[local_an_id][2] = 0;
-        
-        if(goal_coords[local_an_id].size() < 3)
-          goal_coords[local_an_id].resize(3);
-        goal_coords[local_an_id][0] = sub_g[0];
-        goal_coords[local_an_id][1] = sub_g[1];
-        goal_coords[local_an_id][2] = 0;
-      
-        have_info[local_an_id] = 1;     
-        
-        printf("recieved new data from %d: \n", ag_gbl_id);
-        printf("start: [%f %f %f] \n", start_coords[local_an_id][0], start_coords[local_an_id][1], start_coords[local_an_id][2]);
-        printf("goal:  [%f %f %f] \n", goal_coords[local_an_id][0], goal_coords[local_an_id][1], goal_coords[local_an_id][2]);
-      }
     }
   }
 
@@ -620,7 +610,6 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
   {
     index++;
   }
-
 
   // now check if any members in our team have increased their planning iteration above our planning iteration
   for(int i = 1; i < team_size; i++)
@@ -700,9 +689,11 @@ bool GlobalVariables::JoinedTeams()
         {
           printf("----------------------- need to join teams -------------------------\n");
    
-          InTeam[temp_ag] = true;
-          local_ID[temp_ag] = team_size;
+          printf("adding %d to team \n", temp_ag);
+
           global_ID.push_back(temp_ag);
+          local_ID[temp_ag] = team_size;
+          InTeam[temp_ag] = true;           
           team_size++;
            
           // active combine, so make our planning iteration larger (and larger than the new member's) 
@@ -791,15 +782,15 @@ void GlobalVariables::output_state_data()
   {
     if(!InTeam[i])
     {
-      printf("(%d.%d %d %d %d), ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+      printf("(%d.%d %d %d %d), ", planning_iteration[i], nav_state[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
     }
     else if(i == agent_number)
     {
-      printf("[%d.%d %d %d %d], ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+      printf("[%d.%d %d %d %d], ", planning_iteration[i], nav_state[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
     }
     else
     {
-      printf("<%d.%d %d %d %d>, ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+      printf("<%d.%d %d %d %d>, ", planning_iteration[i], nav_state[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
     }
   }
   printf("\n");
@@ -866,6 +857,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 
   while(!G->kill_master)
   {
+    G->listener_active = false;
     while(G->master_reset)
     {
       printf("(listener) waiting until master reset is done \n");
@@ -876,7 +868,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
     {  
       G->listener_active = true;
 
-      printf("listener: waiting for messages\n");
+      //printf("listener: waiting for messages\n");
 
       memset(&planning_message_buffer,'\0',sizeof(planning_message_buffer)); 
       message_length = recvfrom(in_socket, planning_message_buffer, sizeof(planning_message_buffer), 0, (struct sockaddr *)&senders_address, (socklen_t *)&senders_address_length);  // blocks until a message is recieved
@@ -888,9 +880,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         continue;
       }
 
+      int sender_id;
       if(planning_message_buffer[message_ptr] == 'S') // message contains robot data
       {
-        if(G->recover_all_robot_data_from_buffer(planning_message_buffer, message_ptr))
+        if(G->recover_all_robot_data_from_buffer(planning_message_buffer, message_ptr, sender_id))
         {
           G->master_reset = true;   
           printf("master reset due to incriment from message \n");
@@ -904,7 +897,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         }
       }
 
-      if(planning_message_buffer[message_ptr] == '2') // it has planning data in it;
+      if(planning_message_buffer[message_ptr] == '2' && G->InTeam[sender_id]) // it has planning data in it from our team
       {
         //printf("contains planning data \n");
         message_ptr++;
@@ -963,6 +956,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
           }
         }
     
+      }
+      else if(planning_message_buffer[message_ptr] == '2') // planning data from another team
+      {
+
       }
       else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
       {
@@ -1073,6 +1070,7 @@ void *Robot_Data_Sync_Sender_Ad_Hoc(void * inG)
   while(!G->all_team_ready_to_plan() && !G->master_reset && !G->revert_to_single_robot_path) // until the rest of the team is ready to plan
   {       
     printf("startup sender: waiting until all of team is ready to plan\n");
+    G->output_state_data();
 
     int index = G->populate_buffer_with_all_robot_data(buffer);
     buffer[index] = 4; // this signals that all this message contained was robot data
