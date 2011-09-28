@@ -53,13 +53,21 @@ bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int inde
 
 bool SolutionSafe(const vector<vector<float> >& solution, const vector<vector<vector<float> > >& obstacle_list, float the_robot_rad, int path_dims); // this if the solution is safe vs obstacle_list, path_dims is the dimensions of 1 robot's path
 
-int add_int_to_buffer(const int &i, void* buffer); // add int to buffer and returns the size in chars
 
+int add_int_to_buffer(const int &i, void* buffer); // add int to buffer and returns the size in chars
 int extract_int_from_buffer(int &i, void* buffer); // extracts int from buffer and places it in i, returns the number of chars that were used
 
-int add_2d_vector_to_buffer(const vector<vector<float> > &v, void* buffer); // add v to buffer and returns the size in chars
+int add_1d_int_vector_to_buffer(const vector<int> &v, void* buffer); // add v to buffer and returns the size in chars
+int extract_1d_int_vector_from_buffer(vector<vector<int> > &v, void* buffer); // extracts a 1d vector from buffer and places it in v, returns the number of chars that were used
 
-int extract_2d_vector_from_buffer(vector<vector<float> > &v, void* buffer); // extracts a 2d vector from buffer and places it in v, returns the size that was used in buffer in chars
+int add_float_to_buffer(const float &i, void* buffer); // add float to buffer and returns the size in chars
+int extract_float_from_buffer(float &i, void* buffer); // extracts float from buffer and places it in i, returns the number of chars that were used
+
+int add_1d_float_vector_to_buffer(const vector<float> &v, void* buffer); // add v to buffer and returns the size in chars
+int extract_1d_float_vector_from_buffer(vector<vector<float> > &v, void* buffer); // extracts a 1d vector from buffer and places it in v, returns the number 
+
+int add_2d_float_vector_to_buffer(const vector<vector<float> > &v, void* buffer); // add v to buffer and returns the size in chars
+int extract_2d_float_vector_from_buffer(vector<vector<float> > &v, void* buffer); // extracts a 2d vector from buffer and places it in v, returns the number 
 
 // returns the 2D eudlidian distance between two points (using first 2 dims)
 float euclid_dist(const vector<float> & A, const vector<float> &B);
