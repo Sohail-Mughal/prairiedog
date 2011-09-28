@@ -1089,14 +1089,13 @@ int main(int argc, char** argv)
 
 
   // set this robots best path to be remaining at its initial position for a minute or two
-
-
-
-
-//!!!!!!!!!!!!!!!!!!!
-
-
-
+  vector<float> path_for_wait_here(4,0);
+  path_for_wait_here[0] = robot_pose->x;
+  path_for_wait_here[1] = robot_pose->y;
+  Globals.single_robot_solution.resize(4,path_for_wait_here);
+  Globals.single_robot_solution[1][2] = 10;
+  Globals.single_robot_solution[2][2] = 20;
+  Globals.single_robot_solution[3][2] = 30;
 
 
   // each trip throught the loop is a complete planning and move cycle
@@ -1125,7 +1124,7 @@ int main(int argc, char** argv)
 
 
     // reset globals for a new planning cycle
-    printf("resetting globals\n");
+    printf("master: resetting globals\n");
     Globals.Reset(); 
 
     // if using smart plan time then reset min time to plan ?????????
@@ -1157,7 +1156,8 @@ int main(int argc, char** argv)
       while(!Globals.have_all_team_single_paths() && !Globals.master_reset)
       {
         printf("master: waiting for other member's single paths\n");
-
+        Globals.output_state_data();
+  
         publish_system_update(1); // if we've reset, then tell the controller
         ros::spinOnce();  
         sleep(1);   // !!!!!!!!!!!!!!!!! make shorter
@@ -1288,7 +1288,8 @@ int main(int argc, char** argv)
       while(!Globals.have_all_team_start_and_goal_data() && !Globals.master_reset)
       {
         printf("master: exchanging start and goals with team\n");
-    
+        Globals.output_state_data();
+
         publish_system_update(1); // if we've reset, then tell the controller
         ros::spinOnce(); 
 
@@ -1484,6 +1485,7 @@ int main(int argc, char** argv)
           if(last_time_left_floor != (int)time_left_to_plan)
           {
             printf("\nmaster: time left to plan: %f\n", time_left_to_plan);
+            Globals.output_state_data();
             last_time_left_floor = (int)time_left_to_plan;
           }
         
@@ -1566,7 +1568,7 @@ int main(int argc, char** argv)
         // extract this robots path from the multi solution, each point in ThisAgentsPath will be [x y rotation]
         extract_and_translate_solution(ThisAgentsPath, mult_agent_bst_sln_doubled, Scene.translation, Globals.local_ID[agent_number], world_dims);
 
-        printf("single robot solution:\n");
+        printf("master: single robot solution:\n");
         vector<vector <float> > temp_single_robot_solution(ThisAgentsPath.size());
         for(uint i = 0; i < ThisAgentsPath.size(); i++)
         {
@@ -1616,7 +1618,7 @@ int main(int argc, char** argv)
       while(!MultAgSln.StartMoving() && !Globals.master_reset)
       {    
         printf("master: waiting for consensus\n");
-    
+        Globals.output_state_data();
         // data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
 
         if(mode == 2 && agent_number != 0)
@@ -1676,7 +1678,7 @@ int main(int argc, char** argv)
     {       
       //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
       printf("master: moving\n");
-          
+      Globals.output_state_data();
 
       start_wait_t = clock();
       now_time = clock();
@@ -2039,7 +2041,7 @@ int main(int argc, char** argv)
             if(Globals.other_robots_single_solutions[j_global].size() > 0 && Globals.single_robot_solution.size() > 1)
             {
               // make sure we can drop without just adding back in
-              if(team_drop_dist < euclid_dist(Globals.other_robots_single_solutions[j_global][0], Globals.single_robot_solution[0]) )
+              if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
               {
                 // drop this agent from our team
                 printf("master: __________________Dropping agent %d from team__________________\n", j_global);          

@@ -380,8 +380,10 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     index += extract_1d_float_vector_from_buffer(   senders_team_bound_area_size, (void*)((size_t)buffer + (size_t)index));
 
 
+    bool overlap = false;
+
     // maintainance of this agent vs the sender 
-    if(InTeam[ag_gbl_id]) // the sender is in our team already
+    if(InTeam[ag_gbl_id] && pln_itr >= planning_iteration[agent_number]) // the sender is in our team already, and its planning iterate is the same or more
     {
       // check if the sender has added new members to its team that are not in our team
       for(int i = 0; i < senders_team_size; i++)
@@ -392,7 +394,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
         }
       }
     }
-    else // the sender is not in our team already
+    else if(!InTeam[ag_gbl_id]) // the sender is not in our team already
     {
       // check if sender's team needs to be combined with our team
       if(JOIN_ON_OVERLAPPING_AREAS)
@@ -400,10 +402,10 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
         // check if message planning bounds intersects with this agent's team's planning bounds
         if(team_bound_area_min.size() > 1 && team_bound_area_size.size() > 1)
         {
-          bool overlap = quads_overlap(senders_team_bound_area_min[0], senders_team_bound_area_size[0], 
-                                       senders_team_bound_area_min[1], senders_team_bound_area_size[1], 
-                                       team_bound_area_min[0], team_bound_area_size[0], 
-                                       team_bound_area_min[1], team_bound_area_size[1]);
+          overlap = quads_overlap(senders_team_bound_area_min[0], senders_team_bound_area_size[0], 
+                                  senders_team_bound_area_min[1], senders_team_bound_area_size[1], 
+                                  team_bound_area_min[0], team_bound_area_size[0], 
+                                  team_bound_area_min[1], team_bound_area_size[1]);
 
           if(overlap)              // need to join due to overlap
           {
@@ -460,15 +462,27 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
         }
       }
 
-      // increase this robot's planning iteration and makes sure it is larger than sender's planning iteration too
-      if(pln_itr > planning_iteration[agent_number])
+      //  increase our planning iteration
+      if(overlap || team_size > senders_team_size)  // second case handles the case where the sender still needs to know about members of our team
       {
-        planning_iteration[agent_number] = pln_itr + 1;
+        // active combine
+
+        // increase this robot's planning iteration and makes sure it is larger than sender's planning iteration too
+        if(pln_itr > planning_iteration[agent_number])
+        {
+          planning_iteration[agent_number] = pln_itr + 1;
+        }
+        else 
+        {
+          planning_iteration[agent_number]++;
+        } 
       }
       else 
       {
-        planning_iteration[agent_number]++;
-      } 
+        // passive combine
+        planning_iteration[agent_number] = pln_itr;
+      }
+
       planning_iteration_increase = true;
     }
 
@@ -608,7 +622,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
   }
 
 
-  // now check if any members in our team have increased thier planning iteration above our planning iteration
+  // now check if any members in our team have increased their planning iteration above our planning iteration
   for(int i = 1; i < team_size; i++)
   {    
     if(planning_iteration[global_ID[i]] >  planning_iteration[agent_number])
@@ -655,7 +669,7 @@ bool GlobalVariables::JoinedTeams()
 
           //printf("__________________ checking for conflicts vs agent %d ____________\n", temp_ag);
 
-          float this_dist = euclid_dist(other_robots_single_solutions[temp_ag][0], single_robot_solution[0]);
+          float this_dist = euclid_dist(last_known_pose[temp_ag], last_known_pose[agent_number]);
           if(find_first_time_conflict_points(other_robots_single_solutions[temp_ag], single_robot_solution, robot_radius, time_resolution, A_conflict, B_conflict)) 
           {
             // the paths conflicts, calculate distance to that agent's last known point based on the first point in either path
@@ -691,7 +705,7 @@ bool GlobalVariables::JoinedTeams()
           global_ID.push_back(temp_ag);
           team_size++;
            
-          // make our planning iteration larger (and larger than the new member's) 
+          // active combine, so make our planning iteration larger (and larger than the new member's) 
           if(planning_iteration[temp_ag] > planning_iteration[agent_number])
           {
             planning_iteration[agent_number] = planning_iteration[temp_ag]+1;
@@ -769,6 +783,26 @@ bool GlobalVariables::have_all_team_single_paths()         // returns true if we
   }
 
   return true;
+}
+
+void GlobalVariables::output_state_data()
+{
+  for(int i = 0; i < number_of_agents; i++)
+  {
+    if(!InTeam[i])
+    {
+      printf("(%d.%d %d %d %d), ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+    }
+    else if(i == agent_number)
+    {
+      printf("[%d.%d %d %d %d], ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+    }
+    else
+    {
+      printf("<%d.%d %d %d %d>, ", planning_iteration[i], nav_state_iteration[i], pose_iteration[i], sub_start_and_goal_iteration[i], planning_iteration_single_solutions[i]);
+    }
+  }
+  printf("\n");
 }
 
 

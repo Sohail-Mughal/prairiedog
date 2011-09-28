@@ -28,6 +28,8 @@ class GlobalVariables
 
    bool have_all_team_single_paths();         // returns true if we have all team members current single paths, else false
 
+   void output_state_data();
+
    vector<int> InPorts;      // indexed using global ID (i.e. agent number)
    vector<int> OutPorts;     // indexed using global ID (i.e. agent number)
    int MasterInPort;
