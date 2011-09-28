@@ -1175,6 +1175,7 @@ int main(int argc, char** argv)
 
       vector<float> sub_start;
       vector<float> sub_goal;
+
       Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
       float preferred_min_planning_area_side_length = 0.5*Globals.team_size;
       float preferred_max_planning_area_side_length = 1.0*Globals.team_size;
@@ -1253,6 +1254,7 @@ int main(int argc, char** argv)
 
       Globals.sub_start_coords[Globals.agent_number][0] = robot_pose->x;
       Globals.sub_start_coords[Globals.agent_number][1] = robot_pose->y;
+
       Globals.sub_goal_coords[Globals.agent_number][0] = goal_pose->x;
       Globals.sub_goal_coords[Globals.agent_number][1] = goal_pose->y;
     }
@@ -1302,15 +1304,35 @@ int main(int argc, char** argv)
         continue;  // a team member has been added, need to restart planning with more dimensions
       }
     
+      printf("setting start %d and goal %d from sub_start and sub_goal\n", Globals.start_coords.size(), Globals.goal_coords.size());
+      // use sub_start and sub_goal as start and goal
+      Globals.start_coords.resize(Globals.team_size);
+      Globals.goal_coords.resize(Globals.team_size);
+      for(int i = 0; i < Globals.team_size; i++)
+      {
+        int global_i = Globals.global_ID[i];
+  
+        printf("agent %d (%d): [%f %f] [%f %f] \n", global_i, i, Globals.sub_start_coords[global_i][0], Globals.sub_start_coords[global_i][1],
+                                                                 Globals.sub_goal_coords[global_i][0], Globals.sub_goal_coords[global_i][1]);
+        Globals.start_coords[i].resize(3,0); 
+        Globals.start_coords[i][0] = Globals.sub_start_coords[global_i][0];
+        Globals.start_coords[i][1] = Globals.sub_start_coords[global_i][1];
+        Globals.start_coords[i][2] = 0;  
 
+        Globals.goal_coords[i].resize(3,0); 
+        Globals.goal_coords[i][0] = Globals.sub_goal_coords[global_i][0];
+        Globals.goal_coords[i][1] = Globals.sub_goal_coords[global_i][1];
+        Globals.goal_coords[i][2] = 0; 
 
+        Globals.have_info[i] = 1;
+      }
+      printf("Done setting start and goal from sub_start and sub_goal\n");
 
 
       // =========================================== planning phase (3) ===========================================
       // ----> This is the planning phase
       Globals.nav_state[Globals.agent_number] = 3;  
       Globals.nav_state_iteration[Globals.agent_number]++;
-
 
       // this is where the planning stuff starts
       // set up the scene based on all start/goal locations and any maps
@@ -1338,9 +1360,11 @@ int main(int argc, char** argv)
       goalc = Scene.goalC;
       dist_threshold = map_resolution;
     
+
       Cspc.W.Populate(num_robots, robot_rad, Scene.dim_max);
       Cspc.W.Gbls = &Globals;
     
+
       if(!Cspc.Populate(startc, goalc, num_robots*world_dims) && !Globals.kill_master)  // first case fail on invalid start or goal location
       {
         printf("!!!!!!!!!!!!! INVALID START OR GOAL !!!!!!!!!!!!!!\n");
@@ -1351,7 +1375,8 @@ int main(int argc, char** argv)
         sleep(1);
         continue;
       }
-    
+
+   
       MultAgSln.Populate(total_agents, agent_number, &Globals, world_dims);
       MultAgSln.obstacles_pub = &obstacles_pub;
       Globals.MAgSln = &MultAgSln;
@@ -1384,6 +1409,8 @@ int main(int argc, char** argv)
         {
           now_time = clock();
        
+          printf("planning, tree has %d points \n", Cspc.num_points);
+
           #ifdef treev2
           if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
           #elif defined(treev3)
@@ -1415,6 +1442,7 @@ int main(int argc, char** argv)
               MultAgSln.AddSolution(Cspc);  // add the path from the message to our cspace
               found_path = true;
             }
+            //printf("sending (planning) messages \n");
             MultAgSln.SendMessageUDP(prob_success);
           }
         }
@@ -1488,7 +1516,9 @@ int main(int argc, char** argv)
             Globals.output_state_data();
             last_time_left_floor = (int)time_left_to_plan;
           }
-        
+
+          printf("planning, tree has %d points \n", Cspc.num_points);
+
           now_time = clock();
      
           #ifdef treev2

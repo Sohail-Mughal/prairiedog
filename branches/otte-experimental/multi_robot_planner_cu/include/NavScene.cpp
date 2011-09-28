@@ -640,27 +640,28 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   {
     for(int i = 0; i < G.team_size; i++)
     {
+
       if(min_x > G.start_coords[i][0])
         min_x = G.start_coords[i][0];
       if(min_x > G.goal_coords[i][0])
         min_x = G.goal_coords[i][0]; 
-    
+
       if(min_y > G.start_coords[i][1])
         min_y = G.start_coords[i][1];
       if(min_y > G.goal_coords[i][1])
         min_y = G.goal_coords[i][1];
-    
+
       if(max_x < G.start_coords[i][0])
         max_x = G.start_coords[i][0];
       if(max_x < G.goal_coords[i][0])
         max_x = G.goal_coords[i][0]; 
-    
+   
       if(max_y < G.start_coords[i][1])
         max_y = G.start_coords[i][1];
       if(max_y < G.goal_coords[i][1])
         max_y = G.goal_coords[i][1];    
     }
-    
+
     // we want to add a frame of free space around the configuration (obstacles handled later)
     min_x -= G.planning_border_width;
     max_x += G.planning_border_width;
@@ -675,7 +676,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   translation[0] = -min_x;
   translation[1] = -min_y;
   translation[2] = 0;
-  
+
   // get max values for each dimension (in post translated space)
   dim_max[0] = max_x - min_x;
   dim_max[1] = max_y - min_y;
@@ -686,12 +687,12 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   G.team_bound_area_min[0] = min_x;
   G.team_bound_area_min[1] = min_y;
   G.team_bound_area_min[2] = 0;
-  
+
   G.team_bound_area_size.resize(3);
   G.team_bound_area_size[0] = dim_max[0];
   G.team_bound_area_size[1] = dim_max[1];
   G.team_bound_area_size[2] = dim_max[2];
-  
+
   // get num_robots
   num_robots = G.team_size;
   if(num_robots < 1)
@@ -699,7 +700,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
     printf("problems: num_robots cannot be less than 1 \n"); 
     return false;
   }
-  
+
   // get robot_rad, assuming all the same, can modify this to be sent in start-up messages if we ever need it to be different
   robot_rad.resize(num_robots);
   for(int i = 0; i < num_robots; i++)
@@ -711,7 +712,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
       return false;
     }
   }
-  
+
   // get start configuration
   startC.resize(num_robots*world_dims);
   int j = 0;
@@ -720,13 +721,13 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
     // get to next valid robot   
     while(G.have_info[j] == 0)
       j++;  
-      
+
     startC[i*world_dims] = G.start_coords[j][0] - min_x;
     startC[i*world_dims+1] = G.start_coords[j][1] - min_y;
     startC[i*world_dims+2] = G.start_coords[j][2]; 
     j++; 
   }
-   
+ 
   printf("adjusted start: \n");
   print_float_vector(startC);
   

@@ -768,7 +768,7 @@ int add_1d_int_vector_to_buffer(const vector<int> &v, void* buffer) // add v to 
   // add all points
   for(int i = 0; i < r; i++)
   {
-    float t = v[i];
+    int t = v[i];
 
     memcpy((void*)buffer_ptr, &t, sizeof(int));
     buffer_ptr += sizeof(int);
@@ -1760,6 +1760,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 {
   // Note: There are probably better ways to do this than duplicating it on each agent, but this works and runtime is only robots squared
 
+  printf("calculating sub area 1");
+
   no_conflicts_between_single_paths = false;
 
   // see if all paths fit within the preferred planning area
@@ -1791,7 +1793,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         min_y = robot_paths[r][i][1];
     }
   }
-
+  printf("calculating sub area 2");
   if( (max_x - min_x <= preferred_max_planning_area_side_length) && 
       (max_y - min_y <= preferred_max_planning_area_side_length) )  // then we can just use normal start and goal
   {
@@ -1817,6 +1819,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     return false;
   }
 
+  printf("calculating sub area 3");
   // go through and find all robot vs robot first conflicts, as well as bounds on the area containing all first conflicts
   vector<vector<float> > first_conflicts(max_num_robots);
   vector<float> time_of_first_conflicts(max_num_robots, LARGE);
@@ -1892,6 +1895,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     }
   }
 
+  printf("calculating sub area 4");
 
   // check if any robots did not conflict, this may happen if a multi-path was 1/2 way through planning when a new robot was added to the team
   // that does not conflict with the multi-path but does conflict with the single robot path
@@ -1974,6 +1978,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     }
   }
 
+  printf("calculating sub area 5");
+
   vector<float> this_robots_first_conflict;
 
   if(time_of_first_conflicts[this_agent_id] < LARGE)
@@ -1993,6 +1999,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     else
       printf("...and no other agents have conflicts \n");
   }
+
+  printf("calculating sub area 6");
 
   // init current_point to the conflict points and find the inds of edges that contain them
   vector<vector<float> > current_point = first_conflicts;
@@ -2022,6 +2030,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       }
     }
   }
+
+  printf("calculating sub area 6");
 
   // expand the planning area up to the minimum size, we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
   bool need_to_expand_up_to_maximum = true;
@@ -2135,9 +2145,6 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       if(at_goal[r])
         continue;
 
-    printf("here h \n");
-
-
       current_point[r][0] += (dist_to_move/dist_to_end_of_edge)*(robot_paths[r][i+1][0] - current_point[r][0]);
       current_point[r][1] += (dist_to_move/dist_to_end_of_edge)*(robot_paths[r][i+1][1] - current_point[r][1]);
 
@@ -2152,11 +2159,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 
       if(current_point[r][1] < min_y)
         min_y = current_point[r][1];
-    printf("here i \n");
     }
-    printf("here j \n");
   }
-    printf("here k \n");
   //printf("current_point 0: [%f, %f]\n", current_point[0][0], current_point[0][1]);
   //printf("current_point 1: [%f, %f]\n", current_point[1][0], current_point[1][1]);
 
@@ -2172,16 +2176,16 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
   // record all robot goal locations
   //printf("(Recording all global goals) \n");
   vector<vector<float> > robot_global_goals(max_num_robots);
-printf("here l \n");
+
   for(int i = 0; i < max_num_robots; i++)
   {
     if(!InTeam[i])
       continue;
-printf("here m \n");
+
 
     int goal_ind = ((int)robot_paths[i].size())-1;
     robot_global_goals[i] = robot_paths[i][goal_ind];
-printf("here n \n");
+
   }
   printf("(Done recording all goals)\n");
 

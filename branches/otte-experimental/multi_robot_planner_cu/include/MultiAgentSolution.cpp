@@ -736,103 +736,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       // extract nodes from file
       if(uni_tree_build == 1)
       {
-        printf("this has not yet been changed to use 1 level of abstraction for dimensions, it will probably not work \n");  
-          
-        int num_nodes_in_file;
-        if(fscanf(ifp, "n:%d\n", &num_nodes_in_file) > 0)
-        {
-          if(num_nodes_in_file > 0)
-          {
-            vector<int> node_key_a(num_nodes_in_file,0);
-            vector<int> node_key_b(num_nodes_in_file,0);
-            vector<int> parent_key_a(num_nodes_in_file,0);
-            vector<int> parent_key_b(num_nodes_in_file,0);
-            vector<vector<float> > the_coords(num_nodes_in_file); 
-            
-            int this_node_key_a;
-            int this_node_key_b;
-            int this_parent_key_a;
-            int this_parent_key_b;
-            float this_cord;
-            vector<float> this_point(file_dimensions,0);
-
-            vector<int> max_key_b(num_agents,-1); // remembers max key b for each agent
-            
-            // extract the data from the file
-            bool problems_getting_nodes = false;
-            for(int fn = 0; fn < num_nodes_in_file && !problems_getting_nodes; fn++)
-            {
-              if(fscanf(ifp, "%d, %d, %d, %d, ", &this_node_key_a, &this_node_key_b, &this_parent_key_a, &this_parent_key_b) < 4)  // get global node id and parrent id
-              {
-                printf(" problems getting nodes \n");
-                problems_getting_nodes = true;
-                break;
-              }
-              
-              if(this_node_key_a < 0 || this_node_key_b < 0 || this_parent_key_a < 0 || this_parent_key_b < 0)
-              {
-                printf("problems reading nodes from file, key is negative \n");
-                getchar();
-              }
-              node_key_a[fn] = this_node_key_a;
-              node_key_b[fn] = this_node_key_b;
-              parent_key_a[fn] = this_parent_key_a;
-              parent_key_b[fn] = this_parent_key_b;
-              
-              // remember max key b
-              if(max_key_b[this_node_key_a] < this_node_key_b)
-                max_key_b[this_node_key_a] = this_node_key_b;    
-              if(max_key_b[this_parent_key_a] < this_parent_key_b)
-                max_key_b[this_parent_key_a] = this_parent_key_b;    
-             
-              for(int d = 0; d < file_dimensions; d++) // add configuration coordinates
-              {
-                if(fscanf(ifp, "%f, ",&this_cord) <= 0)
-                {
-                  problems_getting_nodes = true; 
-                  break;
-                }
-                this_point[d] = this_cord;
-              }
-              unused_result = fscanf(ifp, "\n");    
-              the_coords[fn] = this_point;
-            }
-
-            // add the data to the c space;
-            if(!problems_getting_nodes)
-            {
-              vector<bool> already_existed(num_nodes_in_file); // remembers which nodes already existed
-                
-              
-              //for(int c = 0; c < num_nodes_in_file; c++)
-              //  printf("[%d %d] -> [%d %d]\n", node_key_a[c], node_key_b[c], parent_key_a[c], parent_key_b[c]);
-
-              // pass 1, make sure nodes exist, make them if they do not
-              for(int c = 0; c < num_nodes_in_file; c++)
-                already_existed[c] = ConfirmExistanceGlobalIdNode(node_key_a[c], node_key_b[c], the_coords[c]);
-              
-              //for(int c = 0; c < num_nodes_in_file; c++)
-              //  printf("[%d %d]:%d -> [%d %d]:%d\n", node_key_a[c], node_key_b[c], NodeID[node_key_a[c]][node_key_b[c]], parent_key_a[c], parent_key_b[c],NodeID[parent_key_a[c]][parent_key_b[c]]);
-              
-              
-              // pass 2, link new nodes together
-              for(int c = 0; c < num_nodes_in_file; c++)
-              {
-                if(already_existed[c])
-                  continue;
-                LinkGlobalIdNodes(node_key_a[c], node_key_b[c], parent_key_a[c], parent_key_b[c]);
-              }  
-            
-              // pass 3, update distince info of nodes
-              for(int c = 0; c < num_nodes_in_file; c++)
-              {
-                if(already_existed[c])
-                  continue;
-                UpdateDistanceInfoGlobalIdNode(node_key_a[c], node_key_b[c]);
-              }
-            }
-          }
-        }
+        printf("THIS FEATURE HAS BEEN DISCONTINUED \n");  
       }
       
       fclose(ifp);
@@ -1189,6 +1093,7 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
       printf("WARNING THIS FUNCTIONALITY HAS BEEN DISCONTINUED!");
     }
 
+    //printf("sending here !!! \n");
     Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
     out_msg_ctr[i]++;
   }
