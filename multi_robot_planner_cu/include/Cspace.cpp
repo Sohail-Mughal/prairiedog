@@ -614,7 +614,7 @@ bool Cspace::BuildTree(clock_t start_t, double clock_to_plan, int& steps, float 
 }
 
 
-bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, float prob_at_goal, float move_max, float theta_max, float resolution, float angular_resolution)  // this builds or continues to build the search tree. steps is decremented for each attempt to add a new point to the tree. The tree grows untill either the current time is clock_to_plan seconds past start_t or steps reaches 0 (if steps starts as a negative, then steps is ignored). the search moves at goal with prob_at_goal, in jumps no larger than move_max, returns true when it finds a better path, this version uses pruning when possible, A*-like re-linking when possible, and is otherwise based on an RRT, note move_max no longer used
+bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, float prob_at_goal, float move_max, float theta_max, float resolution, float angular_resolution, bool config_provided, vector<float>& config)  // this builds or continues to build the search tree. steps is decremented for each attempt to add a new point to the tree. The tree grows untill either the current time is clock_to_plan seconds past start_t or steps reaches 0 (if steps starts as a negative, then steps is ignored). the search moves at goal with prob_at_goal, in jumps no larger than move_max, returns true when it finds a better path, this version uses pruning when possible, A*-like re-linking when possible, and is otherwise based on an RRT, note move_max no longer used. if config_provided is true then explicitly uses config instead of anything else
 {
   // while steps and time left  
   bool not_added_start = true;
@@ -625,13 +625,17 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
        
     clock_t now_t = clock();
 
-    if(steps == 0 || difftime_clock(now_t, start_t) >= clock_to_plan) // no steps left or no time left      
+    if(config_provided)
+    {
+      // nothing goes here
+    }
+    else if(steps == 0 || difftime_clock(now_t, start_t) >= clock_to_plan) // no steps left or no time left      
     {
       break;
     }
     steps--;   
  
-    if(attempt_random_path_improve == 1 && num_valid_points > 2)
+    if(attempt_random_path_improve == 1 && num_valid_points > 2 && !config_provided)
     {    
       // pick a random node already in the tree, see if it can be rerouted through another node instead of its parent at less cost
       int ind_of_rn = ValidInds[rand_int(1,num_valid_points-1)];
@@ -719,6 +723,25 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
  
             #ifdef using_smoothing        
             GreedyPathSmooth(start_ind);
+
+            if(!config_provided) // only recurse once here
+            {
+              printf("here in 1 \n");
+              for(int tries = 0; tries < 100; tries++)
+              {
+                vector<float>  better_config;
+                if(FindA1DShortCut(start_ind, better_config))
+                {
+                  // add better_config
+                  BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution, true, better_config);
+                }
+                else
+                {
+                  break;
+                }
+              }
+              printf("here out 1 \n");
+            }
             #endif 
             
             // remove nodes that can no longer help
@@ -732,18 +755,29 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
       }
     }
     
-    // randomly pick a new configuration  
-    #ifdef pre_calculated_free_space
-    W.RandMove4(new_configuration, prob_at_goal, start, free_space);
-    #else
-    W.RandMove3(new_configuration, prob_at_goal, start);
-    #endif
-    
+    if(config_provided)
+    {
+      new_configuration = config;
+    }
+    else
+    {
+      // randomly pick a new configuration  
+      #ifdef pre_calculated_free_space
+      W.RandMove4(new_configuration, prob_at_goal, start, free_space);
+      #else
+      W.RandMove3(new_configuration, prob_at_goal, start);
+      #endif
+    }    
+
     // test the new configuration to make sure it could possible lead to a better solution given goal and start
     if(best_total_path_length < W.Dist(goal, new_configuration) + W.Dist(new_configuration, start))
     {
       // it cannot lead to a better solution
       now_t = clock(); 
+
+      if(config_provided)
+        return false;
+
       continue;  
     }
     
@@ -753,6 +787,10 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
     if(this_dist_to_obstacle_point <= 0) // not a valid point
     { 
       now_t = clock(); 
+
+      if(config_provided)
+        return false;
+
       continue;
     }
     
@@ -805,11 +843,18 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
     if(break_again)
     {
       // continuing because the new node was too close to an old node already in the graph
+
+      if(config_provided)
+        return false;
+
       continue;
     }
        
     if(closest_neighbor_to_goal_so_far < 0) // then no valid neighbors could be found
     {
+      if(config_provided)
+        return false;
+
       continue;
     }
 
@@ -907,6 +952,25 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
  
           #ifdef using_smoothing        
           GreedyPathSmooth(start_ind);
+
+          if(!config_provided) // only recurse once here
+          {
+            printf("here in 2 \n");
+            for(int tries = 0; tries < 100; tries++)
+            {
+              vector<float>  better_config;
+              if(FindA1DShortCut(start_ind, better_config))
+              {
+                // add better_config
+                BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution, true, better_config);
+              }
+              else
+              {
+                break;
+              }
+            }
+            printf("here out 2 \n");
+          }
           #endif 
           
           // remove nodes that can no longer help
@@ -939,6 +1003,25 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
       
         #ifdef using_smoothing        
         GreedyPathSmooth(start_ind);
+
+        if(!config_provided) // only recurse once here
+        {
+          printf("here in 3 \n");
+          for(int tries = 0; tries < 100; tries++)
+          {
+            vector<float>  better_config;
+            if(FindA1DShortCut(start_ind, better_config))
+            {
+              // add better_config
+              BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution, true, better_config);
+            }
+            else
+            {
+              break;
+            }
+          }
+          printf("here out 3 \n");
+        }
         #endif 
         
         // remove nodes that can no longer help
@@ -958,13 +1041,15 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
 
 bool Cspace::BuildTreeV3(clock_t start_t, double clock_to_plan, int& steps, float prob_at_goal, float move_max, float theta_max, float resolution, float angular_resolution)  // same as above, but attempts to connect goal on timeout
 {
+  vector<float> not_used;
+
   // try to find a random solution, 
-  bool found_solution = BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution);
+  bool found_solution = BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution, false, not_used);
   
   // try to connect goal
   int temp_steps = 1; // because prob = 0 that goal is added below
   clock_t temp_time = clock();
-  bool connected_goal = BuildTreeV2(temp_time, clock_to_plan, temp_steps, 1, move_max, theta_max, resolution, angular_resolution);
+  bool connected_goal = BuildTreeV2(temp_time, clock_to_plan, temp_steps, 1, move_max, theta_max, resolution, angular_resolution, false, not_used);
 
   //if(found_solution)
   //  printf("found_solution \n");
@@ -995,8 +1080,10 @@ bool Cspace::BuildTreeV4(clock_t start_t, double clock_to_plan, int& steps, floa
     }
   }  
   else
-    found_solution = BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution);
-  
+  {
+    vector<float> not_used;
+    found_solution = BuildTreeV2(start_t, clock_to_plan, steps, prob_at_goal, move_max, theta_max, resolution, angular_resolution, false, not_used);
+  }
   
   return found_solution;
 }
@@ -2112,6 +2199,89 @@ bool Cspace::GreedyPathSmooth(int start_smooth_ind) // starting at start_smooth_
   }
   return found_shorter_path;
 }
+
+
+bool Cspace::FindA1DShortCut(int start_smooth_ind, vector<float>&  new_config) // attempts to find a benificial new_config based on combining one dimension of a parent with its child, returns true if it finds one (note returns the best one based on the path from start_smooth_ind
+{
+
+  int num_robots = dims/3; 
+   
+  // backtrack from start_smooth_ind to goal and store nodes in a list 
+    
+  vector<float> original_path_sequence(1, start_smooth_ind);
+    
+  int ind = start_smooth_ind;
+  while(ind > 0)
+  {
+    ind = Neighbors[ind][0];
+    original_path_sequence.push_back(ind);
+  }
+          
+  if(ind != 0)
+  {
+     printf("problems smoothing, didn't find goal \n");
+     getchar();
+  }
+  
+  int front_list_ind = 0;  // this will change as we move through the list
+  int node;
+  int parent;
+  int grand_parent;
+  int back_list_ind = original_path_sequence.size() - 1; // this will keep this value as we move through the list
+
+  float best_cost_savings = 0;
+
+  // move from front_list_ind through list toward back_list_end
+  while(front_list_ind < back_list_ind - 1)
+  {
+    node = original_path_sequence[front_list_ind];
+    parent = original_path_sequence[front_list_ind+1];
+    grand_parent = original_path_sequence[front_list_ind+2];
+   
+    // store cost of going from node -> parent -> grand_parent
+    float old_cost = W.Dist(ValidConfigs[node], ValidConfigs[parent]) + W.Dist(ValidConfigs[parent], ValidConfigs[grand_parent]);
+
+    // find best reduction dimension
+    for(int i = 0; i < num_robots; i++)
+    {
+      int d = i*3;
+
+      // see if making parent[r] = node[r], for a single robot leads to a configuration that reduces distance vs. parent
+      vector<float> modified_parent_config = ValidConfigs[parent];
+      modified_parent_config[d] = ValidConfigs[node][d];
+      modified_parent_config[d+1] = ValidConfigs[node][d+1];
+      modified_parent_config[d+2] = ValidConfigs[node][d+2];
+
+
+      if(W.PointValid(modified_parent_config) <= 0) // not a valid point
+        continue;
+
+      // check if a valid edge exists between node and modified_parent
+      if(W.EdgeValid(ValidConfigs[node], modified_parent_config) <= 0)
+        continue;
+
+      // check if a valid edge exists between modified_parent and grand_parent
+      if(W.EdgeValid(modified_parent_config, ValidConfigs[grand_parent]) <= 0)
+        continue;
+
+      // calculate cost savings
+      float cost_savings = old_cost - (W.Dist(ValidConfigs[node], modified_parent_config) + W.Dist(modified_parent_config, ValidConfigs[grand_parent]));
+
+      if(cost_savings > best_cost_savings)
+      {
+        new_config = modified_parent_config;
+        best_cost_savings = cost_savings;
+      }
+    }
+    front_list_ind++;
+  }
+
+  if(best_cost_savings > SMALL)
+    return true;
+
+  return false; 
+}
+
 
 float Cspace::PathLength(int node_index)        // returns the length from the node at node_index to the root of the tree
 {

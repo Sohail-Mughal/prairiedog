@@ -75,7 +75,7 @@ using namespace std;
 //#define using_glut
 
  #define treev2            //options: treev3, treev3rho, treev2, treev2rho, rrt, rrtrho, rrtfast or nothing i.e. not defined
-// #define using_smoothing   // when defined the rrt algorithms perform smoothing after each new solution is found
+ #define using_smoothing   // when defined the rrt algorithms perform smoothing after each new solution is found
 // #define save_time_data    // when defined stats [time, best, path_length, nodes_in_tree] are saved (for entire run) after the final solution is found
 // #define use_kd_tree       // when defined a kd_tree is used for finding nearest neighbors (only useful with trees where this is allowed)  rrtrho, rrtfast
 
@@ -223,8 +223,9 @@ vector<vector<float> > free_space;      // updated for each search to hold subsp
 #endif
 
 bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then this gets set to true, and min_planning_time is adjusted based on circumstance
-float plan_time_mult = 3;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
+float plan_time_mult = 5;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
 float smart_min_time_to_plan = 5; // if(use_smart_plan_time) then plan for at least smart_min_time_to_plan
+bool calculated_smart_plan_time = false; //set to true once we calcualte the above
 
 vector<float> drop_point;         // stores the point on the map at which we can drop team members
 
@@ -1156,6 +1157,7 @@ int main(int argc, char** argv)
     // if using smart plan time then reset min time to plan ?????????
     if(use_smart_plan_time)
     {
+      calculated_smart_plan_time = false;
       min_clock_to_plan = smart_min_time_to_plan;
       printf("using smart plan time : %f \n", min_clock_to_plan);
     }
@@ -1438,10 +1440,12 @@ int main(int argc, char** argv)
         {
           now_time = clock();
        
-          printf("planning, tree has %d points \n", Cspc.num_points);
+          vector<float> not_used;     
+
+          //printf("planning, tree has %d points \n", Cspc.num_points);
 
           #ifdef treev2
-          if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          if(Cspc.BuildTreeV2(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution, false, not_used))
           #elif defined(treev3)
           if(Cspc.BuildTreeV3(now_time, message_wait_time, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))   
           #elif defined(treev4)
@@ -1524,9 +1528,12 @@ int main(int argc, char** argv)
       {
         // do anytime until a better solution is found, or we run out of time, also does one round of message passing per loop
         
+
         float time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
       
-        // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
+        printf("time left to plan start %f \n", time_left_to_plan);
+
+        // we want to keep planning for the maximum of time_left_to_plan or message_wait_time
         float this_time_to_plan = message_wait_time;
         if(time_left_to_plan < message_wait_time)
           this_time_to_plan = time_left_to_plan;
@@ -1546,12 +1553,13 @@ int main(int argc, char** argv)
             last_time_left_floor = (int)time_left_to_plan;
           }
 
-          printf("planning, tree has %d points \n", Cspc.num_points);
+          //printf("planning, tree has %d points \n", Cspc.num_points);
 
           now_time = clock();
-     
+          vector<float> not_used;     
+
           #ifdef treev2
-          if(Cspc.BuildTreeV2(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))
+          if(Cspc.BuildTreeV2(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution, false, not_used))
           #elif defined(treev3)
           if(Cspc.BuildTreeV3(now_time, this_time_to_plan, iterations_left, prob_at_goal, move_max, theta_max, resolution, angular_resolution))  
           #elif defined(treev4)
@@ -1589,10 +1597,9 @@ int main(int argc, char** argv)
           publish_obstacles(Scene);
           publish_team_list(Globals.InTeam);
           ros::spinOnce();
-      
-      
+       
           time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
-      
+
           // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
           this_time_to_plan = message_wait_time;
           if(time_left_to_plan < message_wait_time)

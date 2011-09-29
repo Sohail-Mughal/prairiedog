@@ -162,7 +162,7 @@ void GlobalVariables::Reset()
   last_path_conflict_check_time.resize(number_of_agents, temp_time);
 
   start_time_of_planning = temp_time;
-  min_clock_to_plan = min_clock_to_plan;
+  //min_clock_to_plan = min_clock_to_plan;
 
   planning_time_remaining.resize(0);
   planning_time_remaining.resize(Globals.number_of_agents, LARGE);
@@ -739,11 +739,13 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
       float time_elapsed_since_planning_started = difftime_timeval(time_now, start_time_of_planning);
       planning_time_remaining[i] = min_clock_to_plan - time_elapsed_since_planning_started;
       last_update_time[i] = time_now;
+      //printf("my planning time calc: %f \n", planning_time_remaining[i]);
     }
     else
     {
       planning_time_remaining[i] -= time_elapsed_since_last;
       last_update_time[i] = time_now;
+      //printf("%d's planning time calc: %f \n", i, planning_time_remaining[i]);
     }
 
     if(planning_time_remaining[i] < time_for_planning_remaining)

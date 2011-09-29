@@ -670,6 +670,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         print_float_vector(start_config);
          
         fclose(ifp);
+
+        if(Gbls->nav_state[Gbls->agent_number] == 4) // in consensus phase, so there is a problem
+        {
+          printf("master reset due to different start in consensus phase\n");
+          Gbls->planning_iteration[Gbls->agent_number]++;
+          Gbls->master_reset = true;
+        }
+
         printf("break 19 \n");
         break;
       }
@@ -683,6 +691,14 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
         print_float_vector(goal_config);
         
         fclose(ifp);
+
+        if(Gbls->nav_state[Gbls->agent_number] == 4) // in consensus phase, so there is a problem
+        {
+          printf("master reset due to different goal in consensus phase\n");
+          Gbls->planning_iteration[Gbls->agent_number]++;
+          Gbls->master_reset = true;
+        }
+
         break;
       }
       
@@ -1062,7 +1078,10 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
     }      
     
     // time left for planning
-    sprintf(temp_buffer, "r:%f\n", Gbls->calculate_time_left_for_planning());
+    if(use_smart_plan_time && !calculated_smart_plan_time)
+      sprintf(temp_buffer, "r:%f\n", (float)LARGE);  // don't send data until we calculate the time to use
+    else
+      sprintf(temp_buffer, "r:%f\n", Gbls->calculate_time_left_for_planning());
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
     // move flag
