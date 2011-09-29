@@ -209,16 +209,17 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
-float path_conflict_combine_dist = 10; // distance robots have to be near each other to combine teams if thier paths conflict
-float team_combine_dist = 3;  // distance robots have to be near to each other to combine teams
-float team_drop_dist = 10;     // distance robots have to be away from each other to dissolve teams
-float team_drop_time = 10;    // after this long without hearing from a robot we drop it from the team
+float path_conflict_combine_dist = 2; // distance robots have to be near each other to combine teams if thier paths conflict
+float team_combine_dist = 1;  // distance robots have to be near to each other to combine teams
+float team_drop_dist = 5;     // distance robots have to be away from each other to dissolve teams
+float team_drop_time = 5;    // after this long without hearing from a robot we drop it from the team
         
 bool robot_is_moving = false;
 float change_plase_thresh = .001; // if start or goal change less than this, then we say they are the same
 
 #ifdef pre_calculated_free_space
-vector<vector<float> > free_space;  // holds freespace points to resolution of bitmap map
+vector<vector<float> > all_free_space;  // holds freespace points to resolution of bitmap map
+vector<vector<float> > free_space;      // updated for each search to hold subspace of all_free_space within the planning area, transformed approperiatly
 #endif
 
 bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then this gets set to true, and min_planning_time is adjusted based on circumstance
@@ -738,6 +739,31 @@ bool load_map(vector<vector<float> >& global_list)
 }
 
 
+// puts subset of all_f_s that is within sub_area into f_s
+void get_valid_subset_freespace(vector<vector<float> >& all_f_s, vector<vector<float> >& f_s, vector<float>& team_bound_area_min,  vector<float>& team_bound_area_size)
+{
+  f_s.resize(0);
+
+  vector<float> temp(3,0);
+
+  for(uint i = 0; i < all_f_s.size(); i++)
+  {
+    if(all_f_s[i][0] < team_bound_area_min[0])
+      continue;
+    if(all_f_s[i][1] < team_bound_area_min[1])
+      continue;
+
+    temp[0] = all_f_s[i][0] - team_bound_area_min[0];
+    if(temp[0] > team_bound_area_size[0])
+      continue;
+
+    temp[1] = all_f_s[i][1] - team_bound_area_min[1];
+    if(temp[1] > team_bound_area_size[1])
+      continue;
+
+    f_s.push_back(temp);
+  }
+}
 
 /*---------------------------- ROS tf functions -------------------------*/
 void broadcast_map_tf()
@@ -792,7 +818,7 @@ int main(int argc, char** argv)
   ros::service::waitForService("/cu/get_map_cu", -1);
   
   // wait for a map --- using this to get list of free space
-  while(!load_map(free_space) && ros::ok())
+  while(!load_map(all_free_space) && ros::ok())
   {
     ros::spinOnce();
     loop_rate.sleep(); 
@@ -1392,6 +1418,9 @@ int main(int argc, char** argv)
       Globals.last_update_time[Globals.agent_number] = Globals.start_time_of_planning; 
       Globals.min_clock_to_plan = min_clock_to_plan;
 
+      #ifdef pre_calculated_free_space
+      get_valid_subset_freespace(all_free_space, free_space, Globals.team_bound_area_min, Globals.team_bound_area_size);
+      #endif
 
       // find at least one solution (between all robots), also does one round of message passing per loop
       found_path = false;

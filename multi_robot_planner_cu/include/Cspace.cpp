@@ -614,7 +614,7 @@ bool Cspace::BuildTree(clock_t start_t, double clock_to_plan, int& steps, float 
 }
 
 
-bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, float prob_at_goal, float move_max, float theta_max, float resolution, float angular_resolution)  // this builds or continues to build the search tree. steps is decremented for each attempt to add a new point to the tree. The tree grows untill either the current time is clock_to_plan seconds past start_t or steps reaches 0 (if steps starts as a negative, then steps is ignored). the search moves at goal with prob_at_goal, in jumps no larger than move_max, returns true when it finds a better path, this version uses pruning when possible, A*-like re-linking when possible, and is otherwise based on an RRT
+bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, float prob_at_goal, float move_max, float theta_max, float resolution, float angular_resolution)  // this builds or continues to build the search tree. steps is decremented for each attempt to add a new point to the tree. The tree grows untill either the current time is clock_to_plan seconds past start_t or steps reaches 0 (if steps starts as a negative, then steps is ignored). the search moves at goal with prob_at_goal, in jumps no larger than move_max, returns true when it finds a better path, this version uses pruning when possible, A*-like re-linking when possible, and is otherwise based on an RRT, note move_max no longer used
 {
   // while steps and time left  
   bool not_added_start = true;

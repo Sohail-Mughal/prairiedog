@@ -606,9 +606,9 @@ void MultiRobotWorkspace::RandMove4(vector<float>& new_config, float prob_at_goa
       
       int f_ind = rand_int(0, f_space.size()-1);
       
-      new_config[x_ind] = f_space[f_ind][0] - Gbls->team_bound_area_min[0];
-      new_config[y_ind] = f_space[f_ind][1] - Gbls->team_bound_area_min[1];
-      new_config[theta_ind] =  f_space[f_ind][2] - Gbls->team_bound_area_min[2];
+      new_config[x_ind] = f_space[f_ind][0];
+      new_config[y_ind] = f_space[f_ind][1];
+      new_config[theta_ind] =  f_space[f_ind][2];
     }
   } 
 }
