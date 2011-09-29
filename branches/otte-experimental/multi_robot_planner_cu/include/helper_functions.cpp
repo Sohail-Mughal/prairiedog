@@ -227,10 +227,27 @@ void data_dump(const char* directory, float prob_success, float min_clock_to_pla
 
 
 // appends info to a file per agent in directory 
-void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose)
-{   
+timeval last_data_dump_dynamic_team_time;
+bool first_data_dump_dynamic_team = true;
+void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose, const timeval & first_start_time)
+{ 
+
+  timeval now_time;
+  gettimeofday(&now_time, NULL);
+  float time_elapsed = difftime_timeval(now_time, first_start_time);
+
+  if(first_data_dump_dynamic_team)
+  {
+    first_data_dump_dynamic_team = false;
+  }
+  else if(difftime_timeval(now_time, last_data_dump_dynamic_team_time) < 0.5) // only save data every half second
+  {
+    return;
+  }
+  last_data_dump_dynamic_team_time = now_time;
+
   char this_file[100];
-  sprintf(this_file, "../%s/agent_%d_team_stats.txt", directory, MultAgSln.agent_id);
+  sprintf(this_file, "../%s/agent_%d_team_statsv2_%u.txt", directory, MultAgSln.agent_id, (uint)first_start_time.tv_sec);
   
   FILE* ofp = fopen(this_file,"a");
   while(ofp == NULL)
@@ -240,9 +257,6 @@ void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiA
       return;
   }
   
-  clock_t now_time = clock();
-  float time_elapsed = difftime_clock(now_time, start_time);
-
   char sent_to_us[100];
   char temp[20];
   sprintf(sent_to_us,"s: ");  
@@ -271,7 +285,7 @@ void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiA
     strcat(in_team, temp); 
   }
   
-  fprintf(ofp, "%d %f %f %f %f %f %d %d %s%s%s\n", G.agent_number, time_elapsed, M.best_solution_length, robot_pose->x, robot_pose->y, robot_pose->alpha, G.number_of_agents, G.team_size, sent_to_us, recieved_by_us, in_team);
+  fprintf(ofp, "%d %f %f %f %f %f %f %d %d %s%s%s\n", G.agent_number, time_elapsed, M.best_solution_length, robot_pose->x, robot_pose->y, robot_pose->alpha, very_first_path_length, G.number_of_agents, G.team_size, sent_to_us, recieved_by_us, in_team);
   
   fclose(ofp);
 }

@@ -45,9 +45,9 @@ class MultiAgentSolution
     vector<int> in_msg_ctr;               // used to help keep track of message queue   (global id)
     vector<int> out_msg_ctr;              // used to help keep track of message queue   (global id)
       
-    vector<int> message_send_attempts;    // stats on how well we send to other robots  (global id)
-    vector<float> messages_sent_to_us;    // stats on how well we recieve messages from other robots  (global id)
-    vector<float> messages_recieved_by_us;// stats on how well we recieve messages from other robots  (global id)
+    vector<int> message_send_attempts;    // stats on how well we send to other robots in team (global id)
+    vector<float> messages_sent_to_us;    // stats on how well we recieve messages from other robots in team (global id)
+    vector<float> messages_recieved_by_us;// stats on how well we recieve messages from other robots in team (global id)
     
     // the following are only of relivance when uni_tree_build == 1
     int total_nodes_added;

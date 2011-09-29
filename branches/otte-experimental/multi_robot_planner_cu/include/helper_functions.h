@@ -23,13 +23,15 @@ float line_dist_to_point(float ax, float ay, float bx, float by, float cx, float
 
 void data_dump(const char* directory, float prob_success, float min_clock_to_plan, float phase_two_time, Cspace& C, MultiAgentSolution& M, float actual_clock_to_plan, float total_time); // appends info to a file per agent in directory
 
-void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose);  // appends info to a file per agent in directory 
+void data_dump_dynamic_team(const char* directory, const Cspace& C, const MultiAgentSolution& M, const GlobalVariables& G, POSE* robot_pose, const timeval & first_start_time);
 
 #ifdef save_time_data
 void time_data_dump(const char* directory, float prob_success, float min_clock_to_plan);
 #endif
 
 float difftime_clock(const clock_t& clock_time_1, const clock_t& clock_time_2); // returns the difference in seconds between the clock time 1 and 2, (2 is assumed earlier than 1)
+
+float difftime_timeval(const timeval& time_1, const timeval& time_2); // returns the difference in seconds between the timeval time 1 and 2, (2 is assumed earlier than 1)
 
 bool string_printf_s(int &sp, char* buffer, char* buffer2, int buffer_len); // this takes the string in buffer 2 and puts it into buffer starting at buffer[sp], it then resets sp to be the new end of the string, returns false if there is not enfough space in buffer
 
