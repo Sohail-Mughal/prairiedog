@@ -229,6 +229,8 @@ bool calculated_smart_plan_time = false; //set to true once we calcualte the abo
 
 vector<float> drop_point;         // stores the point on the map at which we can drop team members
 
+float very_first_path_length = -1;
+
 /* ----------------------- POSE -----------------------------------------*/
 struct POSE
 {
@@ -1125,6 +1127,9 @@ int main(int argc, char** argv)
   Globals.single_robot_solution[3][2] = 30;
 
 
+  timeval first_start_time;
+  gettimeofday(&first_start_time, NULL);
+
   // each trip throught the loop is a complete planning and move cycle
   while(!Globals.kill_master)
   {   
@@ -1430,8 +1435,7 @@ int main(int argc, char** argv)
       {  
         // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
 
-
-        //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+        data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose, first_start_time);
         // broadcast tf
         //broadcast_map_tf();  
       
@@ -1544,7 +1548,7 @@ int main(int argc, char** argv)
           // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
 
 
-          //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);  
+          data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose, first_start_time);  
           
           if(last_time_left_floor != (int)time_left_to_plan)
           {
@@ -1651,6 +1655,8 @@ int main(int argc, char** argv)
         Globals.single_robot_solution = temp_single_robot_solution;
         Globals.found_single_robot_solution = true;
 
+        very_first_path_length = MultAgSln.best_solution_length;
+
         if(Globals.master_reset)
         {
           printf("master: restarting planning 2.5\n");
@@ -1685,7 +1691,7 @@ int main(int argc, char** argv)
       {    
         printf("master: waiting for consensus\n");
         Globals.output_state_data();
-        // data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+        data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose, first_start_time);
 
         if(mode == 2 && agent_number != 0)
         {
@@ -1722,7 +1728,7 @@ int main(int argc, char** argv)
       //  data_dump(experiment_name, prob_success, min_clock_to_plan, phase_two_time, Cspc, MultAgSln,actual_solution_time,total_time);
   
     
-      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose, first_start_time);
   
     }
     else // (Globals.revert_to_single_robot_path)
@@ -1742,7 +1748,7 @@ int main(int argc, char** argv)
     printf("masater: enter move loop\n");
     while(!display_path && !Globals.master_reset) // if we want to display the path then we ignore this part, otherwise loop here until goal or path conflict
     {       
-      //data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose);
+      data_dump_dynamic_team(experiment_name, Cspc, MultAgSln, Globals, robot_pose, first_start_time);
       printf("master: moving\n");
       Globals.output_state_data();
 

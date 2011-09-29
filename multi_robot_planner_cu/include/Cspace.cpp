@@ -726,7 +726,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
 
             if(!config_provided) // only recurse once here
             {
-              printf("here in 1 \n");
               for(int tries = 0; tries < 100; tries++)
               {
                 vector<float>  better_config;
@@ -740,7 +739,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
                   break;
                 }
               }
-              printf("here out 1 \n");
             }
             #endif 
             
@@ -955,7 +953,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
 
           if(!config_provided) // only recurse once here
           {
-            printf("here in 2 \n");
             for(int tries = 0; tries < 100; tries++)
             {
               vector<float>  better_config;
@@ -969,7 +966,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
                 break;
               }
             }
-            printf("here out 2 \n");
           }
           #endif 
           
@@ -1006,7 +1002,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
 
         if(!config_provided) // only recurse once here
         {
-          printf("here in 3 \n");
           for(int tries = 0; tries < 100; tries++)
           {
             vector<float>  better_config;
@@ -1020,7 +1015,6 @@ bool Cspace::BuildTreeV2(clock_t start_t, double clock_to_plan, int& steps, floa
               break;
             }
           }
-          printf("here out 3 \n");
         }
         #endif 
         

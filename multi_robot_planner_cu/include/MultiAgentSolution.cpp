@@ -366,7 +366,7 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       vector<float> file_DimensionOffset;
       vector<vector<float> > file_solution;
       int file_move_flag;  
-      int message_num;
+      int message_num = 0;
       int senders_planning_iteration;
       
       // get solution length from file
@@ -738,14 +738,27 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       //printf("file move_flag: %d \n",file_move_flag);
    
       // get message number
-      if(fscanf(ifp, "s:%d\n", &message_num) <= 0)
-      {      
-        // problems reading data
-        fclose(ifp);
-        printf("break 21 \n");
-        break;
+      int temp_int;
+      temp_int = fscanf(ifp, "s:"); // hack to make warnings go away
+      bool break_again = false;
+      for(int j = 0; j < num_agents; j++)
+      {
+        if(fscanf(ifp, "%d,", &temp_int) <= 0)
+        {      
+          // problems reading data
+          fclose(ifp);
+          break_again = true;
+          break;
+        }
+        if(j == agent_id)
+        {
+          message_num = temp_int;
+        }
       }
-      
+      if(break_again)
+        break;
+      temp_int = fscanf(ifp, "\n"); // hack to make warnings go away
+
       // check for workspace points
       Scene.GetPointsFromFile(ifp); 
       
@@ -758,11 +771,13 @@ bool MultiAgentSolution::GetMessages(const vector<float>& start_config, const ve
       fclose(ifp);
       
       // if we are here than we successfully recieved a message
-    
       in_msg_ctr[i]++;
-      messages_sent_to_us[i] = (float)message_num;
-      messages_recieved_by_us[i] = (float)(in_msg_ctr[i]);
-         
+      if(Gbls->InTeam[i])
+      {
+        messages_sent_to_us[i] = (float)message_num;
+        messages_recieved_by_us[i] += 1.0;
+      }
+ 
       //printf("recieved a message, moving_flag = %d, overall_prob:%f per %d sent\n",file_move_flag, messages_sent_to_us[i], message_num);
       
       // get rid of message file
@@ -925,197 +940,170 @@ void  MultiAgentSolution::SendMessageUDP(float send_prob)   // while above funct
   pctr_all = 0;
   ectr_all = 0;
     
-  
-//   if(BestSolution.size() <= 0) // | BestSolution[0].size() <= 0)
-//   {
-//     //printf(" solution has 0 points \n");
-//       
-//     // just send a message with valid workspace points in it  
-//     // send messages to every other agent but this one
-//     for(int i = 0; i < num_agents; i++)
-//     {
-//       if(i == agent_id)
-//         continue;
-//       
-//       // send with send send_prob
-//       float rand_float = ((float)rand_int(0,1000000))/((float)1000000); // rand float between 0 and 1
-//       
-//       if(rand_float > send_prob) 
-//         continue;
-//       char this_file[100];
-//       sprintf(this_file, "%s/%d_to_%d_%d.txt", message_dir, agent_id, i, out_msg_ctr[i]);    
-//       
-//       if(add_points_to_messages == 1)
-//       {
-//           
-//        printf("warning: trying to use a feature that has not been implimented yet \n");
-//            
-//         //FILE* ofp = fopen(this_file,"w");  
-//         //Scene.SendPointsToFile(ofp);
-//         //fclose(ofp);
-//         //out_msg_ctr[i]++;
-//       }
-//     }
-//     return;
-//   }
-  
-  // send messages to every other agent but this one
-  for(int i = 0; i < num_agents; i++)
-  {
-    if(i == agent_id)
-      continue;
-      
-    // send with send send_prob
-    float rand_float = ((float)rand_int(0,1000000))/((float)1000000); // rand float between 0 and 1
-    if(rand_float > send_prob) 
-      continue;
+  // TAKEN OUT WHEN STARTED DOING DYNAMIC TEAM STUFF 
+  // send with send send_prob
+  //float rand_float = ((float)rand_int(0,1000000))/((float)1000000); // rand float between 0 and 1
+  //if(rand_float > send_prob) 
+  //  return;
    
-    char out_buffer[max_message_size];
-    char temp_buffer[max_message_size];
-    int buffer_len = max_message_size;
+  char out_buffer[max_message_size];
+  char temp_buffer[max_message_size];
+  int buffer_len = max_message_size;
     
-    // add robot data
-    int sp = Gbls->populate_buffer_with_all_robot_data(out_buffer); // sp points to the current position in the string
+  // add robot data
+  int sp = Gbls->populate_buffer_with_all_robot_data(out_buffer); // sp points to the current position in the string
 
-    if(BestSolution.size() < 1)
-    {
-      //printf(" sending here ! \n");
-      out_buffer[sp] = 4; // this signals that all this message contained was the prefered robot path 
-      sp++;
+  if(BestSolution.size() < 1)
+  {
+    //printf(" sending here ! \n");
+    out_buffer[sp] = 4; // this signals that all this message contained was the prefered robot path 
+    sp++;
 
-      Gbls->hard_broadcast((void *)out_buffer, sizeof(char) * sp);  // note, changed to hard broadcast when we started doing dynamic team sizes
-      return;
-    }
+    Gbls->hard_broadcast((void *)out_buffer, sizeof(char) * sp);  // note, changed to hard broadcast when we started doing dynamic team sizes
+    return;
+  }
 
-    sprintf(temp_buffer,"2%d",agent_id);
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
+  sprintf(temp_buffer,"2%d",agent_id);
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     
-    // best path length (i.e. cost)
-    sprintf(temp_buffer,"l:%f,%d\n",best_solution_length, Gbls->planning_iteration[agent_id]);
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
+  // best path length (i.e. cost)
+  sprintf(temp_buffer,"l:%f,%d\n",best_solution_length, Gbls->planning_iteration[agent_id]);
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
     
        
-    // best path agent id
-    sprintf(temp_buffer, "a:%d\n",best_solution_agent);
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  // best path agent id
+  sprintf(temp_buffer, "a:%d\n",best_solution_agent);
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
-    // all robots that support the best path known to this robot (including this robot)
-    sprintf(temp_buffer,"s:");
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  // all robots that support the best path known to this robot (including this robot)
+  sprintf(temp_buffer,"s:");
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     
-    for(int j = 0; j < num_agents; j++)
+  for(int j = 0; j < num_agents; j++)
+  {
+    if(Votes[j] == best_solution_agent)
     {
-      if(Votes[j] == best_solution_agent)
-      {
-        sprintf(temp_buffer, "%d,",j);   
-        string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-      }
+      sprintf(temp_buffer, "%d,",j);   
+      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     }
-    sprintf(temp_buffer, "\nf:\n"); 
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  }
+  sprintf(temp_buffer, "\nf:\n"); 
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
      
-    for(int j = 0; j < num_agents; j++)
+  for(int j = 0; j < num_agents; j++)
+  {
+    sprintf(temp_buffer, "%d, ",FinalSolutionSent[j]); 
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  }
+  sprintf(temp_buffer,"\n");  
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len);  
+    
+    
+//   // just for debugging    
+//   printf("sending:  xx>");
+//   for(int j = 0; j < num_agents; j++)
+//     printf("%d, ", FinalSolutionSent[j]);
+//   printf("  <xx\n");
+    
+    
+  // best path (meta data)
+  int num_points = BestSolution.size();       
+  int num_dims = BestSolution[0].size();
+  sprintf(temp_buffer, "p:%d\n", num_points);\
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    
+  sprintf(temp_buffer, "d:%d,%d\n", num_dims, (int)Gbls->team_bound_area_min.size());
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    
+  // add the dimensional offset to the file, the dth value in the file denotes the world coordiante that coorisponds to local coordiante 0
+  //printf("adding the following offset: ");
+  for(uint j = 0; j < Gbls->team_bound_area_min.size(); j++)
+  {
+    sprintf(temp_buffer, "%f, ",Gbls->team_bound_area_min[j]); 
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    // printf("%f, ",Gbls->team_bound_area_min[j]);
+  }
+  sprintf(temp_buffer,"\n");  
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  //printf("\n");
+    
+  // add the dimensional mapping to the file, the nth value in the file denotes which global robot the nth dimension group represents
+  sprintf(temp_buffer, "m:%d\n", Gbls->team_size); 
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  //printf("adding the following mapping: ");
+  for(int j = 0; j < Gbls->team_size; j++)
+  {
+    sprintf(temp_buffer, "%d, ",Gbls->global_ID[j]); 
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    // printf("%d, ",Gbls->global_ID[j]);
+  }
+  sprintf(temp_buffer,"\n");  
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  //printf("\n");
+    
+  // best path (itself)
+  for(int j = 0; j < num_points; j++)
+  {
+    for(int k = 0; k < num_dims; k++) 
     {
-      sprintf(temp_buffer, "%d, ",FinalSolutionSent[j]); 
+      sprintf(temp_buffer, "%f, ", BestSolution[j][k]);
       string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
     }
-    sprintf(temp_buffer,"\n");  
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);  
-    
-    
-//     // just for debugging    
-//     printf("sending:  xx>");
-//     for(int j = 0; j < num_agents; j++)
-//       printf("%d, ", FinalSolutionSent[j]);
-//     printf("  <xx\n");
-    
-    
-    // best path (meta data)
-    int num_points = BestSolution.size();       
-    int num_dims = BestSolution[0].size();
-    sprintf(temp_buffer, "p:%d\n", num_points);\
+    sprintf(temp_buffer, "\n");
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+  }      
     
-    sprintf(temp_buffer, "d:%d,%d\n", num_dims, (int)Gbls->team_bound_area_min.size());
+  // time left for planning
+  if(use_smart_plan_time && !calculated_smart_plan_time)
+    sprintf(temp_buffer, "r:%f\n", (float)LARGE);  // don't send data until we calculate the time to use
+  else
+    sprintf(temp_buffer, "r:%f\n", Gbls->calculate_time_left_for_planning());
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
+    
+  // move flag
+  if(moving)
+  {
+    sprintf(temp_buffer, "m:1\n");
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    
-    // add the dimensional offset to the file, the dth value in the file denotes the world coordiante that coorisponds to local coordiante 0
-    //printf("adding the following offset: ");
-    for(uint j = 0; j < Gbls->team_bound_area_min.size(); j++)
-    {
-      sprintf(temp_buffer, "%f, ",Gbls->team_bound_area_min[j]); 
-      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-     // printf("%f, ",Gbls->team_bound_area_min[j]);
-    }
-    sprintf(temp_buffer,"\n");  
+  }
+  else
+  {
+    sprintf(temp_buffer, "m:0\n");
     string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    //printf("\n");
+  }
     
-    // add the dimensional mapping to the file, the nth value in the file denotes which global robot the nth dimension group represents
-    sprintf(temp_buffer, "m:%d\n", Gbls->team_size); 
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    //printf("adding the following mapping: ");
-    for(int j = 0; j < Gbls->team_size; j++)
+  // message stats
+  sprintf(temp_buffer, "s:");
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
+  for(int i = 0; i < num_agents; i++)
+  {
+    if(Gbls->InTeam[i])
     {
-      sprintf(temp_buffer, "%d, ",Gbls->global_ID[j]); 
-      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-     // printf("%d, ",Gbls->global_ID[j]);
-    }
-    sprintf(temp_buffer,"\n");  
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    //printf("\n");
-    
-    // best path (itself)
-    for(int j = 0; j < num_points; j++)
-    {
-      for(int k = 0; k < num_dims; k++) 
-      {
-        sprintf(temp_buffer, "%f, ", BestSolution[j][k]);
-        string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-      }
-      sprintf(temp_buffer, "\n");
-      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    }      
-    
-    // time left for planning
-    if(use_smart_plan_time && !calculated_smart_plan_time)
-      sprintf(temp_buffer, "r:%f\n", (float)LARGE);  // don't send data until we calculate the time to use
-    else
-      sprintf(temp_buffer, "r:%f\n", Gbls->calculate_time_left_for_planning());
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    
-    // move flag
-    if(moving)
-    {
-      sprintf(temp_buffer, "m:1\n");
-      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    }
-    else
-    {
-      sprintf(temp_buffer, "m:0\n");
-      string_printf_s(sp, out_buffer, temp_buffer, buffer_len); 
-    }
-    
-    
-    // message stats
-    sprintf(temp_buffer, "s:%d\n",(message_send_attempts[i]));
-    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
-    
-    if(add_points_to_messages == 1)
-    {
-      printf("warning: trying to use a feature that has not been implimented yet \n");  
-      //Scene.SendPointsToFile(ofp);
-    }
-    
-    if(uni_tree_build == 1)
-    {
-      printf("WARNING THIS FUNCTIONALITY HAS BEEN DISCONTINUED!");
+      message_send_attempts[i] += 1;
     }
 
-    //printf("sending here !!! \n");
-    Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
-    out_msg_ctr[i]++;
+    sprintf(temp_buffer, "%d,",(message_send_attempts[i]));
+    string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
   }
+  sprintf(temp_buffer, "\n");
+  string_printf_s(sp, out_buffer, temp_buffer, buffer_len);
+
+  if(add_points_to_messages == 1)
+  {
+    printf("warning: trying to use a feature that has not been implimented yet \n");  
+    //Scene.SendPointsToFile(ofp);
+  }
+    
+  if(uni_tree_build == 1)
+  {
+    printf("WARNING THIS FUNCTIONALITY HAS BEEN DISCONTINUED!");
+  }
+
+  //printf("sending here !!! \n");
+  Gbls->hard_broadcast(out_buffer, sizeof(out_buffer));  // note, changed to hard broadcast when we started doing dynamic team sizes
+  for(int j = 0; j < num_agents; j++)
+    out_msg_ctr[j]++;
+ 
 }
 
 bool MultiAgentSolution::StartMoving()   // returns true if this agent can start moving
