@@ -8,7 +8,7 @@ Cspace::Cspace() // default constructor
   num_valid_points = 0;
 }
 
-Cspace::Cspace(const vector<float>& the_start, const vector<float>& the_goal, int dimensions) // constructor
+Cspace::Cspace( vector<float>& the_start,  vector<float>& the_goal, int dimensions) // constructor
 {
   Populate(the_start, the_goal, dimensions);
 }
@@ -79,23 +79,91 @@ Cspace::~Cspace() // destructor
   #endif
 }
 
-bool Cspace::Populate(const vector<float>& the_start, const vector<float>& the_goal, int dimensions) // populates or re-populates the structure, returns true on success
+void seperate(vector<float> & P, const vector<float> & robot_radius)
+{
+  int dims = 3;
+  int num_robots = P.size()/dims;
+  bool conflicts = true;
+
+  while(conflicts)
+  {
+    conflicts = false;
+    float robot_1_x, robot_1_y, robot_2_x, robot_2_y, dist, radius_1;
+    float min_dist = LARGE;
+  
+    for(int i = 0; i < num_robots; i++)
+    {  
+      robot_1_x = P[i*dims];
+      robot_1_y = P[i*dims+1];
+      radius_1 = robot_radius[i];
+    
+      // check robot vs robot collisions
+      for(int j = i+1; j < num_robots; j++)
+      {
+        robot_2_x = P[j*dims];
+        robot_2_y = P[j*dims+1]; 
+        
+        dist = (sqrt((robot_1_x-robot_2_x)*(robot_1_x-robot_2_x) + (robot_1_y-robot_2_y)*(robot_1_y-robot_2_y)) - (radius_1 + robot_radius[j]));
+        if(min_dist > dist)
+        {
+          min_dist = dist;
+          if(min_dist <= 0.1)
+          {
+
+            // move the robots away from each other until they no longer conflict
+            float midpointx = (robot_1_x + robot_2_x)/2.0;
+            float midpointy = (robot_1_y + robot_2_y)/2.0;
+
+            // move a away from midpoint
+            float delta_x = robot_1_x - midpointx;
+            float delta_y = robot_1_y - midpointy;
+
+            float dist_to_mid = sqrt(delta_x*delta_x + delta_y+delta_y);
+            float dist_to_move = 0.01;
+
+            P[i*dims] += (dist_to_move/dist_to_mid*delta_x);
+            P[i*dims+1] += (dist_to_move/dist_to_mid*delta_y);
+
+            // move b away from midpoint
+            P[j*dims] -= (dist_to_move/dist_to_mid*delta_x);
+            P[j*dims+1] -= (dist_to_move/dist_to_mid*delta_y);
+
+            conflicts = true;
+          }
+        }
+      }
+    }
+  }
+}
+
+bool Cspace::Populate(vector<float>& the_start, vector<float>& the_goal, int dimensions) // populates or re-populates the structure, returns true on success
 {
   dims = dimensions;
   num_points = 0;
   
-  // check to make sure both start and goal are valid configs
+  // check to make sure both start and goal are valid configs, if not, then see if any two robots are too close to each other, if they are, then seperate
   if(W.PointValid(the_start) < 0)
   {
-    printf("error: invalid start configuration, %f \n", W.PointValid(the_start));
-    return false;
+    seperate(the_start, W.robot_radius);
+
+    if(W.PointValid(the_start) < 0)
+    {
+      printf("error: invalid start configuration, %f \n", W.PointValid(the_start));
+      return false;
+    }
   }
   
   float goal_dist = W.PointValid(the_goal);
   if(goal_dist < 0)
   {
-    printf("error: invalid goal configuration, %f \n",goal_dist);
-    return false;
+    seperate(the_goal, W.robot_radius);
+
+    goal_dist = W.PointValid(the_goal);
+    if(goal_dist < 0)
+    {
+      printf("error: invalid goal configuration, %f \n",goal_dist);
+      return false;
+    }
   }
   // save start and goal
   start.resize(dims);

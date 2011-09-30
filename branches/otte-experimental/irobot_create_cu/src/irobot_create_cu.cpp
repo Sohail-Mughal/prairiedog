@@ -1622,8 +1622,12 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   {
     if(on_a_point)
     {
+      if(carrot_index < current_time_index)
+        carrot_index = current_time_index;
+
       if(Edist(T[carrot_index][0], T[carrot_index][1], robot_pose->x, robot_pose->y) < robot_rad) // basically at point
       {
+
         TARGET_SPEED = 0;
       }
       else // not at point yet
@@ -1751,7 +1755,7 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   }
 
   // adjust time if we get too far behind
-  if(dist_to_time_target < robot_rad && time_ahead_of_schedual < -time_behind_adjust_thresh) // points have been problematic due to much time near the same location
+  if(dist_to_time_target > robot_rad && time_ahead_of_schedual < -time_behind_adjust_thresh) // points have been problematic due to much time near the same location
   {
     time_adjust += fabs(time_ahead_of_schedual);
     printf("time adjust: %f \n",time_adjust);

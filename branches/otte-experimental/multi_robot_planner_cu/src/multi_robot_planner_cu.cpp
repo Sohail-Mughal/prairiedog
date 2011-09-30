@@ -1219,7 +1219,12 @@ int main(int argc, char** argv)
 
 
       bool no_conflicts_between_sub_paths = false;
-      if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
+      if(Globals.team_size == 1 || Globals.revert_to_single_robot_path)
+      {
+        printf("master: single robot team\n");
+        Globals.use_sub_sg = false;
+      }
+      else if(calculate_sub_goal(Globals.other_robots_single_solutions, Globals.InTeam, Globals.agent_number, 
                             preferred_min_planning_area_side_length,  preferred_max_planning_area_side_length, 
                             robot_radius, accuracy_resolution, time_resolution, sub_start, sub_goal, no_conflicts_between_sub_paths) )
       {
@@ -1241,17 +1246,17 @@ int main(int argc, char** argv)
         Globals.sub_start_coords[Globals.agent_number] =  sub_start;
         Globals.sub_goal_coords[Globals.agent_number] =  sub_goal;
       }
-      /*else if(no_conflicts_between_sub_paths)
+      else if(no_conflicts_between_sub_paths)
       {
         printf("master: no conflicts between sub-paths\n");
 
         // reset single robot path 
         Globals.use_sub_sg = false;
         Globals.revert_to_single_robot_path = true;
-      }*/
+      }
       else if(Globals.use_sub_sg)
       {
-        printf("master: old sub area \n");
+        printf("master: old sub area %u %u\n", sub_start.size(), sub_goal.size());
     
         // continue using old sub_start and sub_goal (which we have saved)
         Globals.start_coords[0].resize(3, 0); 
@@ -1742,6 +1747,7 @@ int main(int argc, char** argv)
     Globals.nav_state[Globals.agent_number] = 5;  
     Globals.nav_state_iteration[Globals.agent_number]++;
 
+    vector<bool> OldInTeam = Globals.InTeam;
 
     Globals.done_planning = true;
     bool need_to_calculate_path_to_broadcast = true;
@@ -2096,25 +2102,32 @@ int main(int argc, char** argv)
         //printf("Done updating path for robot position : [%f %f]\n", robot_pose->x, robot_pose->y);
 
         // check the distance to the point at which we can reset team (end of last sub area we planned for)
+        bool at_drop_point = false;
         if(drop_point.size() >= 2 && temp_best_point_found.size() >= 2) // drop point exists and so does temp_best_point_found
         {
           if(euclid_dist(drop_point, temp_best_point_found) < Globals.robot_radius) // close enough point to drop team members based on path conflicts
           {
+             at_drop_point = true;
              drop_point.resize(0); // resizing to 0 signals we can drop agents
           }
         }
 
-        if(drop_point.size() == 0)
+        if(at_drop_point)
         {
+          // =========================================== drop phase (6) ===========================================
+          // ----> drop all members from team
+          Globals.nav_state[Globals.agent_number] = 6;  
+          Globals.nav_state_iteration[Globals.agent_number]++;
+
           for(int j = 1; j < Globals.team_size; j++) // start at 1 because this agent is 0
           {
             int j_global = Globals.global_ID[j];
       
-            if(Globals.other_robots_single_solutions[j_global].size() > 0 && Globals.single_robot_solution.size() > 1)
+            if(Globals.InTeam[j_global])
             {
               // make sure we can drop without just adding back in
-              if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
-              {
+              //if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
+              //{
                 // drop this agent from our team
                 printf("master: __________________Dropping agent %d from team__________________\n", j_global);          
 
@@ -2128,15 +2141,27 @@ int main(int argc, char** argv)
                 Globals.team_size--;
                 Globals.global_ID.resize(Globals.team_size);
 
+                j--;
+
                 if(Globals.team_size == 1)
                 {
                   printf("master: only member of team is us \n");
+                  Globals.planning_iteration[Globals.agent_number]++;
                 }
-              }
+              //}
             }
           }
           //printf("Done checking position vs. drop point");
         }
+        //else if(Globals.old_team_disolved(OldInTeam))
+        //{
+        //  printf("master: teams disolved\n");
+        //
+        //  Globals.planning_iteration[Globals.agent_number]++;
+        //  Globals.revert_to_single_robot_path = true;
+        //  Globals.master_reset = true;
+        //}
+
       }
 
       publish_global_path(ThisAgentsPath, Parametric_Times); 
