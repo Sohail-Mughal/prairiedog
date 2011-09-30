@@ -28,6 +28,8 @@ class GlobalVariables
 
    bool have_all_team_single_paths();         // returns true if we have all team members current single paths, else false
 
+   bool old_team_disolved(const vector<bool> & OldInTeam); // checks to see if the old team has been disolved
+
    void output_state_data();
 
    vector<int> InPorts;      // indexed using global ID (i.e. agent number)

@@ -1830,6 +1830,9 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     printf("region bounds: x:[%f, %f] y:[%f, %f]\n", min_x, max_x, min_y, max_y);
     printf("all paths fit, just use normal start and goal\n");
 
+    sub_start = robot_paths[this_agent_id][0];
+    sub_goal = robot_paths[this_agent_id][robot_paths.size()-1];
+
     return false;
   }
 
@@ -2403,11 +2406,29 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     }
     else
     {
-      // this should not happen, but just explicitly set each to the global start
-      printf("(Two global starts are conflictiong)\n");
+      // this may happen if global starts are conflicting
+      printf("(Two global starts are conflictiong, adjusting)\n");
 
-      sub_starts[conflicting_ind_a] = robot_paths[conflicting_ind_a][0];
-      sub_starts[conflicting_ind_b] = robot_paths[conflicting_ind_b][0];
+      // move the robots away from each other until they no longer conflict
+      float midpointx = (sub_starts[conflicting_ind_a][0] + sub_starts[conflicting_ind_b][0])/2.0;
+      float midpointy = (sub_starts[conflicting_ind_a][1] + sub_starts[conflicting_ind_b][1])/2.0;
+
+      // move a away from midpoint
+      float delta_x = sub_starts[conflicting_ind_a][0] - midpointx;
+      float delta_y = sub_starts[conflicting_ind_a][1] - midpointy;
+
+      float dist_to_mid = sqrt(delta_x*delta_x + delta_y+delta_y);
+      float dist_to_move = 0.01;
+
+      sub_starts[conflicting_ind_a][0] += (dist_to_move/dist_to_mid*delta_x);
+      sub_starts[conflicting_ind_a][1] += (dist_to_move/dist_to_mid*delta_y);
+
+      // move b away from midpoint
+      sub_starts[conflicting_ind_b][0] -= (dist_to_move/dist_to_mid*delta_x);
+      sub_starts[conflicting_ind_b][1] -= (dist_to_move/dist_to_mid*delta_y);
+
+      //sub_starts[conflicting_ind_a] = robot_paths[conflicting_ind_a][0];
+      //sub_starts[conflicting_ind_b] = robot_paths[conflicting_ind_b][0];
 
       //return false;
     }

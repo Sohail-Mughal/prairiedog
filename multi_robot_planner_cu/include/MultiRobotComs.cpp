@@ -140,6 +140,15 @@ void GlobalVariables::Reset()
   // waiting here until other threads are safe (not using Globals)
   while(sender_Ad_Hoc_running || listener_active)
   {
+    if(sender_Ad_Hoc_running && listener_active)
+      printf("master: both listener and sender are running\n");
+    else if(sender_Ad_Hoc_running)
+      printf("master: sender running\n");
+    else if(listener_active)
+      printf("master: listener running\n");
+    else
+      printf("master: other threads not running\n");
+
     usleep(100000); // sleep for 1/10 sec
   }
 
@@ -413,8 +422,53 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
 
     bool overlap = false;
 
+
+    // see if we need to disolve team
+    if(nav_st == 6 && InTeam[ag_gbl_id] && nav_state[agent_number] != 6)
+    {
+      // the sender used to be in our team, but they have disolved their team, and we have not, so we will also disolve our team
+
+      nav_state[agent_number] = 6;
+      nav_state_iteration[agent_number]++;
+
+      for(int j = 1; j < team_size; j++) // start at 1 because this agent is 0
+      {
+        int j_global = global_ID[j];
+      
+        if(Globals.InTeam[j_global])
+        {
+          // make sure we can drop without just adding back in
+          //if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
+          //{
+            // drop this agent from our team
+            printf("_______Dropping agent %d from team due to direct message________\n", j_global);          
+
+            InTeam[j_global] = false;
+            local_ID[j_global] = -1; 
+        
+            // swap local index with the last one
+            global_ID[j] = global_ID[team_size-1];         
+            local_ID[global_ID[j]] = j;
+   
+            team_size--;
+            global_ID.resize(team_size);
+
+            j--;
+
+            if(team_size == 1)
+            {
+              printf("(only member of team is us) \n");
+              Globals.planning_iteration[Globals.agent_number]++;
+            }
+          //}
+        }
+      }
+      return false;
+    }
+
+
     // maintainance of this agent vs the sender 
-    if(InTeam[ag_gbl_id] && pln_itr >= planning_iteration[agent_number]) // the sender is in our team already, and its planning iterate is the same or more
+    if(InTeam[ag_gbl_id] && pln_itr >= planning_iteration[agent_number] && nav_st < 6) // the sender is in our team already, and its planning iterate is the same or more, and they have not disolved their team
     {
       // check if the sender has added new members to its team that are not in our team
       for(int i = 0; i < senders_team_size; i++)
@@ -466,10 +520,11 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
         }
       }
 
-      if(team_includes_this_ag && pln_itr > planning_iteration[ag_gbl_id])   
+      if(team_includes_this_ag && pln_itr > planning_iteration[ag_gbl_id] && pln_itr > planning_iteration[agent_number])   
       {
         // need to join because the sending agent thinks we are in its team, but we currently don't think so, 
         // and this is a new planning iteration for the sender (needed since we may have been in an old team but are not any more)
+        // and this is a new planning iteration for us
         printf("Recieved a message from an agent that has added us to their team\n");
         need_to_join_teams = true;
       }
@@ -521,6 +576,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
       planning_iteration_increase = true;
     }
 
+    
     // update state information about sender
     if(pln_itr > planning_iteration[ag_gbl_id]) // new planning iteration for this robot
     {
@@ -573,6 +629,49 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     if(ag_gbl_id == agent_number)  // this is data about the recieving robot
     {
       continue;
+    }
+
+    // see if we need to disolve team
+    if(nav_st == 6 && InTeam[ag_gbl_id] && nav_state[agent_number] != 6)
+    {
+      // the sender used to be in our team, but they have disolved their team, and we have not, so we will also disolve our team
+
+      nav_state[agent_number] = 6;
+      nav_state_iteration[agent_number]++;
+
+      for(int j = 1; j < team_size; j++) // start at 1 because this agent is 0
+      {
+        int j_global = global_ID[j];
+      
+        if(Globals.InTeam[j_global])
+        {
+          // make sure we can drop without just adding back in
+          //if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
+          //{
+            // drop this agent from our team
+            printf("_______Dropping agent %d from team due to indirect message________\n", j_global);          
+
+            InTeam[j_global] = false;
+            local_ID[j_global] = -1; 
+        
+            // swap local index with the last one
+            global_ID[j] = global_ID[team_size-1];         
+            local_ID[global_ID[j]] = j;
+   
+            team_size--;
+            global_ID.resize(team_size);
+
+            j--;
+
+            if(team_size == 1)
+            {
+              printf("(only member of team is us) \n");
+              Globals.planning_iteration[Globals.agent_number]++;
+            }
+          //}
+        }
+      }
+      return false;
     }
 
     // update state information about the other robot
@@ -777,6 +876,23 @@ bool GlobalVariables::have_all_team_single_paths()         // returns true if we
 
   return true;
 }
+
+bool GlobalVariables::old_team_disolved(const vector<bool> & OldInTeam) // checks to see if the old team has been disolved
+{
+  for(uint tm = 0; tm < OldInTeam.size(); tm ++)
+  {
+    if(OldInTeam[tm])
+    {
+      if(planning_iteration[tm] == planning_iteration[agent_number] && nav_state[tm] < 6)
+        return false;
+
+      if(planning_iteration[tm] < planning_iteration[agent_number])
+        return false;
+    }
+  }
+  return true;
+}
+
 
 void GlobalVariables::output_state_data()
 {
