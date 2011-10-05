@@ -510,7 +510,7 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
     while(this_translation.size() < (uint)num_spatial_dims)
       this_translation.push_back(0);    
     
-    printf("Translation: ");
+    printf("File Translation: ");
     for(int i = 0; i < num_spatial_dims; i++)
       printf("%f, ", this_translation[i]);
     printf("\n");
@@ -519,6 +519,12 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
     while(translation.size() < (uint)num_spatial_dims)
       translation.push_back(0);    
     
+    printf("Global Translation: ");
+    for(int i = 0; i < num_spatial_dims; i++)
+      printf("%f, ", translation[i]);
+    printf("\n");
+
+
     int this_points;
     polygon_list.resize(num_polygons);
     for(int i = 0; i < num_polygons; i++)
@@ -556,7 +562,98 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
         unused_result = fscanf(ifp, "\n");  // unused_result makes warning go away
       }
     }
-    
+
+    // populate polygon_list_alt with bounds of the planning area so we can test if edges go through it
+    vector<float> bound_a(2);  bound_a[0] = 0.0        ; bound_a[1] = 0.0       ;
+    vector<float> bound_b(2);  bound_b[0] = dim_max[0] ; bound_b[1] = 0.0       ;
+    vector<float> bound_c(2);  bound_c[0] = dim_max[0] ; bound_c[1] = dim_max[1];
+    vector<float> bound_d(2);  bound_d[0] = 0.0        ; bound_d[1] = dim_max[1];
+
+    vector<vector<float> > bound_all(4);
+    bound_all[0] = bound_a;
+    bound_all[1] = bound_b;
+    bound_all[2] = bound_c;
+    bound_all[3] = bound_d;
+    polygon_list_alt.resize(1,bound_all);
+   
+
+    // add all edges to an edge list
+    vector<vector<vector<float> > > edge_list(0); 
+
+    for(uint i = 0; i < polygon_list.size(); i++)
+    {
+      for(uint j = 0; j < polygon_list[i].size(); j++)
+      {
+        vector<float> last_point;
+        if(j == 0)
+          last_point = polygon_list[i][polygon_list[i].size()-1];
+        else
+          last_point = polygon_list[i][j-1];
+
+        vector<float> this_point = polygon_list[i][j];
+
+        if((0.0  <= last_point[0] && last_point[0] <=  dim_max[0]  &&  0.0  <= last_point[1] && last_point[1] <= dim_max[1])  || // last point in                    
+           (0.0  <= this_point[0] && this_point[0] <=  dim_max[0]  &&  0.0  <= this_point[1] && this_point[1] <=  dim_max[1]) || // this point in
+           (!EdgeSafe(last_point, this_point, 0, robot_rad[0], true) ) ) // the edge goes through (the planning area) //////////!!!!!!! assuming all radii the same
+        {
+          vector<vector<float> > new_edge(2);
+          new_edge[0] = last_point;
+          new_edge[1] = this_point;
+          edge_list.push_back(new_edge);
+        }
+      }
+    }
+
+    // now repopulate polygon_list from edge_list
+    num_polygons = 0;
+    polygon_list.resize(0);
+    if(edge_list.size() > 0)
+    {
+      vector<vector<float> > this_obstacle(1, edge_list[0][0]);
+      this_obstacle.push_back(edge_list[0][1]);
+
+      for(uint i = 1; i < edge_list.size(); i++)
+      {
+        if(edge_list[i-1][1][0] != edge_list[i][0][0] || edge_list[i-1][1][1] != edge_list[i][0][1]) // i is the begining of a new obstacle
+        {
+          if(this_obstacle[0][0] != this_obstacle[this_obstacle.size()-1][0] || this_obstacle[0][1] != this_obstacle[this_obstacle.size()-1][1]) // obstacle not in a loop
+          {
+            for(int k = this_obstacle.size()-2; k > 0; k--)  // since obstacles are loops of points, add points backward toward start
+              this_obstacle.push_back(this_obstacle[k]);
+          }
+          else // in a loop but duplicate points
+          {
+            this_obstacle.resize(this_obstacle.size()-1);
+          }
+
+          polygon_list.push_back(this_obstacle);  // save old obstacle we were building
+            
+          this_obstacle.resize(0);                // reset temp obstacle holder
+          this_obstacle.push_back(edge_list[i][0]);
+        }
+
+        this_obstacle.push_back(edge_list[i][1]);
+
+      }
+
+      // save the final obstacle we were working on
+      if(this_obstacle.size() > 1)
+      {
+        if(this_obstacle[0][0] != this_obstacle[this_obstacle.size()-1][0] || this_obstacle[0][1] != this_obstacle[this_obstacle.size()-1][1]) // obstacle not in a loop
+        {
+          for(int k = this_obstacle.size()-2; k > 0; k--)  // since obstacles are loops of points, add points backward toward start
+            this_obstacle.push_back(this_obstacle[k]);
+        }
+        else // in a loop but duplicate points
+        {
+          this_obstacle.resize(this_obstacle.size()-1);
+        }
+        polygon_list.push_back(this_obstacle); 
+      }
+      num_polygons = (int)polygon_list.size();
+    }
+
+
     // allocate point lookup table
     int x_num_points = (int)(2*dim_max[0]/resolution+1);
     int y_num_points = (int)(2*dim_max[1]/resolution+1);
@@ -580,7 +677,7 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
         }
       }
     }
-    
+    /*
     if(add_points_to_messages == 1)
     {
       // allocate structures to hold last n points
@@ -596,7 +693,7 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
       last_n_edges_y2.assign(num_edges_per_file, -1);
       last_n_edges_val.assign(num_edges_per_file, 0);
       n_edge_ptr = 0; 
-    }
+    }*/
   }
   else // num_polygons == 0
   {
@@ -624,7 +721,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   float max_x = -LARGE;
   float max_y = -LARGE;  
     
-  if(!G.found_single_robot_solution) // for a single robot we need to plan in the entire area
+  if(false) //!G.found_single_robot_solution) // for a single robot we need to plan in the entire area
   {
     if(G.default_map_x_size <= 0 || G.default_map_y_size <= 0)
     {
@@ -1035,15 +1132,18 @@ float NavScene::PointSafe(const vector<float>& point, int index, float the_robot
   return min_dist; 
 }
 
-bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, float the_robot_rad) // this checks if an edge is safe in the environment, where the points' coords start at index in vectors
+bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, float the_robot_rad, bool use_alternative_obs_list) // this checks if an edge is safe in the environment, where the points' coords start at index in vectors, if use_alternative_obs_list is true then use polygon_list_alt instead of polygon_list
 {
   #ifdef save_time_data
   total_collision_checks++;
   #endif   
     
   clock_t t1 = clock(); 
-  if(num_polygons == 0)
+  if(num_polygons == 0 && !use_alternative_obs_list)
      return true;
+  if(num_polygons_alt == 0 && use_alternative_obs_list)
+     return true;
+
   ectr_all++;
   float r_x1, r_x2, r_y1, r_y2, o_x1, o_x2, o_y1, o_y2, Mr_top, Mr_bottom, Mo_top, Mo_bottom, Mr, Mo;
   float x = LARGE;
@@ -1059,7 +1159,9 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
   int lookup_y1 = -1;
   int lookup_x2 = -1;
   int lookup_y2 = -1;
-    
+  
+  // being discontinued:
+  /*  
   if(using_edge_lookup_table == 1)
   {
     // check if this data is already in the lookup table
@@ -1086,7 +1188,7 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
         return true;
     }
   }
-  
+  */
   // otherwise we need to do collision detection
   ectr++;
   Mr_top = r_y2 - r_y1;
@@ -1100,27 +1202,56 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
     last_n_edges_x2[n_edge_ptr] = lookup_x2;
     last_n_edges_y2[n_edge_ptr] = lookup_y2;
   }
-            
-  for(int i = 0; i < num_polygons; i++) // each polygon
+
+  int num_polygons_used = num_polygons;
+  if(use_alternative_obs_list)
+    num_polygons_used = (int)polygon_list_alt.size();
+
+  for(int i = 0; i < num_polygons_used; i++) // each polygon
   {
-    this_edge_num = polygon_list[i].size();
+
+    if(use_alternative_obs_list)
+      this_edge_num = polygon_list_alt[i].size();
+    else
+      this_edge_num = polygon_list[i].size();
+
     for(int j = 0; j < this_edge_num; j++) // each edge
     {    
-      if(j == 0)   
-      {   
-        o_x1 = polygon_list[i][this_edge_num-1][0];
-        o_x2 = polygon_list[i][0][0];
-        o_y1 = polygon_list[i][this_edge_num-1][1];
-        o_y2 = polygon_list[i][0][1];  
+      if(use_alternative_obs_list)
+      {
+        if(j == 0)   
+        {   
+          o_x1 = polygon_list_alt[i][this_edge_num-1][0];
+          o_x2 = polygon_list_alt[i][0][0];
+          o_y1 = polygon_list_alt[i][this_edge_num-1][1];
+          o_y2 = polygon_list_alt[i][0][1];  
+        }
+        else
+        {
+          o_x1 = polygon_list_alt[i][j-1][0];
+          o_x2 = polygon_list_alt[i][j][0];
+          o_y1 = polygon_list_alt[i][j-1][1];
+          o_y2 = polygon_list_alt[i][j][1]; 
+        }
       }
       else
       {
-        o_x1 = polygon_list[i][j-1][0];
-        o_x2 = polygon_list[i][j][0];
-        o_y1 = polygon_list[i][j-1][1];
-        o_y2 = polygon_list[i][j][1]; 
-      }
-     
+        if(j == 0)   
+        {   
+          o_x1 = polygon_list[i][this_edge_num-1][0];
+          o_x2 = polygon_list[i][0][0];
+          o_y1 = polygon_list[i][this_edge_num-1][1];
+          o_y2 = polygon_list[i][0][1];  
+        }
+        else
+        {
+          o_x1 = polygon_list[i][j-1][0];
+          o_x2 = polygon_list[i][j][0];
+          o_y1 = polygon_list[i][j-1][1];
+          o_y2 = polygon_list[i][j][1]; 
+        }
+      } 
+
       Mo_top = o_y2 - o_y1;
       Mo_bottom = o_x2 - o_x1;
       
@@ -1165,19 +1296,21 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
              ((r_y1 <= o_y1 && o_y1 <= r_y2) || (r_y2 <= o_y1 && o_y1 <= r_y1)) ||
              ((r_y1 <= o_y2 && o_y2 <= r_y2) || (r_y2 <= o_y2 && o_y2 <= r_y1))) // collision
           { 
+            /*
             if(using_edge_lookup_table == 1)  
             {
               EdgeSafeLookup[lookup_x1][lookup_y1][lookup_x2][lookup_y2] = 0;
               EdgeSafeLookup[lookup_x2][lookup_y2][lookup_x1][lookup_y1] = 0;
             }
-            
+            */
+            /*
             if(add_points_to_messages == 1 && n_edge_ptr < num_edges_per_file)
             {
               // save info in last n edges structure
               last_n_edges_val[n_edge_ptr] = 0;  
               n_edge_ptr++;
             }
-            
+            */
             
             clock_t t2 = clock();    
             // printf("collision: %f \n", difftime_clock(t2, t1)*10000);
@@ -1214,19 +1347,22 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
         //x_temp_vec.push_back(x);
         //y_temp_vec.push_back(y); 
           
+        /*
         if(using_edge_lookup_table == 1)
         {
           EdgeSafeLookup[lookup_x1][lookup_y1][lookup_x2][lookup_y2] = 0;
           EdgeSafeLookup[lookup_x2][lookup_y2][lookup_x1][lookup_y1] = 0;
         }
-        
+        */
+        /*
         if(add_points_to_messages == 1 && n_edge_ptr < num_edges_per_file)
         {
           // save info in last n edges structure
           last_n_edges_val[n_edge_ptr] = 0;  
           n_edge_ptr++;
         }
-        
+        */
+
         clock_t t2 = clock();    
         // printf("collision: %f \n", difftime_clock(t2, t1)*10000);
         
@@ -1262,19 +1398,21 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
       float dist_temp = line_dist_to_point(r_x1, r_y1, r_x2, r_y2, o_x1, o_y1); 
       if(dist_temp < the_robot_rad)
       {
+        /*
         if(using_edge_lookup_table == 1)
         {
           EdgeSafeLookup[lookup_x1][lookup_y1][lookup_x2][lookup_y2] = 0;
           EdgeSafeLookup[lookup_x2][lookup_y2][lookup_x1][lookup_y1] = 0;
         }
-        
+        */
+        /*
         if(add_points_to_messages == 1 && n_edge_ptr < num_edges_per_file)
         {
           // save info in last n edges structure
           last_n_edges_val[n_edge_ptr] = 0;  
           n_edge_ptr++;
         }
-        
+        */
         
         clock_t t2 = clock();    
         // printf("collision: %f \n", difftime_clock(t2, t1)*10000);
@@ -1290,19 +1428,21 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
       dist_temp = line_dist_to_point(r_x1, r_y1, r_x2, r_y2, o_x2, o_y2); 
       if(dist_temp < the_robot_rad)
       {
+        /*
         if(using_edge_lookup_table == 1)  
         {
           EdgeSafeLookup[lookup_x1][lookup_y1][lookup_x2][lookup_y2] = 0;
           EdgeSafeLookup[lookup_x2][lookup_y2][lookup_x1][lookup_y1] = 0;
         }
-        
+        */
+        /*
         if(add_points_to_messages == 1 && n_edge_ptr < num_edges_per_file)
         {
           // save info in last n edges structure
           last_n_edges_val[n_edge_ptr] = 0;  
           n_edge_ptr++;
         }
-        
+        */
         
         clock_t t2 = clock();    
         // printf("collision: %f \n", difftime_clock(t2, t1)*10000);
@@ -1315,20 +1455,21 @@ bool NavScene::EdgeSafe(const vector<float>& point1, const vector<float>& point2
       }
     }    
   }    
-  
+  /*
   if(using_edge_lookup_table == 1)
   {
     EdgeSafeLookup[lookup_x1][lookup_y1][lookup_x2][lookup_y2] = 1;
     EdgeSafeLookup[lookup_x2][lookup_y2][lookup_x1][lookup_y1] = 1;
   }
-  
+  */
+  /*
   if(add_points_to_messages == 1 && n_edge_ptr < num_edges_per_file)
   {
     // save info in last n edges structure
     last_n_edges_val[n_edge_ptr] = 1;  
     n_edge_ptr++;
   }
-  
+  */
   
   clock_t t2 = clock();    
   // printf("collision: %f \n", difftime_clock(t2, t1)*10000);

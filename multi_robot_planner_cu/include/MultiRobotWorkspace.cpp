@@ -921,7 +921,7 @@ float MultiRobotWorkspace::EdgeValid(const vector<float>& P1, const vector<float
     } 
     
     // check robot vs scene collisions 
-    if(!Scene.EdgeSafe(P1, P2, i, radius_1)) // the rest of the path segment
+    if(!Scene.EdgeSafe(P1, P2, i, radius_1, false)) // the rest of the path segment
       return -radius_1; // early break out if collision
   }
   
@@ -1011,7 +1011,7 @@ float MultiRobotWorkspace::ProjectedEdgeValid(const vector<float>& P1, const vec
   
   int i = bot*dims;
 
-  if(!Scene.EdgeSafe(P1, P2, i, radius_1)) // the rest of the path segment
+  if(!Scene.EdgeSafe(P1, P2, i, radius_1, false)) // the rest of the path segment
   {
     //printf(" scene collision %d, [%f %f]  [%f %f] \n", i, P1[i], P1[i+1], P2[i], P2[i+1]);  
     return -radius_1; // early break out if collision

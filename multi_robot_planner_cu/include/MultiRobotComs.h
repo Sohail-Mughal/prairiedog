@@ -20,7 +20,7 @@ class GlobalVariables
    
    int populate_buffer_with_all_robot_data(char* buffer); // puts data about all robots the sender knows about into the buffer, returns the number of chars that it required
 
-   bool recover_all_robot_data_from_buffer(char* buffer, int &index, int& sender_id); // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
+   bool recover_all_robot_data_from_buffer(char* buffer, int &index, int& sender_id, bool &fresh_data); // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
 
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning
 
