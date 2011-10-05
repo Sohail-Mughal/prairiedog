@@ -209,8 +209,8 @@ vector<float> Parametric_Times; // holds time parametry of best solution
   
 bool JOIN_ON_OVERLAPPING_AREAS = false; // if true, then we conservatively combine teams based on overlappingplanning areas. If false, then teams are only combined if paths intersect (or cause collisions)
 
-float path_conflict_combine_dist = 2; // distance robots have to be near each other to combine teams if thier paths conflict
-float team_combine_dist = 1;  // distance robots have to be near to each other to combine teams
+float path_conflict_combine_dist = 3; // distance robots have to be near each other to combine teams if thier paths conflict
+float team_combine_dist = 2;  // distance robots have to be near to each other to combine teams
 float team_drop_dist = 5;     // distance robots have to be away from each other to dissolve teams
 float team_drop_time = 5;    // after this long without hearing from a robot we drop it from the team
         
@@ -223,7 +223,7 @@ vector<vector<float> > free_space;      // updated for each search to hold subsp
 #endif
 
 bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then this gets set to true, and min_planning_time is adjusted based on circumstance
-float plan_time_mult = 5;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
+float plan_time_mult = 2;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
 float smart_min_time_to_plan = 5; // if(use_smart_plan_time) then plan for at least smart_min_time_to_plan
 bool calculated_smart_plan_time = false; //set to true once we calcualte the above
 
@@ -1155,6 +1155,22 @@ int main(int argc, char** argv)
     robot_is_moving = false;  
 
 
+    while(Globals.sender_Ad_Hoc_running || Globals.listener_active)
+    {
+      if(Globals.sender_Ad_Hoc_running && Globals.listener_active)
+        printf("master: both listener and sender are running\n");
+      else if(Globals.sender_Ad_Hoc_running)
+        printf("master: sender running\n");
+      else if(Globals.listener_active)
+        printf("master: listener running\n");
+      else
+        printf("master: other threads not running\n");
+
+      usleep(100000); // sleep for 1/10 sec
+    }
+    
+
+
     // reset globals for a new planning cycle
     printf("master: resetting globals\n");
     Globals.Reset(); 
@@ -1210,7 +1226,7 @@ int main(int argc, char** argv)
       vector<float> sub_goal;
 
       Globals.other_robots_single_solutions[Globals.agent_number] = Globals.single_robot_solution;
-      float preferred_min_planning_area_side_length = 0.5*Globals.team_size;
+      float preferred_min_planning_area_side_length = 1.0*Globals.team_size;
       float preferred_max_planning_area_side_length = 1.0*Globals.team_size;
       float accuracy_resolution = .05;
       float time_resolution = .05;
@@ -1219,7 +1235,7 @@ int main(int argc, char** argv)
 
 
       bool no_conflicts_between_sub_paths = false;
-      if(Globals.team_size == 1 || Globals.revert_to_single_robot_path)
+      if(Globals.team_size <= 2 || Globals.revert_to_single_robot_path)
       {
         printf("master: single robot team\n");
         Globals.use_sub_sg = false;
@@ -1246,14 +1262,14 @@ int main(int argc, char** argv)
         Globals.sub_start_coords[Globals.agent_number] =  sub_start;
         Globals.sub_goal_coords[Globals.agent_number] =  sub_goal;
       }
-      else if(no_conflicts_between_sub_paths)
+      /*else if(no_conflicts_between_sub_paths)
       {
         printf("master: no conflicts between sub-paths\n");
 
         // reset single robot path 
         Globals.use_sub_sg = false;
         Globals.revert_to_single_robot_path = true;
-      }
+      }*/
       else if(Globals.use_sub_sg)
       {
         printf("master: old sub area %u %u\n", sub_start.size(), sub_goal.size());
@@ -1374,16 +1390,25 @@ int main(int argc, char** argv)
 
       // this is where the planning stuff starts
       // set up the scene based on all start/goal locations and any maps
+      
+
+      printf("loading globals \n");
       if(!Scene.LoadFromGlobals(Globals))
         return 0;
-    
+      printf("done loading globals \n");
+
+
+      printf("loading map \n");
       char map_file[] = "../lab.txt";
       if(!Scene.LoadMapFromFile(map_file))
       {
         printf("master: unable to load map file: %s\n", map_file);
         return 0;
       }
-  
+      printf("done loading map \n");
+   
+      
+
       Scene.PrintSceneInfo(); 
       publish_planning_area(Scene);
       publish_obstacles(Scene);
@@ -2153,14 +2178,15 @@ int main(int argc, char** argv)
           }
           //printf("Done checking position vs. drop point");
         }
-        //else if(Globals.old_team_disolved(OldInTeam))
-        //{
-        //  printf("master: teams disolved\n");
-        //
-        //  Globals.planning_iteration[Globals.agent_number]++;
-        //  Globals.revert_to_single_robot_path = true;
-        //  Globals.master_reset = true;
-        //}
+        else if(Globals.old_team_disolved(OldInTeam))
+        {
+          printf("master: teams disolved\n");
+        
+          Globals.planning_iteration[Globals.agent_number]++;
+          //Globals.revert_to_single_robot_path = true;
+          Globals.use_sub_sg = false;
+          Globals.master_reset = true;
+        }
 
       }
 

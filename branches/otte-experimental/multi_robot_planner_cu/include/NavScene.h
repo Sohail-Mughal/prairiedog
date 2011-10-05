@@ -21,7 +21,7 @@ class NavScene
     void DrawEdgeSafeLookup();   // draws the lookup table values
     
     float PointSafe(const vector<float>& point, int index, float the_robot_rad); // this checks if a point is safe in the environment, where the points' coords start at index in vectors, it returns the minimum distance to an obstacle
-    bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, float the_robot_rad); // this checks if an edge is safe in the environment, where the points' coords start at index in vectors
+    bool EdgeSafe(const vector<float>& point1, const vector<float>& point2, int index, float the_robot_rad, bool use_alternative_obs_list); // this checks if an edge is safe in the environment, where the points' coords start at index in vectors, if use_alternative_obs_list is true then use polygon_list_alt instead of polygon_list
 
     bool GetPointsFromFile(FILE* ifp); // this reads point data from the file
     bool SendPointsToFile(FILE* ofp);  // this writes point data to the file
@@ -43,7 +43,10 @@ class NavScene
     
     int num_polygons;
     vector<vector<vector<float> > > polygon_list; // [a][b][c], a polygon obstacles with b points of c dimensions
-    
+
+    int num_polygons_alt;
+    vector<vector<vector<float> > > polygon_list_alt; // [a][b][c], a polygon obstacles with b points of c dimensions
+
     // the following are only used when certian flags are set:
     
     vector<vector<float> > PointSafeLookup; // [x/resolution][y/resolution] stores the values from PointSafe when used on point x y

@@ -137,20 +137,6 @@ void GlobalVariables::Reset()
   // in case it is not already true, we'll make it true
   master_reset = true;
 
-  // waiting here until other threads are safe (not using Globals)
-  while(sender_Ad_Hoc_running || listener_active)
-  {
-    if(sender_Ad_Hoc_running && listener_active)
-      printf("master: both listener and sender are running\n");
-    else if(sender_Ad_Hoc_running)
-      printf("master: sender running\n");
-    else if(listener_active)
-      printf("master: listener running\n");
-    else
-      printf("master: other threads not running\n");
-
-    usleep(100000); // sleep for 1/10 sec
-  }
 
   done_planning = false;
 
@@ -366,8 +352,9 @@ int GlobalVariables::populate_buffer_with_all_robot_data(char* buffer)
 }
 
 
-bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &index, int &sender_id) // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
+bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &index, int &sender_id, bool &fresh_data) // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
 {
+  fresh_data = false;
   bool need_to_join_teams = false;
   bool planning_iteration_increase = false;
 
@@ -435,10 +422,10 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
       {
         int j_global = global_ID[j];
       
-        if(Globals.InTeam[j_global])
+        if(InTeam[j_global])
         {
           // make sure we can drop without just adding back in
-          //if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
+          //if(team_drop_dist < euclid_dist(last_known_pose[j_global], last_known_pose[agent_number]))
           //{
             // drop this agent from our team
             printf("_______Dropping agent %d from team due to direct message________\n", j_global);          
@@ -458,7 +445,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
             if(team_size == 1)
             {
               printf("(only member of team is us) \n");
-              Globals.planning_iteration[Globals.agent_number]++;
+              planning_iteration[agent_number]++;
             }
           //}
         }
@@ -470,6 +457,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     // maintainance of this agent vs the sender 
     if(InTeam[ag_gbl_id] && pln_itr >= planning_iteration[agent_number] && nav_st < 6) // the sender is in our team already, and its planning iterate is the same or more, and they have not disolved their team
     {
+      fresh_data = true;
       // check if the sender has added new members to its team that are not in our team
       for(int i = 0; i < senders_team_size; i++)
       {    
@@ -643,10 +631,10 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
       {
         int j_global = global_ID[j];
       
-        if(Globals.InTeam[j_global])
+        if(InTeam[j_global])
         {
           // make sure we can drop without just adding back in
-          //if(team_drop_dist < euclid_dist(Globals.last_known_pose[j_global], Globals.last_known_pose[agent_number]))
+          //if(team_drop_dist < euclid_dist(last_known_pose[j_global], last_known_pose[agent_number]))
           //{
             // drop this agent from our team
             printf("_______Dropping agent %d from team due to indirect message________\n", j_global);          
@@ -666,7 +654,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
             if(team_size == 1)
             {
               printf("(only member of team is us) \n");
-              Globals.planning_iteration[Globals.agent_number]++;
+              planning_iteration[agent_number]++;
             }
           //}
         }
@@ -775,7 +763,10 @@ bool GlobalVariables::JoinedTeams()
             }
           }
 
-          if(this_dist < combine_dist)
+ 
+          float dist_to_global_goal = euclid_dist(last_known_pose[temp_ag], single_robot_solution[single_robot_solution.size()-1]);
+
+          if(this_dist < combine_dist && dist_to_global_goal > robot_radius*1.5) // last case makes sure that don't keep adding and dropping at global goal
           {
              printf("join based on being too close right now (%f)\n", this_dist);
              need_to_join_teams = true;
@@ -931,11 +922,22 @@ void *Robot_Listner_Ad_Hoc(void * inG)
 {
   GlobalVariables* G = (GlobalVariables*)inG; 
  
+  int count = 0;
   while(G->master_reset)
   {
     // if master is resetting, then wait here while globals are reset
     G->listener_active = false;
     sleep(1);                        /// !!!!!!!!!!!!!!!!!!!! make shorter
+    count++;
+
+    if(count > 5) // problems
+    {
+ 
+      G->planning_iteration[G->agent_number]++;
+      printf("increasing planning iteration due to stall out\n");
+      G->sender_Ad_Hoc_running = false;
+      count = 0;
+    }
   }
 
   G->listener_active = true;
@@ -976,11 +978,26 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   while(!G->kill_master)
   {
     G->listener_active = false;
+    count = 0;
     while(G->master_reset)
     {
-      printf("(listener) waiting until master reset is done \n");
-      sleep(1);         // MAKE SHORTER !!!!!!!!!!!!!!!!!!
+      // if master is resetting, then wait here while globals are reset
+      G->listener_active = false;
+      sleep(1);                        /// !!!!!!!!!!!!!!!!!!!! make shorter
+      count++;
+
+      if(count > 5) // problems
+      {
+ 
+        G->planning_iteration[G->agent_number]++;
+        printf("increasing planning iteration due to stall out\n");
+        G->sender_Ad_Hoc_running = false;
+        count = 0;
+      }
     }
+
+    G->listener_active = true;
+ 
 
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
     {  
@@ -999,9 +1016,10 @@ void *Robot_Listner_Ad_Hoc(void * inG)
       }
 
       int sender_id;
+      bool fresh_data = false;
       if(planning_message_buffer[message_ptr] == 'S') // message contains robot data
       {
-        if(G->recover_all_robot_data_from_buffer(planning_message_buffer, message_ptr, sender_id))
+        if(G->recover_all_robot_data_from_buffer(planning_message_buffer, message_ptr, sender_id, fresh_data))
         {
           G->master_reset = true;   
           printf("master reset due to incriment from message \n");
@@ -1015,7 +1033,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         }
       }
 
-      if(planning_message_buffer[message_ptr] == '2' && G->InTeam[sender_id]) // it has planning data in it from our team
+      if(planning_message_buffer[message_ptr] == '2' && G->InTeam[sender_id] && fresh_data) // it has planning data in it from our team
       {
         //printf("contains planning data \n");
         message_ptr++;
