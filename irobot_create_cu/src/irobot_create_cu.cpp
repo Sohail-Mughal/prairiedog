@@ -585,7 +585,7 @@ void team_list_callback(const multi_robot_planner_cu::TeamList_CU::ConstPtr& msg
   
   uint length = msg->data.size();
 
-  if(length > InTeam.size())
+  if(length != InTeam.size())
     InTeam.resize(length, false);
 
   //printf("team includes: ");
@@ -1490,6 +1490,7 @@ void remove_first_part_of_path(vector<vector<float> >& T, int new_first_ind)
 }
 
 // similar to below but better for multi robot stuff, hopefully
+int saved_index = -1;
 int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
 {
   if(robot_pose == NULL)
@@ -1536,6 +1537,10 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
     on_path = false;
     //printf("robot is at least rad away from path\n");
   }
+  else if(dist_to_time_target > robot_rad*2) // on path but far ahead or behind of schedual, so not really on path
+  {
+    on_path = false;
+  }
   else
   {
     //printf("first_ind_within_radius: %d, last_ind_within_radius: %d\n", first_ind_within_radius_of_robot, last_ind_within_radius_of_robot);
@@ -1564,23 +1569,26 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
     if(time_ahead_of_schedual > -time_ahead_rad) // if we are ahead of schedual (or not too far behind) and off path
     {
       carrot_index = current_time_index; // steer at the point we should be at now
+      time_ahead_of_schedual = T[carrot_index][3] - T[current_time_index][3];
     }
     else  // more than a bit behind schedual and off path
     {
       int closest_point_on_path = find_closest_ind_between(T, 0, current_time_index);
       carrot_index = closest_point_on_path; // steer at the closest point along the path between the start of the path and where we should be now
+      time_ahead_of_schedual = -dist_to_time_target/.2;
     }
   }
-  //else if(dist_to_time_target < robot_rad)
-  //{
-  //  //printf("time target within rad \n");
-  //  carrot_index = current_time_index;       // steer at the time target;
-  //}
+  else if(dist_to_time_target > robot_rad && current_time_index < first_ind_within_radius_of_robot)
+  {
+    //printf("time target within rad \n");
+    carrot_index = current_time_index;       // steer at the time target;
+  }
   else if(time_ahead_of_schedual > time_ahead_rad) // too far ahead of schedual
   {
     //printf("too far ahead of schedual\n");  
     //carrot_index = closest_ind_within_radius_of_robot;  // steer based on the closest point on the path
-    carrot_index = last_ind_within_radius_of_robot;
+    //carrot_index = last_ind_within_radius_of_robot;
+    carrot_index = current_time_index;
   }
   else if(time_ahead_of_schedual >= 0) // slightly ahead of schedual or on schedual
   {
@@ -1590,15 +1598,16 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   else if(time_ahead_of_schedual > -time_ahead_rad) // slightly behind schedual
   {
     //printf("slightly behind schedual: %f\n", -time_ahead_of_schedual);
-    //carrot_index = current_time_index;                 // steer based on where we should be
-    carrot_index = last_ind_within_radius_of_robot;
+    carrot_index = current_time_index;                 // steer based on where we should be
+    //carrot_index = last_ind_within_radius_of_robot;
   }
-  else // too far behind schedual
+  else // too far behind schedual (and on path)
   {
     //printf("too far behind schedual %d\n", last_ind_within_radius_of_robot);
     carrot_index = last_ind_within_radius_of_robot;    // steer based on the the last path point within the radius of the robot
   }
 
+ 
   t_target_ind = carrot_index; // I think this is only used for visualization
 
   if(carrot_index < 0 || carrot_index >= ((int)T.size())-1)
@@ -1757,6 +1766,27 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   // adjust time if we get too far behind
   if(dist_to_time_target > robot_rad && time_ahead_of_schedual < -time_behind_adjust_thresh) // points have been problematic due to much time near the same location
   {
+
+/////// here to -->
+
+    // if not on path save the current time index, then only adjust again if taget time gets passed it
+    if(!on_path)
+    {
+      if(saved_index == -1 || saved_index <= current_time_index) // not saved
+      {
+        saved_index = current_time_index;
+      }
+      else
+      {
+        time_ahead_of_schedual = 0;
+      }
+    }
+    else
+      saved_index = -1;
+  
+/////// here <---- not yet tested with moving robots
+
+
     time_adjust += fabs(time_ahead_of_schedual);
     printf("time adjust: %f \n",time_adjust);
   }

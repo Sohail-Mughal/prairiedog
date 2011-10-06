@@ -918,86 +918,61 @@ void output_pulse(clock_t & last_listener_pulse, float pulse_time, const char* s
 }
 
 // this thread always listens for incomming messages from other robots
+bool listener_setup_flag = true;
+int in_socket;  
+int in_port;
+int my_address_length;
+int senders_address_length;
 void *Robot_Listner_Ad_Hoc(void * inG)
 {
   GlobalVariables* G = (GlobalVariables*)inG; 
- 
-  int count = 0;
-  while(G->master_reset)
-  {
-    // if master is resetting, then wait here while globals are reset
-    G->listener_active = false;
-    sleep(1);                        /// !!!!!!!!!!!!!!!!!!!! make shorter
-    count++;
+  G->listener_active = false;
 
-    if(count > 5) // problems
-    {
- 
-      G->planning_iteration[G->agent_number]++;
-      printf("increasing planning iteration due to stall out\n");
-      G->sender_Ad_Hoc_running = false;
-      count = 0;
-    }
+  struct sockaddr_in my_address, senders_address;
+  int message_length;
+
+  if(listener_setup_flag)
+  {
+    in_port = G->InPorts[G->agent_number];    
+
+    printf("listener: ad-hoc listener thread\n"); 
+  
+    // create socket
+    in_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if(in_socket < 0)  // failed to open socket
+      error("listener: Problems opening socket\n");
+  
+    // clear all memory of my_address structure
+    my_address_length = sizeof(my_address);
+    memset(&my_address, NULL, my_address_length); 
+   
+    // populate my_address structure
+    my_address.sin_family = AF_INET;
+    my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
+    my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
+  
+    // bind in_socket with my_address
+    if(bind(in_socket, (struct sockaddr *)&my_address, my_address_length)<0) 
+      error("listener: problems binding in_socket");
+  
+    senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
+    listener_setup_flag = false;
   }
 
-  G->listener_active = true;
- 
-  struct sockaddr_in my_address, senders_address;
-  int my_address_length, senders_address_length;
-  int in_socket;
-  int message_length;
-  int in_port;
-    
-  in_port = G->InPorts[G->agent_number];    
-
-  printf("listener: ad-hoc listener thread\n"); 
-  
-  // create socket
-  in_socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if(in_socket < 0)  // failed to open socket
-    error("listener: Problems opening socket\n");
-  
-  // clear all memory of my_address structure
-  my_address_length = sizeof(my_address);
-  memset(&my_address, NULL, my_address_length); 
-   
-  // populate my_address structure
-  my_address.sin_family = AF_INET;
-  my_address.sin_addr.s_addr = INADDR_ANY; // ip address of this machine
-  my_address.sin_port = htons(in_port);  // htons() converts 'number' to proper network byte order
-  
-  // bind in_socket with my_address
-  if(bind(in_socket, (struct sockaddr *)&my_address, my_address_length)<0) 
-    error("listener: problems binding in_socket");
-  
-  senders_address_length = sizeof(struct sockaddr_in);  // get the memory size of a sockaddr_in struct 
   char planning_message_buffer[max_message_size];
   //clock_t last_listener_pulse = clock();
   //float pulse_time = 1;
 
   while(!G->kill_master)
   {
-    G->listener_active = false;
-    count = 0;
-    while(G->master_reset)
+    if(G->master_reset)
     {
       // if master is resetting, then wait here while globals are reset
       G->listener_active = false;
-      sleep(1);                        /// !!!!!!!!!!!!!!!!!!!! make shorter
-      count++;
 
-      if(count > 5) // problems
-      {
- 
-        G->planning_iteration[G->agent_number]++;
-        printf("increasing planning iteration due to stall out\n");
-        G->sender_Ad_Hoc_running = false;
-        count = 0;
-      }
+      printf("listener: killing listener\n");
+      return NULL; /////////////////////////////////// killing proc here
     }
-
-    G->listener_active = true;
- 
 
     while(!G->kill_master && !G->master_reset) // this thread is responsible for reading in data from other processes
     {  
@@ -1015,6 +990,9 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         continue;
       }
 
+      if(G->master_reset)
+        break;
+
       int sender_id;
       bool fresh_data = false;
       if(planning_message_buffer[message_ptr] == 'S') // message contains robot data
@@ -1023,13 +1001,13 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         {
           G->master_reset = true;   
           printf("master reset due to incriment from message \n");
-          continue;
+          break;
         }
         if(G->JoinedTeams())
         {
           G->master_reset = true;   
           printf("master reset due to team join \n");
-          continue;
+          break;
         }
       }
 
@@ -1100,6 +1078,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
       else if(planning_message_buffer[message_ptr] == 3) // it has a kill message in it
       {
         G->kill_master = true;
+        break;
       }
       else if(planning_message_buffer[message_ptr] == 4) // only had robot data
       {
@@ -1110,7 +1089,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
         if(G->master_reset)
         {
           // during a master reset not all of a message will be read
-          continue;
+          break;
         }
         printf("listener: recieved unknown message type --\n%s\n",  &(planning_message_buffer[message_ptr]));    
       }
@@ -1118,6 +1097,7 @@ void *Robot_Listner_Ad_Hoc(void * inG)
   }
   
   // this thread terminates
+  G->listener_active = false;
   return NULL;
 }
 

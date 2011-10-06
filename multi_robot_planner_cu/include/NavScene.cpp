@@ -574,8 +574,8 @@ bool NavScene::LoadMapFromFile(const char* filename) // loads only the map porti
     bound_all[1] = bound_b;
     bound_all[2] = bound_c;
     bound_all[3] = bound_d;
-    polygon_list_alt.resize(1,bound_all);
-   
+    polygon_list_alt.resize(0);
+    polygon_list_alt.push_back(bound_all);
 
     // add all edges to an edge list
     vector<vector<vector<float> > > edge_list(0); 
@@ -721,7 +721,7 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
   float max_x = -LARGE;
   float max_y = -LARGE;  
     
-  if(false) //!G.found_single_robot_solution) // for a single robot we need to plan in the entire area
+  if(!G.found_single_robot_solution) // for a single robot we need to plan in the entire area
   {
     if(G.default_map_x_size <= 0 || G.default_map_y_size <= 0)
     {
@@ -762,8 +762,8 @@ bool NavScene::LoadFromGlobals(GlobalVariables& G) // loads the scene info from 
     // we want to add a frame of free space around the configuration (obstacles handled later)
     min_x -= G.planning_border_width;
     max_x += G.planning_border_width;
-    min_y -= G.planning_border_width;
-    max_y += G.planning_border_width;
+    min_y -= G.planning_border_width*2.0;  // NOTE *2 is hack for andrew's, the *correct* thing to do is exchange desired sub area calculated from
+    max_y += G.planning_border_width*2.0;  // bounds of subset of single robot path that goes from sub start to sub goal, and use union of all of these
   }
 
   float min_theta = 0;
