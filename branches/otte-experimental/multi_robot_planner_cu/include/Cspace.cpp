@@ -2265,7 +2265,13 @@ bool Cspace::GreedyPathSmooth(int start_smooth_ind) // starting at start_smooth_
 
 bool Cspace::FindA1DShortCut(int start_smooth_ind, vector<float>&  new_config) // attempts to find a benificial new_config based on combining one dimension of a parent with its child, returns true if it finds one (note returns the best one based on the path from start_smooth_ind
 {
-return false;
+
+  if(start_smooth_ind <= 0)
+  {
+    printf("start smooth ind <= 0\n");
+    return false;
+  }
+
   int num_robots = dims/3; 
    
   // backtrack from start_smooth_ind to goal and store nodes in a list 
@@ -2290,7 +2296,6 @@ return false;
   int parent;
   int grand_parent;
   int back_list_ind = original_path_sequence.size() - 1; // this will keep this value as we move through the list
-
   float best_cost_savings = 0;
 
   // move from front_list_ind through list toward back_list_end

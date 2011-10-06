@@ -969,6 +969,13 @@ bool find_closest_point_along_edge(const vector<float> & point, const vector<flo
   float obs_step_x = (obs_step/obs_edge_length)*(edge1[0] - edge0[0]);
   float obs_step_y = (obs_step/obs_edge_length)*(edge1[1] - edge0[1]);
 
+  if(obs_edge_length < SMALL)
+  {
+    printf("->small edge \n");
+    best_dist_to_point = LARGE;
+    return false;
+  }
+
   vector<float> obs_point = edge0;
 
   best_dist_to_point = LARGE;
@@ -1774,7 +1781,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
 {
   // Note: There are probably better ways to do this than duplicating it on each agent, but this works and runtime is only robots squared
 
-  printf("calculating sub area 1");
+  printf("calculating sub area 1\n");
 
   no_conflicts_between_single_paths = false;
 
@@ -1807,7 +1814,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         min_y = robot_paths[r][i][1];
     }
   }
-  printf("calculating sub area 2");
+  printf("calculating sub area 2\n");
   if( (max_x - min_x <= preferred_max_planning_area_side_length) && 
       (max_y - min_y <= preferred_max_planning_area_side_length) )  // then we can just use normal start and goal
   {
@@ -1836,7 +1843,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     return false;
   }
 
-  printf("calculating sub area 3");
+  printf("calculating sub area 3\n");
   // go through and find all robot vs robot first conflicts, as well as bounds on the area containing all first conflicts
   vector<vector<float> > first_conflicts(max_num_robots);
   vector<float> time_of_first_conflicts(max_num_robots, LARGE);
@@ -1912,18 +1919,23 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     }
   }
 
-  printf("calculating sub area 4");
+  printf("calculating sub area 4\n");
 
   // check if any robots did not conflict, this may happen if a multi-path was 1/2 way through planning when a new robot was added to the team
   // that does not conflict with the multi-path but does conflict with the single robot path
   // (we need a portion of their path to be in the sub area so they are accounted for) (yes, this is a bit hacky, but it shouldn't happen much)
   if(there_is_at_least_one_robot_without_conflicts) // at least one robot needs a first conflict
   {
+    printf("calculating sub area 4.1\n");
+
     // check if there is at least 1 conflict
     if(there_is_at_least_one_conflict) // there is at least one conflict
     {
       // for all robots that are in the team and do not have sub_start and sub_goal, call sub_start (and sub_goal) the closest
       // point on their path to the centroid of all start_conflicts
+
+      printf("calculating sub area 4.2\n");
+
 
       // calculate centroid
       float center_x = 0;
@@ -1943,6 +1955,8 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       }
       center_x /= num;
       center_y /= num;
+
+      printf("calculating sub area 4.3\n");
 
       vector<float> centroid(2);
       centroid[0] = center_x;
@@ -1975,9 +1989,12 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
           }
         }
       }
+      printf("calculating sub area 4.4\n");
     }
     else // no conflicts between any robots single paths
     {
+      printf("calculating sub area 4.5\n");
+
       // send a flag that lets system know that it can ignore planning a new path and can just use its single robot path
       // now that robots are in the same team, they will not try to recombine unless another robot conflicts with one or more of them
 
@@ -1992,10 +2009,14 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
         first_conflicts[i] = robot_paths[i][0];
         time_of_first_conflicts[i] = robot_paths[i][0][2];
       }
+      printf("calculating sub area 4.6\n");
+
     }
+    printf("calculating sub area 4.7\n");
+
   }
 
-  printf("calculating sub area 5");
+  printf("calculating sub area 5\n");
 
   vector<float> this_robots_first_conflict;
 
@@ -2017,7 +2038,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
       printf("...and no other agents have conflicts \n");
   }
 
-  printf("calculating sub area 6");
+  printf("calculating sub area 6\n");
 
   // init current_point to the conflict points and find the inds of edges that contain them
   vector<vector<float> > current_point = first_conflicts;
@@ -2048,7 +2069,7 @@ bool calculate_sub_goal(const vector<vector<vector<float> > > & robot_paths, con
     }
   }
 
-  printf("calculating sub area 6");
+  printf("calculating sub area 6.5\n");
 
   // expand the planning area up to the minimum size, we'll start with the first conflicts, and expand the planning area by moving it out along all robot's paths simultaniously
   bool need_to_expand_up_to_maximum = true;
