@@ -223,7 +223,7 @@ vector<vector<float> > free_space;      // updated for each search to hold subsp
 #endif
 
 bool use_smart_plan_time = false; // if min_planning_time is input <= 0 then this gets set to true, and min_planning_time is adjusted based on circumstance
-float plan_time_mult = 3;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
+float plan_time_mult = 2;         // if(use_smart_plan_time) then plan for at least plan_time_mult X time it takes to compute first solution 
 float smart_min_time_to_plan = 5; // if(use_smart_plan_time) then plan for at least smart_min_time_to_plan
 bool calculated_smart_plan_time = false; //set to true once we calcualte the above
 
@@ -1157,9 +1157,19 @@ int main(int argc, char** argv)
     }  
     robot_is_moving = false;  
 
-
+    timeval time_start_reset;  
+    gettimeofday(&time_start_reset, NULL);
     while(Globals.master_reset && (Globals.sender_Ad_Hoc_running || Globals.listener_active))
     {
+      timeval right_now;  
+      gettimeofday(&right_now, NULL);
+
+      if(difftime_timeval(right_now, time_start_reset) > 10.0) // in case listener has no chance to get a message, and thus stop blocking to sleep
+      {
+        printf("timeout while waiting for threads to stop \n");
+        break;
+      }
+
       if(Globals.sender_Ad_Hoc_running && Globals.listener_active)
         printf("master: both listener and sender are running\n");
       else if(Globals.sender_Ad_Hoc_running)
@@ -1187,10 +1197,12 @@ int main(int argc, char** argv)
     }
 
     // kick off sender thread
-    pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots, will terminate on master_reset
+    if(!Globals.sender_Ad_Hoc_running)
+      pthread_create( &Sender_thread, NULL, Robot_Data_Sync_Sender_Ad_Hoc, &Globals);  // this is used for startup, to send data to other robots, will terminate on master_reset
 
     // kick off listener thread
-    pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         
+    if(!Globals.listener_active)
+      pthread_create( &Listener_thread, NULL, Robot_Listner_Ad_Hoc, &Globals);         
  
 
 
@@ -1214,6 +1226,8 @@ int main(int argc, char** argv)
         publish_system_update(1); // if we've reset, then tell the controller
         ros::spinOnce();  
         usleep(100000); // sleep for 1/10 sec
+
+        Globals.team_member_timeout(60.0);
       }
 
       // if problem is reset then restart the planning loop
@@ -1358,6 +1372,7 @@ int main(int argc, char** argv)
         ros::spinOnce(); 
 
         usleep(Globals.sync_message_wait_time*1000000);
+        Globals.team_member_timeout(60.0);
       } 
 
       if(Globals.master_reset)
@@ -1566,8 +1581,9 @@ int main(int argc, char** argv)
       // record how much time left there is for planning (on this agent)
       Globals.planning_time_remaining[Globals.agent_number] = min_clock_to_plan - actual_solution_time;
 
-      gettimeofday(&temp_time, NULL);
-      Globals.last_update_time[Globals.agent_number] = temp_time;
+      timeval new_temp_time;
+      gettimeofday(&new_temp_time, NULL);
+      Globals.last_update_time[Globals.agent_number] = new_temp_time;
   
       if(mode == 0 || mode == 1 || (mode == 2 && agent_number == 0))   // a planning agent
       {
@@ -1576,6 +1592,15 @@ int main(int argc, char** argv)
 
         float time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
       
+        float second_phase_time_total = min_clock_to_plan - actual_solution_time;
+
+        timeval time_now;  
+        gettimeofday(&time_now, NULL);
+
+        timeval second_phase_start_time;  
+        gettimeofday(&second_phase_start_time, NULL);
+
+
         printf("time left to plan start %f \n", time_left_to_plan);
 
      //   // we want to keep planning for the maximum of time_left_to_plan or message_wait_time
@@ -1584,7 +1609,8 @@ int main(int argc, char** argv)
      //     this_time_to_plan = time_left_to_plan;
      // 
         int last_time_left_floor = (int)time_left_to_plan;
-        while(time_left_to_plan > 0.0 && (!Globals.master_reset  || !Globals.found_single_robot_solution))
+//        while(time_left_to_plan > 0.0 && (!Globals.master_reset  || !Globals.found_single_robot_solution))
+        while(second_phase_time_total > difftime_timeval(time_now, second_phase_start_time) && (!Globals.master_reset  || !Globals.found_single_robot_solution))
         {    
           // Note: want a good solution for single robot, so force to find one using all planning time before allow reset by second second case
 
@@ -1593,7 +1619,8 @@ int main(int argc, char** argv)
           
           if(last_time_left_floor != (int)time_left_to_plan)
           {
-            printf("\nmaster: time left to plan: %f\n", time_left_to_plan);
+            // printf("\nmaster: time left to plan: %f\n", time_left_to_plan);
+            printf("\nmaster: time left to plan: %f\n", second_phase_time_total - difftime_timeval(time_now, second_phase_start_time) );
             Globals.output_state_data();
             last_time_left_floor = (int)time_left_to_plan;
           }
@@ -1643,7 +1670,9 @@ int main(int argc, char** argv)
           publish_team_list(Globals.InTeam);
           ros::spinOnce();
        
-          time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
+          gettimeofday(&time_now, NULL);
+
+        //  time_left_to_plan = Globals.calculate_time_left_for_planning();  // this also considers when other robots are expected to move
 
         //  // we want to keep planning for the minimum of time_left_to_plan or message_wait_time
         //  this_time_to_plan = message_wait_time;
@@ -1750,6 +1779,7 @@ int main(int argc, char** argv)
         ros::spinOnce();
 
         usleep(sync_message_wait_time*1000000);
+        Globals.team_member_timeout(60.0);
       }
       now_time = clock();
     
@@ -2216,6 +2246,8 @@ int main(int argc, char** argv)
       MultAgSln.GetMessages(startc, goalc);
       MultAgSln.SendMessageUDP(prob_success);
  
+     Globals.team_member_timeout(60.0);
+
       if(Globals.master_reset)
       {
         break;  // problem has been changed

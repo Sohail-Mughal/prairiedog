@@ -20,6 +20,8 @@ class GlobalVariables
    
    int populate_buffer_with_all_robot_data(char* buffer); // puts data about all robots the sender knows about into the buffer, returns the number of chars that it required
 
+   bool team_member_timeout(float time_out); // checks if it has been longer since time_out if we have recieved a message from any team member, if so, then they are dropped from the team
+
    bool recover_all_robot_data_from_buffer(char* buffer, int &index, int& sender_id, bool &fresh_data); // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
 
    float calculate_time_left_for_planning();  // based on info from all agents, this returns the time that remains for planning
@@ -82,6 +84,8 @@ class GlobalVariables
    float min_clock_to_plan;
 
    vector<timeval> last_path_conflict_check_time; // holds the last time we checked if this agent conflicts with each other agent
+
+   vector<timeval> last_message_from_time; // holds the last time we recieved any sort of message from each agent
 
    int agent_number;    // this agent's global id
      
