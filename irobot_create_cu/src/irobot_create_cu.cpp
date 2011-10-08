@@ -1527,19 +1527,20 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   int first_ind_within_radius_of_robot = find_first_ind_within_radius_of_robot(T, robot_rad);
   int last_ind_within_radius_of_robot = find_last_ind_within_radius_of_robot_starting_at(T, robot_rad, first_ind_within_radius_of_robot); 
   int closest_ind_within_radius_of_robot = find_closest_ind_between(T, first_ind_within_radius_of_robot, last_ind_within_radius_of_robot);
+  int closest_point_on_path = find_closest_ind_between(T, 0, current_time_index);
 
   if(((int)T.size())-10 < last_ind_within_radius_of_robot && last_ind_within_radius_of_robot < (int)T.size()) 
     printf("on the goal %d\n", T.size());
 
-  if(first_ind_within_radius_of_robot < 0)
+  if(first_ind_within_radius_of_robot < 0) // at least robot rad away from any point on the path
   {
-    // at least robot rad away from any point on the path
     on_path = false;
-    //printf("robot is at least rad away from path\n");
+    time_ahead_of_schedual = -dist_to_time_target/.2;
   }
   else if(dist_to_time_target > robot_rad*2) // on path but far ahead or behind of schedual, so not really on path
   {
     on_path = false;
+    time_ahead_of_schedual = T[closest_ind_within_radius_of_robot][3] - T[current_time_index][3];
   }
   else
   {
@@ -1569,13 +1570,10 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
     if(time_ahead_of_schedual > -time_ahead_rad) // if we are ahead of schedual (or not too far behind) and off path
     {
       carrot_index = current_time_index; // steer at the point we should be at now
-      time_ahead_of_schedual = T[carrot_index][3] - T[current_time_index][3];
     }
     else  // more than a bit behind schedual and off path
     {
-      int closest_point_on_path = find_closest_ind_between(T, 0, current_time_index);
       carrot_index = closest_point_on_path; // steer at the closest point along the path between the start of the path and where we should be now
-      time_ahead_of_schedual = -dist_to_time_target/.2;
     }
   }
   else if(dist_to_time_target > robot_rad && current_time_index < first_ind_within_radius_of_robot)
@@ -1631,7 +1629,8 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   {
     if(on_a_point)
     {
-      if(carrot_index < current_time_index)
+      // use the last path coord at the point that is not ahead of schedual
+      if(carrot_index < current_time_index && Edist(T[carrot_index][0], T[carrot_index][1], T[current_time_index][0], T[current_time_index][1]) < robot_rad/2)
         carrot_index = current_time_index;
 
       if(Edist(T[carrot_index][0], T[carrot_index][1], robot_pose->x, robot_pose->y) < robot_rad) // basically at point
@@ -1739,8 +1738,10 @@ int follow_trajectory2(vector<vector<float> >& T, float time_look_ahead)
   setSpeed(TARGET_SPEED);
   setTurn(TARGET_TURN);   
 
+//printf("path length: %d\n", T.size());
 
-  if(on_path && first_ind_within_radius_of_robot >= 1) // remove the part of the path that we have already traversed from the start up to the current time index or the last point at the same location as the first point within robot radius, whichever is first
+
+  if(on_path && first_ind_within_radius_of_robot >= 1 && time_ahead_of_schedual > 0 && dist_to_time_target < robot_rad) // remove the part of the path that we have already traversed from the start up to the current time index or the last point at the same location as the first point within robot radius, whichever is first
   {
     int new_first_ind = first_ind_within_radius_of_robot-1;
     if(first_ind_within_radius_of_robot > current_time_index-1)

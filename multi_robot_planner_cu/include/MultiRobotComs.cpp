@@ -84,6 +84,7 @@ void GlobalVariables::Populate(int num_of_agents)
   planning_time_remaining.resize(number_of_agents, LARGE);
   last_update_time.resize(number_of_agents);
   last_path_conflict_check_time.resize(number_of_agents);
+  last_message_from_time.resize(number_of_agents);
 
   printf("resetting planning start time\n");
   gettimeofday(&start_time_of_planning, NULL);  
@@ -352,11 +353,49 @@ int GlobalVariables::populate_buffer_with_all_robot_data(char* buffer)
 }
 
 
+bool GlobalVariables::team_member_timeout(float time_out) // checks if it has been longer since time_out if we have recieved a message from any team member, if so, then they are dropped from the team
+{
+  timeval time_now;  
+  gettimeofday(&time_now, NULL);
+  for(int i = 0; i < number_of_agents; i++)
+  {
+    if(i == agent_number)
+      continue;
+    if(!InTeam[i])
+      continue;
+
+    if(difftime_timeval(time_now, last_message_from_time[i]) > time_out) // this agent has timed out
+    {
+      printf("------------------- agent %d has timed out (dropping them) ----------------------\n", i);
+
+      InTeam[i] = false;
+      int loc_i = local_ID[i];
+      local_ID[i] = -1; 
+        
+      // swap local index with the last one
+      global_ID[loc_i] = global_ID[team_size-1];         
+      local_ID[global_ID[loc_i]] = loc_i;
+   
+      team_size--;
+      global_ID.resize(team_size);
+
+      planning_iteration[agent_number]++;
+      master_reset = true;
+      return true;
+    }
+  }
+  return false;
+}
+
+
 bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &index, int &sender_id, bool &fresh_data) // gets robot data out of the buffer, updates index, returns true if the planning iteration changes due to what was in the buffer
 {
   fresh_data = false;
   bool need_to_join_teams = false;
   bool planning_iteration_increase = false;
+
+  timeval time_now;  
+  gettimeofday(&time_now, NULL);
 
   // holds normal data
   int ag_gbl_id;
@@ -409,6 +448,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
 
     bool overlap = false;
 
+    last_message_from_time[ag_gbl_id] = time_now;
 
     // see if we need to disolve team
     if(nav_st == 6 && InTeam[ag_gbl_id] && nav_state[agent_number] != 6)
@@ -677,6 +717,7 @@ bool GlobalVariables::recover_all_robot_data_from_buffer(char* buffer, int &inde
     {
       pose_iteration[ag_gbl_id] = pose_it;
       last_known_pose[ag_gbl_id] = last_pose;
+      last_message_from_time[ag_gbl_id] = time_now;
     }
 
     if(planning_it_single_sln >= planning_iteration_single_solutions[ag_gbl_id]) // new single robot plan iteration
@@ -833,6 +874,9 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
     }
     else
     {
+continue; // took out dependency on other robots here 
+
+//////////
       planning_time_remaining[i] -= time_elapsed_since_last;
       last_update_time[i] = time_now;
       //printf("%d's planning time calc: %f \n", i, planning_time_remaining[i]);
@@ -840,6 +884,7 @@ float GlobalVariables::calculate_time_left_for_planning()  // based on info from
 
     if(planning_time_remaining[i] < time_for_planning_remaining)
       time_for_planning_remaining = planning_time_remaining[i];
+
   }
   
   // reset this agent's time left for planning to be equal to the (minimum) ammount of time left for planning by anybody
