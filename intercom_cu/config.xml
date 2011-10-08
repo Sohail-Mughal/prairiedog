@@ -4,63 +4,63 @@
     <broadcast>
       <message type="0" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>    
       <message type="1" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="2" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="3" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="4" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="5" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="10" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <nonmessage type="12" mode="2" protocol="1">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </nonmessage>  
       <message type="13"/>
       <message type="14" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="15" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="16" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="17" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="18"/>
@@ -78,63 +78,63 @@
        <broadcast>
       <message type="0" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>    
       <message type="1" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="2" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="3" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="4" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="5" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="10" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <nonmessage type="12" mode="2" protocol="1">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </nonmessage>  
       <message type="13"/>
       <message type="14" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="15" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="16" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="17" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="18"/>
@@ -152,63 +152,63 @@
       <broadcast>
       <message type="0" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>    
       <message type="1" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="2" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="3" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="4" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="5" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="10" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <nonmessage type="12" mode="2" protocol="1">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </nonmessage>  
       <message type="13"/>
       <message type="14" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="15" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="16" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="17" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>
       <message type="18"/> 
@@ -226,63 +226,63 @@
       <broadcast>
       <message type="0" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>    
       <message type="1" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="2" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="3" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="4" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="5" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="10" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <nonmessage type="12" mode="2" protocol="1">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </nonmessage>  
       <message type="13"/>
       <message type="14" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="15" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="16" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="17" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>
       <message type="18"/> 
@@ -300,63 +300,63 @@
       <broadcast>
       <message type="0" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message>    
       <message type="1" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="2" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="3" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="4" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="5" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="10" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <nonmessage type="12" mode="2" protocol="1">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </nonmessage>  
       <message type="13"/>
       <message type="14" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="15" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="16" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="17" mode="2">
         <to>
-          <agent id="5"/>  
+          <agent id="6"/>  
         </to>
       </message> 
       <message type="18"/>
@@ -371,6 +371,80 @@
     </receive> 
   </agent>
   <agent id="5" ip="192.168.22.6">
+      <broadcast>
+      <message type="0" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message>    
+      <message type="1" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="2" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="3" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="4" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="5" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="10" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <nonmessage type="12" mode="2" protocol="1">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </nonmessage>  
+      <message type="13"/>
+      <message type="14" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="15" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="16" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="17" mode="2">
+        <to>
+          <agent id="6"/>  
+        </to>
+      </message> 
+      <message type="18"/>
+    </broadcast>
+    <receive>
+      <message type="6"/>
+      <message type="7"/>
+      <message type="8"/>
+      <message type="9"/>
+      <nonmessage type="11"/>
+      <message type="18" mode="1"/>
+    </receive> 
+  </agent>
+  <agent id="6" ip="192.168.22.7">
     <broadcast>
       <message type="6" mode="1"/>
       <message type="7" mode="1"/>
