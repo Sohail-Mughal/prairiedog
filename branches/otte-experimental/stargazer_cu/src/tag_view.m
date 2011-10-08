@@ -2,7 +2,7 @@
 % on its number
 
 function tag_view(num,n)
-
+num
 actual_num = num + 1 + 2^(n-1) + 2^(n-1) * 16^(n-1);          % adjust for corner tags
 raw = dec2bin(actual_num);                                    % turn to raw binary string
 formatted = fliplr([repmat('0',[1,(16)-length(raw)]) , raw]); % flip and pad
@@ -23,3 +23,9 @@ plot(xcoords(:), ycoords(:), 'o',      ...
                 'MarkerFaceColor','r', ...
                 'MarkerSize',20)
 axis([0 n+1 0 n+1])
+
+% next to exit sign in big room: 9266
+% corner of ceiling off of exit and polr in big room: 9250
+% by E202: 1760
+
+%e209

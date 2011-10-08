@@ -4,8 +4,8 @@
   </group>
 
     <group ns="intercom_cu">
-    <param name="my_id" type="int" value="5" />
-    <param name="num_agents" type="int" value="6" />
+    <param name="my_id" type="int" value="6" />
+    <param name="num_agents" type="int" value="7" />
     <param name="config_file" type="string" value="../config.xml" />
   </group>
   <node name="intercom_cu" pkg="intercom_cu" type="intercom_cu" cwd="node" respawn="false" output="screen"/>
@@ -28,7 +28,7 @@
   <node name="mapper_cu" pkg="mapper_cu" type="mapper_cu" cwd="node" respawn="true" output="screen" />
 
   <group ns="visualization_cu">
-    <param name="num_robots" type="int" value="5" />
+    <param name="num_robots" type="int" value="6" />
   </group>
   <node name="visualization_cu" pkg="visualization_cu" type="visualization_cu" output="screen" />
 

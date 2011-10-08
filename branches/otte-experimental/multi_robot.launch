@@ -64,7 +64,7 @@
     <param name="base_ip" type="string" value="192.168.22" />
     <param name="robot_radius" type="double" value="0.2" />
     <param name="safety_distance" type="double" value="0.1" />
-    <param name="rrt_prob_at_goal" type="double" value="0.8" />
+    <param name="rrt_prob_at_goal" type="double" value="0.01" />
     <param name="rrt_move_max" type="double" value="1" />
     <param name="rrt_theta_max" type="double" value="0.7853" />
     <param name="rrt_resolution" type="double" value="0.03" />
