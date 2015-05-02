@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<package>
+  <name>launcher_cu</name>
+  <version>0.1.0</version>
+  <description>The launcher_cu package</description>
+  <maintainer email="sohail.mughal@uni-rostock.de">Sohail Mughal</maintainer>
+  <license>GPLv3</license>
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>
