@@ -1,0 +1,5 @@
+<launch>
+  <node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../pseudolites.xml" output="screen" />
+  <!--node name="stargazer_cu" pkg="stargazer_cu" type="stargazer_cu" cwd="node" args="-c ../command_sets.xml -f ../pseudolites.xml" respawn="true" output="screen" /-->
+
+</launch>

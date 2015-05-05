@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package>
+  <name>mapper_cu</name>
+  <version>0.1.0</version>
+  <description>A Mapper for a 2D environment</description>
+  <maintainer email="sohail.mughal@uni-rostock.de">Sohail Mughal</maintainer>
+  <license>GPLv3</license>
+
+  <url type="website">http://correll.cs.colorado.edu/pmwiki/index.php/Main/PrairieDog</url>
+
+  <author email="Michael.Otte@example.com">Michael Otte</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+ 
+  <build_depend>roscpp</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>hokuyo_listener_cu</build_depend>
+  <build_depend>tf</build_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>nav_msgs</run_depend>
+  <run_depend>geometry_msgs</run_depend> 
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>hokuyo_listener_cu</run_depend>
+  <run_depend>tf</run_depend>
+</package>

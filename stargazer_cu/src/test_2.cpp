@@ -77,7 +77,7 @@ int main ( int argc, char ** argv ) {
 
   // Set the default values
   const char * pseudo_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/pseudolites.xml";
-  const char * command_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/example1.xml";
+  const char * command_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/example2.xml";
   const char * stargazer_name = "new_stargazer";
   const char * port_name = "/dev/stargazer";
 
@@ -112,25 +112,38 @@ int main ( int argc, char ** argv ) {
         ros::Subscriber kill_sub = n.subscribe("/cu/killsg", 1, kill_stargazer);
 	ros::Rate loop_rate(1000);
 
-  // Load the xml files
-  Pseudolite pseudo_1b50(pseudo_file);
+  	// Load the xml files
+  	Pseudolite pseudo_1b50(pseudo_file);
 
-  // Setup the serial port
+  	// Setup the serial port
 	enum state_counter { waiting_for_STX, reading_data, processing };
 	enum state_counter STATE;
 	int port = setup_serial_port(port_name);
 
-  // load configuration file to load things up
-  setup_stargazer( port, n, loop_rate, command_file );
+  	// load configuration file to load things up
+  	setup_stargazer( port, n, loop_rate, command_file );
   
-	STATE = waiting_for_STX;
+
+    STATE = waiting_for_STX;
+
 	while ( n.ok() && !kill) {
-		// waiting for STX		
+		// waiting for STX
+		ROS_INFO("Waiting for data."); 	
 		memset(sensor_data, '\0', sizeof(sensor_data));
+		/*
 		while ( sensor_data[0] != '~' ) {
 			read ( port, sensor_data, 1 );
+			printf("[%s]", sensor_data);
+			if(strcmp(rec_msg, response_start))
+				loop_rate.sleep();
 		}
-		
+		*/
+		while (n.ok()) {
+			read ( port, sensor_data, 1 );
+			printf("[%s]", sensor_data);
+			if(strcmp(sensor_data, "~")) break;
+			loop_rate.sleep();
+		}
 		// reading data:
 		i = 0;
 		while ( sensor_data[i] != '`' ) {
@@ -146,7 +159,6 @@ int main ( int argc, char ** argv ) {
 		
 	}
 	free( sensor_data );
-
 }
 
 void kill_stargazer(const std_msgs::Int8::ConstPtr& msg)
@@ -157,6 +169,7 @@ void kill_stargazer(const std_msgs::Int8::ConstPtr& msg)
 
 void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data) {
 
+	ROS_INFO("Processing and publishing data.");
 	char mode;
 	float angle, x, y;
 	int ID;
@@ -282,68 +295,74 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	
 	// iterate through the command categories in the xml file, since there could be multiple sets of command categories.
 	// The one we are looking for is stored in cmd_init_set
-	printf("step1\n");
+	ROS_INFO("Loading init command configuration.");
 	do
 	{
 		cmd_category = (TiXmlElement *)(parent->IterateChildren( cmd_category ) );
 	} while ( strcmp( (cmd_category->Attribute("title")), cmd_init_set ) != 0 );
 
-	printf("step2\n");
+	ROS_INFO("Setup stargazer started.");
 	// iterate through sending commands, almost all of which come with its own response
 	// Make sure the node is ok to talk, and while there are still commands to send
-	while ( n.ok() && ( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child )) ) )
+	while (( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child )) ) )
 	{
 		switch ( STATE )
 		{
 			case waiting_for_STX:
-			    printf("waiting_for_STX\n");
+			    ROS_INFO("waiting_for_STX");
+			    
 				// Waiting for response from card
-				strcpy( rec_msg, "\0");
+				//strcpy( rec_msg, "\0");
+				memset(rec_msg, '\0', sizeof(rec_msg));
+				
 				// looking for a ~ to indicate the start of a response, as set at the top of this function
-				while ( n.ok() && (strcmp( rec_msg, response_start) != 0)) {
-					//printf("read port:\n");
+				while (n.ok()) {
 					read ( port, rec_msg, 1 );
-					printf("[%s]", rec_msg);
+					//printf("[%s]", rec_msg);
+					if(strcmp(rec_msg, response_start)) break;
 					loop_rate.sleep();
 				}
-				// once a response is on its way, read it
+				
 				STATE = reading_data;
 				break;
 
 			case reading_data:
-				printf("reading_data\n");
+				ROS_INFO("State:reading_data.");
 				i = 0;
 				// read the incoming response. The response
 				// ends with a ` character as set at the top of the function
-				//temp =  rec_msg;
+				
 				while ( strcmp(rec_msg+i, cmd_end) != 0 ) {
 					i++;
-					if ( read ( port, rec_msg, 1 ) )
+					if ( read ( port, rec_msg+i, 1 ) )
         				{
 						// Only want to read one response at a time
 						// as part of initializing parameters
 						// so go to next state
-        					//rec_msg = rec_msg + i;
-        					//rec_msg = temp;
+							//printf("[%s]:", rec_msg);
 							STATE = send_cmd;
-							printf("rec_msg[%s]\n", rec_msg);
-							//sleepcp(10);
 					}
 					else {
-                        //ROS_INFO("Uh oh, couldn't read properly. Trying again");
+                        ROS_INFO("Uh oh, couldn't read properly. Trying again");
                     }
+
 				}
+				ROS_INFO("Response:[%s]", rec_msg);
 
 	      // Check if the received data is a parameter response, starting with ~!
+		   		/*
 	      sscanf(rec_msg, "~!%s|%s`", &check_cmd, &check_value);
 	      if ( strcmp(rec_msg, send_msg) ) // Make sure the sent command is same as received
 	      	ROS_INFO("Correctly set %s to %s", &check_cmd, &check_value);
 	      else ROS_INFO("Warning: Different commands! Sent %s, received %s", send_msg, rec_msg);
-	            sleepcp(15);
+	      		*/
+	          
+	            sleep(1);
 				break;
 
 			case send_cmd:
-			    printf("send_cmd\n");
+			    ROS_INFO("State:send_cmd");
+			    memset(send_msg, '\0', sizeof(send_msg));
 				// get command and value from xml
 				command = cmd_child->Attribute("command");
 				value = cmd_child->Attribute("value");
@@ -357,18 +376,16 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 				}
 				strcat(send_msg, cmd_end);
 
-				ROS_INFO("Setup-Stargazer: Sending command %s\n",send_msg);
+				ROS_INFO("Command to send:[%s].",send_msg);
 				i=0;
 				do {  
-					// send the command through the serial port
-					if ( ! write ( port, send_msg+i, 1) )
-            					ROS_INFO("Uh Oh, couldn't send command");
+            		if ( ! write ( port, send_msg+i, 1) )
+            			ROS_INFO("Uh Oh, couldn't send command");
 					if(!strcmp(temp, cmd_end)) break;
             		i++;
             		temp = send_msg+i;
             		sleepcp(50);
 				} while (n.ok());
-
 				STATE = waiting_for_STX;
 				break;
 
@@ -387,5 +404,6 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	// free( cmd_end );
 	// free( command );
 	// free( value );
+	ROS_INFO("Setup stargazer done."); 
 }
 

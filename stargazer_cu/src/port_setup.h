@@ -6,14 +6,14 @@
 #include <termios.h>
 #include <fcntl.h>
 
-int setup_serial_port ( const char * portname ) {
-
+int setup_serial_port ( const char * portname ) 
+{
 	struct termios toptions;
 	int fd;
 	//int val_ifread;
 	//char * sensor_data;
 	//sensor_data = (char *)malloc(40*sizeof(char));
-	//char * my_port = "/dev/ttyUSB0";
+	//char * my_port = "/dev/ttyUSB1";
 
 	fd = open( portname, O_RDWR | O_NOCTTY );
 	if ( fd == -1 ) {
@@ -52,4 +52,4 @@ int setup_serial_port ( const char * portname ) {
 		exit(-1);
 	}
 	return fd;
-	}
+}

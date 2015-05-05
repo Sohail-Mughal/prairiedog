@@ -1,7 +1,5 @@
 <?xml version="1.0" ?>
-<!-- These commands in each parent don't have to be in order, but they should. YOU MUST INCLUDE the CalcStop or CalcStart command. Note that the necessary ~# | and ` string format parameters specific to the pseudolite system will be included in the hagisonic code rather than here. Additionally, we have hardcoded the size of the command for memory constraints, so the length of the command and value should be under 30 characters. For the pseudolite, this should not be a problem. -->
 <PseudoLiteCommandsRoot>
-  <!-- This is the standard set of commands to initialize the stargazer. Other defaulted command values can be specified in a different xml child -->
   <PseudoLiteCommandSet title="standard_init">
     <PseudoCmd command="CalcStop" value=""> </PseudoCmd>
     <PseudoCmd command="ThrAlg" value="Auto"> </PseudoCmd>

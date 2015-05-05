@@ -1,50 +1,5 @@
-/*  
- *  Copyrights:
- *  Nikos Arechiga 2009
- *  Maciej Stachura, Apretim Shaw, Tony Carfang, Jaeheon Jeong, Sept. 2009
- *  Michael Otte Sept. 2009
- *
- *  This file is part of Stargazer_CU.
- *
- *  Stargazer_CU is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Stargazer_CU is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Stargazer_CU. If not, see <http://www.gnu.org/licenses/>.
- *
- *
- *  If you require a different license, contact Michael Otte at
- *  michael.otte@colorado.edu
- *
- * Initialize the robot with proper parameters for the proper environment
- * This involves reading in the global world XML file that represents
- * pseudolite positions, and setting the configuration parameters defined in the configuration xml file. The expected parameters from the config file are as follows:
- *   ThrAlg: To determine how to get ThrVal, Auto or Manual. We are assigning Auto
- *   MarkType: To set up landmark type by use, Home (3x3 pseudolites, 31 ids), or Office (4x4, 4095 IDs)
- *   MarkDim: To set up landmark type by height. HDL2-2 for our case, which is between 1.1 and 2.9 meters, this means MarkDim 1
- *   MapMode: Determine whether map building mode is executed or not. There are start and stop. We are setting up the world map, so default 'Stop'
- *   MarkMode: To determine whether landmarks are used independently under Alone Modoe or dependently under Map Mode, we are fine with default 'Alone'
- *   ThrVal: Threshold level to reject external turbulence, recommended value between 210 and 240. - Not needed for Auto
- *   MarkHeight: Distance from a StarGazer to a landmark, in our case, height of the ceiling from the floor minus the mounted height of the StarGazer - 2140 mm
- *
- *   Created by: Nikos Arechiga 2009
- *   Edited by: Maciej Stachura, Apretim Shaw, Tony Carfang, and JJ, Sept. 2009
- *   Edited by: Michael Otte Sept. 2009 to send messages to a different topic  
- *
- *   Note: this file includes code from tinyxml
- */
-
-
-
 #include <stdio.h>
-#include "port_setup.h"
+#include <serial_communication.h>
 #include <ros/ros.h>
 #include <unistd.h>
 #include <std_msgs/Int8.h>
@@ -54,6 +9,8 @@
 #include "../include/pseudo_obj.h"
 #include "../include/tinyxml/tinyxml.h"
 #include <time.h>
+#include <iostream>
+#include <string>
 
 bool kill = false;
 
@@ -77,7 +34,7 @@ int main ( int argc, char ** argv ) {
 
   // Set the default values
   const char * pseudo_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/pseudolites.xml";
-  const char * command_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/example1.xml";
+  const char * command_file = "/home/user/ros_ws/indigo/catkin_ws/src/prairiedog/stargazer_cu/example2.xml";
   const char * stargazer_name = "new_stargazer";
   const char * port_name = "/dev/stargazer";
 
@@ -112,25 +69,31 @@ int main ( int argc, char ** argv ) {
         ros::Subscriber kill_sub = n.subscribe("/cu/killsg", 1, kill_stargazer);
 	ros::Rate loop_rate(1000);
 
-  // Load the xml files
-  Pseudolite pseudo_1b50(pseudo_file);
+  	// Load the xml files
+  	Pseudolite pseudo_1b50(pseudo_file);
 
-  // Setup the serial port
+  	// Setup the serial port
 	enum state_counter { waiting_for_STX, reading_data, processing };
 	enum state_counter STATE;
-	int port = setup_serial_port(port_name);
+	int port = 0;
+	//int port = setup_serial_port(port_name);
 
-  // load configuration file to load things up
-  setup_stargazer( port, n, loop_rate, command_file );
+  	// load configuration file to load things up
+  	setup_stargazer( port, n, loop_rate, command_file );
   
-	STATE = waiting_for_STX;
+    /*
+    STATE = waiting_for_STX;
+
 	while ( n.ok() && !kill) {
-		// waiting for STX		
+		// waiting for STX
+		ROS_INFO("Waiting for data."); 	
 		memset(sensor_data, '\0', sizeof(sensor_data));
-		while ( sensor_data[0] != '~' ) {
+		while (n.ok()) {
 			read ( port, sensor_data, 1 );
+			printf("[%s]", sensor_data);
+			if(strcmp(sensor_data, "~")) break;
+			loop_rate.sleep();
 		}
-		
 		// reading data:
 		i = 0;
 		while ( sensor_data[i] != '`' ) {
@@ -145,8 +108,8 @@ int main ( int argc, char ** argv ) {
 		ros::spinOnce();
 		
 	}
+	*/
 	free( sensor_data );
-
 }
 
 void kill_stargazer(const std_msgs::Int8::ConstPtr& msg)
@@ -157,6 +120,7 @@ void kill_stargazer(const std_msgs::Int8::ConstPtr& msg)
 
 void process_and_send_data ( char * input_data, ros::Publisher * data_pub, ros::Publisher * marker_pub, Pseudolite p_data) {
 
+	ROS_INFO("Processing and publishing data.");
 	char mode;
 	float angle, x, y;
 	int ID;
@@ -238,6 +202,8 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	const char * cmd_start = "~#"; // Special symbols for pseudolite as a start command sequence
 	const char * cmd_end = "`"; // special end command sequence
 	const char * response_start = "~";
+	std::string port_name("/dev/stargazer");
+	SerialCommuniucation serial_comm(port_name);
 
 	// states for interacting with the hagisonic board
 	enum state_counter { waiting_for_STX, reading_data, send_cmd };
@@ -282,68 +248,85 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 	
 	// iterate through the command categories in the xml file, since there could be multiple sets of command categories.
 	// The one we are looking for is stored in cmd_init_set
-	printf("step1\n");
+	ROS_INFO("Loading init command configuration.");
 	do
 	{
 		cmd_category = (TiXmlElement *)(parent->IterateChildren( cmd_category ) );
 	} while ( strcmp( (cmd_category->Attribute("title")), cmd_init_set ) != 0 );
 
-	printf("step2\n");
+	ROS_INFO("Setup stargazer started.");
 	// iterate through sending commands, almost all of which come with its own response
 	// Make sure the node is ok to talk, and while there are still commands to send
-	while ( n.ok() && ( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child )) ) )
+	bool is_loop_continue = true;
+
+	if(!( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child ))))
+		is_loop_continue = false;
+
+	while (is_loop_continue )
 	{
 		switch ( STATE )
 		{
 			case waiting_for_STX:
-			    printf("waiting_for_STX\n");
+			    ROS_INFO("waiting_for_STX");
+			    
 				// Waiting for response from card
-				strcpy( rec_msg, "\0");
+				//strcpy( rec_msg, "\0");
+				memset(rec_msg, '\0', sizeof(rec_msg));
+				
 				// looking for a ~ to indicate the start of a response, as set at the top of this function
-				while ( n.ok() && (strcmp( rec_msg, response_start) != 0)) {
-					//printf("read port:\n");
-					read ( port, rec_msg, 1 );
-					printf("[%s]", rec_msg);
+				while (n.ok()) {
+					//read ( port, rec_msg, 1 );
+					serial_comm.readSerial(rec_msg);
+					//printf("[%s]\n", rec_msg);
+					if(strcmp(rec_msg, response_start)) break;
 					loop_rate.sleep();
 				}
-				// once a response is on its way, read it
+				
 				STATE = reading_data;
 				break;
 
 			case reading_data:
-				printf("reading_data\n");
+				ROS_INFO("State:reading_data.");
 				i = 0;
 				// read the incoming response. The response
 				// ends with a ` character as set at the top of the function
-				//temp =  rec_msg;
+				
 				while ( strcmp(rec_msg+i, cmd_end) != 0 ) {
 					i++;
-					if ( read ( port, rec_msg, 1 ) )
+					//if ( read ( port, rec_msg+i, 1 ) )
+					  if (serial_comm.readSerial(rec_msg+i))
         				{
 						// Only want to read one response at a time
 						// as part of initializing parameters
 						// so go to next state
-        					//rec_msg = rec_msg + i;
-        					//rec_msg = temp;
+							//printf("[%s]:", rec_msg);
 							STATE = send_cmd;
-							printf("rec_msg[%s]\n", rec_msg);
-							//sleepcp(10);
 					}
 					else {
-                        //ROS_INFO("Uh oh, couldn't read properly. Trying again");
+                        ROS_INFO("Uh oh, couldn't read properly. Trying again");
                     }
-				}
 
-	      // Check if the received data is a parameter response, starting with ~!
-	      sscanf(rec_msg, "~!%s|%s`", &check_cmd, &check_value);
-	      if ( strcmp(rec_msg, send_msg) ) // Make sure the sent command is same as received
-	      	ROS_INFO("Correctly set %s to %s", &check_cmd, &check_value);
-	      else ROS_INFO("Warning: Different commands! Sent %s, received %s", send_msg, rec_msg);
-	            sleepcp(15);
-				break;
+				}
+				//printf("\n");
+				i++;
+				strcpy(rec_msg+i, "\0");
+				ROS_INFO("Response:[%s]", rec_msg);
+
+		  		if(!( cmd_child = (TiXmlElement *)(cmd_category->IterateChildren( cmd_child ))))
+		  			is_loop_continue = false;
+
+	      		// Check if the received data is a parameter response, starting with ~!
+
+	      		if ( strcmp(rec_msg, send_msg) ) // Make sure the sent command is same as received
+	      			ROS_INFO("Correctly set %s to %s", send_msg, rec_msg);
+	      		else 
+	      			ROS_INFO("Warning: Different commands! Sent %s, received %s", send_msg, rec_msg);
+	            sleep(1);
+			break;
 
 			case send_cmd:
-			    printf("send_cmd\n");
+			    ROS_INFO("State:send_cmd");
+			    memset(send_msg, '\0', sizeof(send_msg));
 				// get command and value from xml
 				command = cmd_child->Attribute("command");
 				value = cmd_child->Attribute("value");
@@ -357,18 +340,16 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 				}
 				strcat(send_msg, cmd_end);
 
-				ROS_INFO("Setup-Stargazer: Sending command %s\n",send_msg);
+				ROS_INFO("Command to send:[%s].",send_msg);
 				i=0;
 				do {  
-					// send the command through the serial port
-					if ( ! write ( port, send_msg+i, 1) )
-            					ROS_INFO("Uh Oh, couldn't send command");
+            		if ( ! serial_comm.writeSerial(send_msg+i) )
+            			ROS_INFO("Uh Oh, couldn't send command");
 					if(!strcmp(temp, cmd_end)) break;
             		i++;
             		temp = send_msg+i;
-            		sleepcp(50);
+            		sleepcp(60);
 				} while (n.ok());
-
 				STATE = waiting_for_STX;
 				break;
 
@@ -381,11 +362,13 @@ void setup_stargazer( int port, ros::NodeHandle n, ros::Rate loop_rate, const ch
 
 	free( send_msg );
 	free( rec_msg );
+	serial_comm.closeSerial();
 	// Consts don't need to be freed? Lines below cause compile-time errors if uncommented
 	// free( cmd_init_set );
 	// free( cmd_start );
 	// free( cmd_end );
 	// free( command );
 	// free( value );
+	ROS_INFO("Setup stargazer done."); 
 }
 

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+#create list of packages to install
+packagelist=(
+  freeglut3-dev 
+)
+
+#install debian packages listed in array above
+sudo apt-get install -y ${packagelist[@]}

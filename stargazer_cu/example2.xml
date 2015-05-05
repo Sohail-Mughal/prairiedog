@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<PseudoLiteCommandsRoot>
+  <PseudoLiteCommandSet title="standard_init">
+    <PseudoCmd command="CalcStop" value=""> </PseudoCmd>
+    <PseudoCmd command="ThrAlg" value="Auto"> </PseudoCmd>
+    <PseudoCmd command="CalcStart" value=""> </PseudoCmd>
+  </PseudoLiteCommandSet>
+  <PseudoLiteCommandSet title="auto-mapping">
+    <PseudoCmd command="CalcStop" value=""> </PseudoCmd>
+    <PseudoCmd command="MarkMode" value="Map"> </PseudoCmd>
+    <PseudoCmd command="MapMode" value="Start"> </PseudoCmd>
+    <PseudoCmd command="CalcStart" value=""> </PseudoCmd>
+  </PseudoLiteCommandSet>
+</PseudoLiteCommandsRoot>
